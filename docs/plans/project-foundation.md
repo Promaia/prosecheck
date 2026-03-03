@@ -106,7 +106,7 @@ claude-linter/
 |---|---|---|
 | `commander` | Argument parsing, subcommands | 240M weekly downloads, zero deps, 18-25ms startup, used by Claude Code and shadcn/ui |
 | `ink` + `react` | Interactive terminal UI | React-based terminal renderer, used by Claude Code, Gemini CLI, Prisma, Wrangler |
-| `@anthropic-ai/sdk` | Claude API client | Official SDK, auto-reads `ANTHROPIC_API_KEY`, built-in retry/backoff |
+| `@anthropic-ai/claude-code-sdk` | Claude Agents SDK | Launches autonomous tool-using agents (one per rule in CI mode); handles tool execution, context management, and parallel agent orchestration |
 | `picocolors` | Terminal colors | 7KB, 2x faster than chalk, zero deps, NO_COLOR/FORCE_COLOR support |
 | `yocto-spinner` | Spinners | 5KB, zero deps, by ora's author — Astro migrated from ora to this |
 | `ignore` | Gitignore-pattern matching | De-facto standard for parsing gitignore patterns in Node.js |
@@ -184,7 +184,7 @@ export default defineConfig({
   sourcemap: true,
   dts: true,
   banner: { js: '#!/usr/bin/env node' },
-  external: ['@anthropic-ai/sdk'],
+  external: ['@anthropic-ai/claude-code-sdk'],
 });
 ```
 
