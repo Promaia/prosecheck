@@ -13,12 +13,12 @@ claude-linter/
 │   ├── index.ts                       # Library entry: exports core API for programmatic use
 │   │
 │   ├── commands/
-│   │   ├── lint.ts                    # Lint command — main flow for both CI and local modes
+│   │   ├── lint.ts                    # Lint command — main flow for both CI and interactive modes
 │   │   └── init.ts                    # `init` command — scaffolds .rules/ in a target project
 │   │
 │   ├── lib/
 │   │   ├── engine.ts                  # Orchestrator: collects rules, generates prompts, dispatches mode, collects results
-│   │   ├── config.ts                  # Config loading, layering (base → environment → CLI flags), validation
+│   │   ├── config.ts                  # Config loading (config.json + config.local.json), layering (base → environment → CLI flags), validation
 │   │   ├── prompt.ts                  # Per-rule prompt generation from template + variables
 │   │   ├── results.ts                 # Result collection, dropped detection, retry orchestration
 │   │   ├── post-run.ts                # Post-run task execution (shell commands, env vars)
@@ -40,7 +40,7 @@ claude-linter/
 │   │   └── sarif.ts                   # SARIF output for GitHub Code Scanning
 │   │
 │   ├── ui/
-│   │   └── components/                # Ink React components for interactive local mode
+│   │   └── components/                # Ink React components for interactive mode
 │   │       ├── LintProgress.tsx       # Rule-by-rule progress display
 │   │       └── Summary.tsx            # Final results summary
 │   │
@@ -354,11 +354,11 @@ Use `process.exitCode = n` instead of `process.exit(n)` for graceful cleanup.
 
 ```typescript
 // Environment: controls config layering
-// Resolved from: --env flag > process.env.CI auto-detect > "local" default
+// Resolved from: --env flag > process.env.CI auto-detect > "interactive" default
 export function resolveEnvironment(cliEnv?: string): string {
   if (cliEnv) return cliEnv;
   if (process.env.CI) return 'ci';
-  return 'local';
+  return 'interactive';
 }
 
 // Display: controls output presentation (orthogonal to environment)
@@ -366,8 +366,8 @@ export const isTTY = !!process.stdout.isTTY;
 export const isInteractive = isTTY && resolveEnvironment() !== 'ci';
 ```
 
-**Environments** (`--env <name>`, default `local`):
-- `local` — developer workstation defaults
+**Environments** (`--env <name>`, default `interactive`):
+- `interactive` — developer workstation defaults
 - `ci` — auto-detected via `process.env.CI`, or passed explicitly
 - Custom — any name defined in `config.environments`, e.g. `--env nightly`
 
