@@ -56,6 +56,7 @@ Config uses a base + mode override model:
 ```json
 {
   "baseBranch": "main",
+  "globalIgnore": [".git/", "node_modules/", "dist/", "build/", ".rules/working/"],
   "lastRun": {
     "read": false,
     "write": true
@@ -83,20 +84,50 @@ Top-level keys are base defaults. The `ci` and `local` objects override base val
 
 ---
 
-## Directory Layout
+## Project Tree
+
+The tree below shows what a project using claude-linter looks like. Items marked **(optional)** are not required for the tool to function.
 
 ```
-.rules/
-├── config.json                # Configuration (base branch, rule calculators, options)
-├── prompt-ci.md               # System prompt for CI-mode agents
-├── prompt-claude-code.md      # Generated prompt file for Claude Code mode
-├── last-user-run              # Git hash of last local run (auto-managed)
-├── working/
-│   └── outputs/               # Agent output files (Claude Code mode)
+my-project/
+├── .rules/                          # Tool configuration root
+│   ├── config.json                  # Configuration (base branch, globalIgnore, calculators)
+│   ├── prompt-ci.md                 # System prompt for CI-mode agents
+│   ├── prompt-claude-code.md        # Generated prompt for Claude Code mode
+│   ├── last-user-run                # Git hash of last local run (auto-managed)
+│   └── working/                     # Ephemeral workspace (gitignored)
+│       └── outputs/                 # Agent output files (Claude Code mode)
+│
+├── RULES.md                         # (optional) Project-root rules — apply to all files
+│
+├── src/
+│   ├── RULES.md                     # (optional) Rules scoped to src/
+│   ├── api/
+│   │   ├── RULES.md                 # (optional) Rules scoped to src/api/
+│   │   ├── routes.ts
+│   │   └── handlers.ts
+│   ├── db/
+│   │   ├── queries.ts
+│   │   └── migrations/
+│   └── lib/
+│       ├── errors.ts
+│       └── utils.ts
+│
+├── docs/
+│   └── adr/                         # (optional) Architecture Decision Records
+│       ├── 001-use-zod.md           # (optional) ADR → becomes enforceable rule
+│       ├── 002-api-error-class.md   # (optional) ADR → becomes enforceable rule
+│       └── ...
+│
+├── package.json
 └── ...
 ```
 
-Project-level `RULES.md` files can live at any directory depth. Rules scoped to a subdirectory apply only to files within that subtree.
+**Required:** Only `.rules/config.json` is strictly required. The tool creates `prompt-ci.md`, `prompt-claude-code.md`, `last-user-run`, and `working/` as needed.
+
+**RULES.md files** can live at any directory depth. Each file's directory becomes the inclusion pattern for all rules it contains. A `RULES.md` deeper in the tree adds rules specific to that subtree.
+
+**ADR files** are read from the path configured in the `adr` calculator (default `docs/adr/`). These are optional — the `adr` calculator can be disabled in config.
 
 ---
 
@@ -146,6 +177,22 @@ The calculator interface is designed for extension. A calculator receives its op
 
 Every rule carries an **inclusions** field — a list of gitignore-formatted patterns defining which files the rule applies to. Patterns follow gitignore syntax: directories match recursively, `!` prefixes negate (exclude), and standard glob wildcards apply.
 
+#### Global Ignore
+
+Before per-rule inclusions are evaluated, a **global ignore** list is applied to all rules. This is configured via the `globalIgnore` field in `.rules/config.json` and defaults to common non-source paths:
+
+```json
+"globalIgnore": [".git/", "node_modules/", "dist/", "build/", ".rules/working/"]
+```
+
+Files matching any global ignore pattern are excluded from all rules — they are never considered changed files and agents are instructed to skip them. This prevents noise from vendored code, build artifacts, and tool internals.
+
+Setting `globalIgnore` to `[]` disables all default exclusions, meaning every file in the repo is eligible for rule matching. Users can also add project-specific patterns (e.g., `"vendor/"`, `"generated/"`) to exclude additional paths globally.
+
+The resolution order is: **globalIgnore → per-rule inclusions**. A file must not match any global ignore pattern AND must match the rule's inclusions to be in scope.
+
+#### Per-Rule Inclusions
+
 In the initial implementation, each calculator produces simple single-directory inclusions:
 
 - `rules-md`: the directory containing the `RULES.md` file (e.g., `src/api/`)
@@ -164,7 +211,7 @@ packages/auth/
 packages/shared/lib/crypto/
 ```
 
-Change detection uses these inclusions to match changed files against rules — a rule only runs if at least one changed file matches its inclusion patterns.
+Change detection uses these inclusions to match changed files against rules — a rule only runs if at least one changed file matches its inclusion patterns (after global ignore filtering).
 
 ---
 
@@ -266,6 +313,7 @@ A failure requires a `headline` (short summary of the violation) and a `comments
 | One agent per rule | Enables parallel evaluation and clear per-rule reporting |
 | Two operating modes | CI runs autonomously; Claude Code integrates into developer workflow |
 | Plain-text rules | No DSL — rules are natural language, evaluated by LLM |
+| Global ignore by default | `globalIgnore` in config excludes `.git/`, `node_modules/`, etc. from all rules; set `[]` to disable |
 | Gitignore-formatted inclusions | Rules carry inclusion patterns; initially single directory, extensible to exclusions |
 | Pluggable rule calculators | `rules-md` and `adr` built-in; extensible via config |
 | Change detection selects rules, not context | Diffs determine which rules fire; agents see full codebase within scope |
