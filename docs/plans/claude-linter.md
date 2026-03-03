@@ -129,9 +129,9 @@ Rule calculators are declared in the `ruleCalculators` array within `.rules/conf
 
 ### Built-in Calculators
 
-**`rules-md`** — The default calculator. Discovers `RULES.md` files throughout the project tree and parses each rule entry from them. Each rule is plain-text, scoped to the directory containing its `RULES.md`. Enabled by default.
+**`rules-md`** — The default calculator. Discovers `RULES.md` files throughout the project tree and parses each rule entry from them. Each rule's inclusions are set to the directory containing its `RULES.md` (e.g., a `RULES.md` at `src/api/` produces inclusions of `src/api/`). In the initial implementation, this is a single directory path per rule. In the future, `RULES.md` could support exclusion patterns or frontmatter to refine scope further. Enabled by default.
 
-**`adr`** — Calculates rules from Architecture Decision Records. Reads ADR files from a configured path (default `docs/adr`) and derives enforceable rules from recorded decisions. For example, an ADR that decides "use Zod for all external data validation" becomes a rule agents can check against. Enabled by default.
+**`adr`** — Calculates rules from Architecture Decision Records. Reads ADR files from a configured path (default `docs/adr`) and derives enforceable rules from recorded decisions. For example, an ADR that decides "use Zod for all external data validation" becomes a rule agents can check against. In the initial implementation, ADR-derived rules apply project-wide (inclusions: root). In the future, ADR files could use YAML frontmatter to define specific inclusion/exclusion patterns. Enabled by default.
 
 ### Custom Calculators
 
@@ -139,8 +139,32 @@ The calculator interface is designed for extension. A calculator receives its op
 
 - Rule name (the heading text for `rules-md`, or equivalent for other calculators)
 - Rule description (natural language)
-- Scope (directory path the rule applies to)
+- Inclusions (gitignore-formatted patterns defining which files the rule applies to)
 - Source reference (originating file for traceability)
+
+### Rule Scope: Inclusions and Exclusions
+
+Every rule carries an **inclusions** field — a list of gitignore-formatted patterns defining which files the rule applies to. Patterns follow gitignore syntax: directories match recursively, `!` prefixes negate (exclude), and standard glob wildcards apply.
+
+In the initial implementation, each calculator produces simple single-directory inclusions:
+
+- `rules-md`: the directory containing the `RULES.md` file (e.g., `src/api/`)
+- `adr`: project root (i.e., all files)
+
+The gitignore format is chosen because it naturally supports future enhancements without changing the data model:
+
+```
+# Future: RULES.md frontmatter could define fine-grained scope
+src/api/
+!src/api/generated/
+!src/api/**/*.test.ts
+
+# Future: ADR YAML frontmatter could target specific packages
+packages/auth/
+packages/shared/lib/crypto/
+```
+
+Change detection uses these inclusions to match changed files against rules — a rule only runs if at least one changed file matches its inclusion patterns.
 
 ---
 
@@ -175,7 +199,7 @@ objects or return ad-hoc `{ error: string }` shapes.
 
 This example produces three rules: "Exported functions must have JSDoc comments", "No direct database queries outside of db/", and "Error responses use the shared ApiError class". The "Exceptions" subheading is part of the first rule's description, not a separate rule.
 
-Rules in a `RULES.md` apply to all files in that directory and its children. A `RULES.md` deeper in the tree can add rules specific to that subtree.
+Rules in a `RULES.md` are scoped to that file's directory and its children (the directory becomes the rule's inclusion pattern). A `RULES.md` deeper in the tree adds rules specific to that subtree.
 
 ---
 
@@ -242,7 +266,7 @@ A failure requires a `headline` (short summary of the violation) and a `comments
 | One agent per rule | Enables parallel evaluation and clear per-rule reporting |
 | Two operating modes | CI runs autonomously; Claude Code integrates into developer workflow |
 | Plain-text rules | No DSL — rules are natural language, evaluated by LLM |
-| Directory scoping | Rules in `RULES.md` apply to their subtree |
+| Gitignore-formatted inclusions | Rules carry inclusion patterns; initially single directory, extensible to exclusions |
 | Pluggable rule calculators | `rules-md` and `adr` built-in; extensible via config |
 | Change detection selects rules, not context | Diffs determine which rules fire; agents see full codebase within scope |
 | Agents get the comparison ref | Agents can run their own diffs for fine-grained analysis |
