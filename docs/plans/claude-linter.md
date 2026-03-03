@@ -24,19 +24,23 @@ An operating mode controls how the tool executes rule evaluation. Modes are sele
 
 #### User Prompt (implemented)
 
-The tool generates a prompt and displays it to the user. The user copies the prompt into their own Claude Code session, which spawns an agent team — one agent per rule. Each agent writes its results to a file with a unique name (assigned in the prompt) under `.rules/working/outputs/`. The tool watches for output files to appear and/or waits for the user to signal completion, then collects and processes the results.
+The tool generates per-rule prompt files (see [Prompt Generation and Execution Pipeline](#prompt-generation-and-execution-pipeline)), then builds a single orchestration prompt for the user to paste into Claude Code. This orchestration prompt instructs Claude Code to create an agent team — one agent per prompt file — and lists all the prompt file paths. The user copies the prompt into their Claude Code session, which spawns the agents.
 
-A generated prompt file at `.rules/prompt.md` provides additional instructions that Claude Code agents reference during execution.
+The tool then watches `.rules/working/outputs/` for result files to appear and/or waits for the user to signal completion, then collects and processes the results.
 
-**Flow:** Invoke → Collect rules → Build prompt → Display prompt and wait for output files or user signal → Collect results from `.rules/working/outputs/` → Process and display
+**Flow:** Invoke → Collect rules → Generate per-rule prompts → Build orchestration prompt → Display prompt and watch for output files or user signal → Collect results → Post-run tasks → Report
 
 #### Claude Code Headless (implemented)
 
-The tool programmatically launches Claude Code CLI instances — one per rule — using `claude --print` (or the Claude Code SDK's headless API). Each instance receives a prompt instructing it to evaluate its assigned rule, explore the codebase autonomously, never ask the user questions, and write structured JSON results to a specific output file under `.rules/working/outputs/`.
+The tool generates per-rule prompt files (see [Prompt Generation and Execution Pipeline](#prompt-generation-and-execution-pipeline)), then launches Claude Code CLI instances to execute them.
 
-This mode works in any environment. In CI it runs unattended. Locally, the tool provides progressive output showing per-rule status as each Claude Code instance completes.
+By default, it spawns one `claude --print` process per rule in parallel. Each instance receives its prompt file content, evaluates the rule autonomously, and writes results to `.rules/working/outputs/`.
 
-**Flow:** Invoke → Collect rules → Launch parallel Claude Code CLI instances (one per rule) → Stream progress as instances complete → Collect results from `.rules/working/outputs/` → Process and display
+A config option `claudeCode.singleInstance` switches to an alternative strategy: launch a single Claude Code instance with the same orchestration prompt used in User Prompt mode (instructing it to spawn an agent team internally). This trades parallelism control for lower process overhead.
+
+This mode works in any environment. In CI it runs unattended. Locally, the tool provides progressive output showing per-rule status as each instance completes.
+
+**Flow:** Invoke → Collect rules → Generate per-rule prompts → Launch Claude Code instance(s) → Stream progress as instances complete → Collect results → Post-run tasks → Report
 
 #### Claude Agents SDK (planned — not yet implemented)
 
@@ -45,6 +49,89 @@ Uses the `@anthropic-ai/claude-code-sdk` to launch autonomous tool-using agents 
 #### Internal Loop (planned — not yet implemented)
 
 Direct Anthropic API calls with a custom agent loop. The tool manages the message history, tool execution, and retry logic itself. Most flexible but most code to maintain. Would be needed if targeting non-Claude models or requiring custom tool implementations that the SDK doesn't support.
+
+---
+
+## Prompt Generation and Execution Pipeline
+
+All operating modes share the same prompt generation phase. The execution and collection phases differ by mode.
+
+### 1. Cleanup
+
+At the start of every run, the tool deletes all files in `.rules/working/prompts/` and `.rules/working/outputs/`. This ensures no stale artifacts from a previous run contaminate results.
+
+### 2. Per-Rule Prompt Generation
+
+For each rule triggered by change detection, the tool generates a prompt file at `.rules/working/prompts/<rule-id>.md`. The rule ID is a stable, filesystem-safe slug derived from the rule name and source file (e.g., `src-rules-md--exported-functions-must-have-jsdoc`).
+
+Each prompt includes:
+
+- **Rule text** — the full natural-language rule description from the source file
+- **Comparison ref** — the git ref to diff against (e.g., `origin/main`, a specific commit)
+- **Changed files** — the list of changed files (modifications, additions, and deletions) that triggered this rule, so the agent knows where to focus
+- **Scope** — the rule's inclusion patterns, so the agent knows its boundaries
+- **Output path** — the exact file path to write results to: `.rules/working/outputs/<rule-id>.json`
+- **General guidance** — instructions included in every prompt:
+
+> These files changed, but they may interact with related code in important ways. Look at the changes since the listed git ref and evaluate the full codebase within the rule's scope. Output your pass/warn/fail status to the specified output file. Do not prompt the user for any questions. Output only to the JSON file without user interaction.
+
+The prompt template is configurable. The tool ships a default template, and users can override it by placing a custom template at `.rules/prompt-template.md`. The template receives all the above variables for interpolation. A separate global system prompt at `.rules/prompt.md` is prepended to every per-rule prompt and can contain project-wide agent instructions.
+
+### 3. Mode-Specific Execution
+
+After prompt generation, the operating mode takes over:
+
+- **User Prompt**: builds an orchestration prompt listing all prompt file paths, displays it to the user
+- **Claude Code Headless**: feeds each prompt file to a `claude --print` instance (or a single instance in `singleInstance` mode)
+- **Claude Agents SDK** (planned): feeds each prompt to an in-process agent
+- **Internal Loop** (planned): feeds each prompt into a custom agent loop
+
+### 4. Waiting and Collection
+
+The tool waits for results using mode-appropriate strategies:
+
+- **Output file watching** — watches `.rules/working/outputs/` for `<rule-id>.json` files to appear (all modes)
+- **Process exit** — waits for Claude Code processes to exit (Claude Code Headless mode)
+- **User signal** — waits for the user to press a key or confirm completion (User Prompt mode, interactive only)
+- **Timeout** — configurable per-run timeout (`timeout` in config, `--timeout` CLI flag). When reached, any rule without output is marked `dropped`
+
+In interactive mode, the tool displays a live table showing each rule's name, run status (waiting / running / done), and final result as they complete.
+
+### 5. Dropped Rule Handling
+
+If a rule produces no output file — because the agent self-cancelled, timed out, or crashed — the rule receives status `dropped`.
+
+Dropped rules are treated as failures by default. A config option `retryDropped` (default `false`) enables automatic retries: the tool re-generates the prompt and re-launches the agent for each dropped rule, up to `retryDroppedMaxAttempts` times (default `1`). If a rule remains dropped after retries, it counts as a failure in the final report.
+
+### 6. Post-Run Tasks
+
+After results are collected and reported, the tool optionally runs a sequence of post-run tasks. For now, these are shell commands defined in config:
+
+```json
+{
+  "postRun": [
+    "echo 'Linting complete'"
+  ]
+}
+```
+
+Post-run commands receive environment variables with run metadata:
+
+- `CLAUDE_LINTER_STATUS` — overall run status (`pass`, `warn`, `fail`)
+- `CLAUDE_LINTER_RESULTS_DIR` — path to `.rules/working/outputs/`
+- `CLAUDE_LINTER_RESULTS_JSON` — path to a combined results JSON file
+
+In the future, post-run tasks will support structured actions (e.g., `post-pr-comment`, `update-check-run`) in addition to shell commands.
+
+### 7. Artifact Retention
+
+Prompt files (`.rules/working/prompts/`) and output files (`.rules/working/outputs/`) are **not** cleaned up after a run. They remain on disk for:
+
+- Debugging — inspect exactly what the agent was asked and what it produced
+- External tooling — other tools can read the structured outputs
+- Re-runs — a user can manually re-feed a prompt file to Claude Code
+
+The `.rules/working/` directory should be gitignored.
 
 ---
 
@@ -88,12 +175,21 @@ Config uses a base + environment override model:
     "read": false,
     "write": true
   },
+  "timeout": 300,
+  "warnAsError": false,
+  "retryDropped": false,
+  "retryDroppedMaxAttempts": 1,
+  "claudeCode": {
+    "singleInstance": false
+  },
+  "postRun": [],
   "environments": {
     "ci": {
       "lastRun": {
         "read": true,
         "write": false
-      }
+      },
+      "warnAsError": true
     },
     "local": {
       "lastRun": {
@@ -112,6 +208,15 @@ Config uses a base + environment override model:
 }
 ```
 
+New config fields:
+
+- `timeout` — per-run timeout in seconds (default 300). Overridable via `--timeout` CLI flag
+- `warnAsError` — treat warnings as failures for exit code purposes (default `false`). Overridable via `--warn-as-error`
+- `retryDropped` — automatically retry rules that produce no output (default `false`). Overridable via `--retry-dropped`
+- `retryDroppedMaxAttempts` — max retry attempts per dropped rule (default `1`)
+- `claudeCode.singleInstance` — in Claude Code Headless mode, launch one instance with agent-team prompt instead of one-per-rule (default `false`)
+- `postRun` — array of shell commands to run after results are collected
+
 Top-level keys are base defaults. The `environments` object contains named overrides — `local` and `ci` are built-in, but users can add arbitrary names (e.g., `nightly`, `staging`). The active environment is selected via `--env <name>` (defaults to `local`; auto-detects `ci` when `process.env.CI` is set). CLI flags override everything:
 
 - `--last-run-read` / `--no-last-run-read` — force enable/disable reading the last-run file
@@ -127,10 +232,12 @@ The tree below shows what a project using claude-linter looks like. Items marked
 my-project/
 ├── .rules/                          # Tool configuration root
 │   ├── config.json                  # Configuration (base branch, globalIgnore, calculators)
-│   ├── prompt.md                     # System prompt / instructions for agents
+│   ├── prompt.md                    # (optional) Global system prompt prepended to all agent prompts
+│   ├── prompt-template.md           # (optional) Custom per-rule prompt template
 │   ├── last-user-run                # Git hash of last local run (auto-managed)
 │   └── working/                     # Ephemeral workspace (gitignored)
-│       └── outputs/                 # Agent output files (Claude Code mode)
+│       ├── prompts/                 # Generated per-rule prompt files (<rule-id>.md)
+│       └── outputs/                 # Agent result files (<rule-id>.json)
 │
 ├── RULES.md                         # (optional) Project-root rules — apply to all files
 │
@@ -157,7 +264,7 @@ my-project/
 └── ...
 ```
 
-**Required:** Only `.rules/config.json` is strictly required. The tool creates `prompt.md`, `last-user-run`, and `working/` as needed.
+**Required:** Only `.rules/config.json` is strictly required. The tool creates `last-user-run` and `working/` as needed. `prompt.md` and `prompt-template.md` are optional overrides.
 
 **RULES.md files** can live at any directory depth. Each file's directory becomes the inclusion pattern for all rules it contains. A `RULES.md` deeper in the tree adds rules specific to that subtree.
 
@@ -296,7 +403,7 @@ Rules in a `RULES.md` are scoped to that file's directory and its children (the 
 
 ## Agent Output Format
 
-Agents output structured JSON. A result is either a **pass** or a **fail**:
+Agents output structured JSON to `.rules/working/outputs/<rule-id>.json`. Each result has one of four statuses.
 
 ### Pass
 
@@ -310,6 +417,26 @@ Agents output structured JSON. A result is either a **pass** or a **fail**:
 ```
 
 The `comment` field is optional on pass — agents may include a summary note but are not required to.
+
+### Warn
+
+```json
+{
+  "status": "warn",
+  "rule": "All exported functions must have JSDoc comments.",
+  "source": "src/RULES.md",
+  "headline": "Minor JSDoc gaps in src/lib/utils.ts",
+  "comments": [
+    {
+      "message": "`formatDate` has a JSDoc comment but is missing @param descriptions.",
+      "file": "src/lib/utils.ts",
+      "line": 23
+    }
+  ]
+}
+```
+
+A warning uses the same shape as a failure — `headline` and `comments` are required. Warnings indicate the code is not clearly in violation but deserves attention (e.g., partial compliance, ambiguous cases). The agent decides whether to warn or fail based on severity.
 
 ### Fail
 
@@ -334,19 +461,40 @@ The `comment` field is optional on pass — agents may include a summary note bu
 
 A failure requires a `headline` (short summary of the violation) and a `comments` array with at least one entry. Each comment has a `message` and optional `file` and `line` fields for pinpointing the violation.
 
+### Dropped
+
+A `dropped` status is **not written by agents** — it is assigned by the tool when a rule produces no output file. This happens when:
+
+- The agent self-cancelled or crashed
+- The agent timed out
+- The agent wrote output to the wrong location
+
+Dropped rules are eligible for retry (see [Dropped Rule Handling](#5-dropped-rule-handling)). After retries are exhausted, dropped rules count as failures in the final report.
+
+### Status Severity and Final Result
+
+The overall run status is determined by the worst status across all rules:
+
+| Priority | Status | Meaning | Exit code |
+|---|---|---|---|
+| 1 (worst) | `fail` | Rule clearly violated | 1 |
+| 2 | `dropped` | No output received, treated as failure | 1 |
+| 3 | `warn` | Potential issue, deserves attention | 0 (configurable to 1 via `--warn-as-error`) |
+| 4 (best) | `pass` | Rule satisfied | 0 |
+
 ### Schema Summary
 
-| Field | Pass | Fail |
-|---|---|---|
-| `status` | `"pass"` | `"fail"` |
-| `rule` | Required | Required |
-| `source` | Required | Required |
-| `comment` | Optional string | — |
-| `headline` | — | Required |
-| `comments` | — | Required, non-empty array |
-| `comments[].message` | — | Required |
-| `comments[].file` | — | Optional |
-| `comments[].line` | — | Optional |
+| Field | Pass | Warn | Fail |
+|---|---|---|---|
+| `status` | `"pass"` | `"warn"` | `"fail"` |
+| `rule` | Required | Required | Required |
+| `source` | Required | Required | Required |
+| `comment` | Optional string | — | — |
+| `headline` | — | Required | Required |
+| `comments` | — | Required, non-empty array | Required, non-empty array |
+| `comments[].message` | — | Required | Required |
+| `comments[].file` | — | Optional | Optional |
+| `comments[].line` | — | Optional | Optional |
 
 ---
 
@@ -359,13 +507,21 @@ A failure requires a `headline` (short summary of the violation) and a `comments
 | Two operating modes initially | User Prompt (manual) and Claude Code Headless (automated); Agents SDK and Internal Loop planned |
 | Custom environments | Users define arbitrary environment names in config; selected via `--env` CLI flag |
 | Plain-text rules | No DSL — rules are natural language, evaluated by LLM |
+| Shared prompt generation | All modes generate the same per-rule prompt files; only execution differs |
+| Configurable prompt templates | Default template ships with the tool; users override via `.rules/prompt-template.md` and `.rules/prompt.md` |
+| Four rule statuses | `pass`, `warn`, `fail`, `dropped` — dropped is tool-assigned when no output received |
+| Clean before, retain after | `.rules/working/` is wiped at run start; prompts and outputs are kept after for inspection |
+| Dropped rule retries | Configurable retry for rules that produce no output; dropped counts as failure after retries exhausted |
+| Post-run tasks | Shell commands run after results collection; future: structured actions (PR comments, check runs) |
 | Global ignore by default | `globalIgnore` inline patterns + `additionalIgnore` external files (defaults to `.gitignore`); set both to `[]` to disable |
 | Gitignore-formatted inclusions | Rules carry inclusion patterns; initially single directory, extensible to exclusions |
 | Pluggable rule calculators | `rules-md` and `adr` built-in; extensible via config |
 | Change detection selects rules, not context | Diffs determine which rules fire; agents see full codebase within scope |
 | Agents get the comparison ref | Agents can run their own diffs for fine-grained analysis |
+| Prompts include changed file list | Agents receive the full list of changed files (modifications, additions, deletions) that triggered the rule |
 | Environment-specific last-run defaults | Local writes but doesn't read; CI reads but doesn't write; custom environments inherit base |
 | Base + environment config layering | Named environment overrides on top of base defaults; CLI flags override all |
-| Structured JSON output | Pass/fail with optional comments, file paths, and line numbers |
+| Structured JSON output | Pass/warn/fail with optional comments, file paths, and line numbers |
 | Configurable base branch | `.rules/config.json` controls diff base and calculator options |
 | All modes share output contract | Every operating mode writes results to `.rules/working/outputs/` as structured JSON |
+| Claude Code Headless single-instance option | Config toggle to use one instance with agent-team prompt vs. one-per-rule (default) |

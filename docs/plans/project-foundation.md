@@ -17,8 +17,11 @@ claude-linter/
 │   │   └── init.ts                    # `init` command — scaffolds .rules/ in a target project
 │   │
 │   ├── lib/
-│   │   ├── engine.ts                  # Orchestrator: collects rules, runs change detection, dispatches agents
-│   │   ├── config.ts                  # Config loading, layering (base → mode → CLI flags), validation
+│   │   ├── engine.ts                  # Orchestrator: collects rules, generates prompts, dispatches mode, collects results
+│   │   ├── config.ts                  # Config loading, layering (base → environment → CLI flags), validation
+│   │   ├── prompt.ts                  # Per-rule prompt generation from template + variables
+│   │   ├── results.ts                 # Result collection, dropped detection, retry orchestration
+│   │   ├── post-run.ts                # Post-run task execution (shell commands, env vars)
 │   │   ├── change-detection.ts        # Git diff, changed-file mapping, globalIgnore + additionalIgnore filtering
 │   │   ├── ignore.ts                  # Gitignore-pattern matching (globalIgnore, additionalIgnore, inclusions)
 │   │   ├── rule.ts                    # Rule type definition and helpers
@@ -48,6 +51,8 @@ claude-linter/
 │   ├── unit/
 │   │   ├── lib/
 │   │   │   ├── config.test.ts
+│   │   │   ├── prompt.test.ts
+│   │   │   ├── results.test.ts
 │   │   │   ├── change-detection.test.ts
 │   │   │   ├── ignore.test.ts
 │   │   │   └── calculators/
