@@ -10,9 +10,9 @@ Claude Linter separates two orthogonal concerns: **where** the tool runs (enviro
 
 ### Environments
 
-An environment controls configuration layering — which config overrides apply. Environments are passed via `--env <name>` (defaults to `local`).
+An environment controls configuration layering — which config overrides apply. Environments are passed via `--env <name>` (defaults to `interactive`).
 
-- **`local`** — Developer workstation. Default environment when no `--env` flag is passed.
+- **`interactive`** — Developer workstation. Default environment when no `--env` flag is passed.
 - **`ci`** — Continuous integration. Auto-detected when `process.env.CI` is set, but can also be passed explicitly.
 - **Custom environments** — Users can define arbitrary environment names (e.g., `staging`, `nightly`) in `.rules/config.json` and pass them via `--env`. Each environment name maps to a config override block.
 
@@ -155,12 +155,12 @@ A git hash stored at `.rules/last-user-run` provides an additional scope narrowi
 
 **Default behavior differs by environment:**
 
-| Behavior | `local` environment | `ci` environment |
+| Behavior | `interactive` environment | `ci` environment |
 |---|---|---|
 | Read last-run file | No (off by default) | Yes (on by default) |
 | Write last-run file | Yes (on by default) | No (off by default) |
 
-This means local runs always check against the full branch diff (safe default for developers) but record their position so CI can skip already-checked work. Each behavior is independently configurable. Custom environments inherit base defaults unless they define their own overrides.
+This means interactive runs always check against the full branch diff (safe default for developers) but record their position so CI can skip already-checked work. Each behavior is independently configurable. Custom environments inherit base defaults unless they define their own overrides.
 
 ### Configuration Layering
 
@@ -191,7 +191,7 @@ Config uses a base + environment override model:
       },
       "warnAsError": true
     },
-    "local": {
+    "interactive": {
       "lastRun": {
         "read": false,
         "write": true
@@ -217,10 +217,23 @@ New config fields:
 - `claudeCode.singleInstance` — in Claude Code Headless mode, launch one instance with agent-team prompt instead of one-per-rule (default `false`)
 - `postRun` — array of shell commands to run after results are collected
 
-Top-level keys are base defaults. The `environments` object contains named overrides — `local` and `ci` are built-in, but users can add arbitrary names (e.g., `nightly`, `staging`). The active environment is selected via `--env <name>` (defaults to `local`; auto-detects `ci` when `process.env.CI` is set). CLI flags override everything:
+Top-level keys are base defaults. The `environments` object contains named overrides — `interactive` and `ci` are built-in, but users can add arbitrary names (e.g., `nightly`, `staging`). The active environment is selected via `--env <name>` (defaults to `interactive`; auto-detects `ci` when `process.env.CI` is set). CLI flags override everything:
 
 - `--last-run-read` / `--no-last-run-read` — force enable/disable reading the last-run file
 - `--last-run-write` / `--no-last-run-write` — force enable/disable writing the last-run file
+
+### Local Config Overrides
+
+An optional file `.rules/config.local.json` provides personal overrides that are not committed to the repository. This file should be gitignored (the `init` command adds it to `.gitignore` automatically).
+
+`config.local.json` has the same schema as `config.json`. Its values are deep-merged on top of `config.json` before environment layering is applied. The full resolution order is:
+
+1. **`config.json`** — base defaults (committed)
+2. **`config.local.json`** — personal overrides (gitignored)
+3. **Environment overrides** — from the active environment in the merged config
+4. **CLI flags** — highest priority
+
+This allows developers to set personal preferences (e.g., a different timeout, extra ignore patterns, or a custom `postRun` command) without affecting the shared config.
 
 ---
 
@@ -234,7 +247,8 @@ my-project/
 │   ├── config.json                  # Configuration (base branch, globalIgnore, calculators)
 │   ├── prompt.md                    # (optional) Global system prompt prepended to all agent prompts
 │   ├── prompt-template.md           # (optional) Custom per-rule prompt template
-│   ├── last-user-run                # Git hash of last local run (auto-managed)
+│   ├── config.local.json             # (optional, gitignored) Local overrides merged on top of config.json
+│   ├── last-user-run                # Git hash of last interactive run (auto-managed)
 │   └── working/                     # Ephemeral workspace (gitignored)
 │       ├── prompts/                 # Generated per-rule prompt files (<rule-id>.md)
 │       └── outputs/                 # Agent result files (<rule-id>.json)
@@ -264,7 +278,7 @@ my-project/
 └── ...
 ```
 
-**Required:** Only `.rules/config.json` is strictly required. The tool creates `last-user-run` and `working/` as needed. `prompt.md` and `prompt-template.md` are optional overrides.
+**Required:** Only `.rules/config.json` is strictly required. The tool creates `last-user-run` and `working/` as needed. `prompt.md`, `prompt-template.md`, and `config.local.json` are optional overrides.
 
 **RULES.md files** can live at any directory depth. Each file's directory becomes the inclusion pattern for all rules it contains. A `RULES.md` deeper in the tree adds rules specific to that subtree.
 
@@ -503,7 +517,7 @@ The overall run status is determined by the worst status across all rules:
 | Decision | Detail |
 |---|---|
 | One agent per rule | Enables parallel evaluation and clear per-rule reporting |
-| Environment ≠ operating mode | Environment (local/ci/custom) controls config; operating mode (user-prompt/claude-code/future) controls execution |
+| Environment ≠ operating mode | Environment (interactive/ci/custom) controls config; operating mode (user-prompt/claude-code/future) controls execution |
 | Two operating modes initially | User Prompt (manual) and Claude Code Headless (automated); Agents SDK and Internal Loop planned |
 | Custom environments | Users define arbitrary environment names in config; selected via `--env` CLI flag |
 | Plain-text rules | No DSL — rules are natural language, evaluated by LLM |
@@ -519,8 +533,9 @@ The overall run status is determined by the worst status across all rules:
 | Change detection selects rules, not context | Diffs determine which rules fire; agents see full codebase within scope |
 | Agents get the comparison ref | Agents can run their own diffs for fine-grained analysis |
 | Prompts include changed file list | Agents receive the full list of changed files (modifications, additions, deletions) that triggered the rule |
-| Environment-specific last-run defaults | Local writes but doesn't read; CI reads but doesn't write; custom environments inherit base |
+| Environment-specific last-run defaults | Interactive writes but doesn't read; CI reads but doesn't write; custom environments inherit base |
 | Base + environment config layering | Named environment overrides on top of base defaults; CLI flags override all |
+| Local config overrides | `config.local.json` is gitignored and merged on top of `config.json` for personal settings |
 | Structured JSON output | Pass/warn/fail with optional comments, file paths, and line numbers |
 | Configurable base branch | `.rules/config.json` controls diff base and calculator options |
 | All modes share output contract | Every operating mode writes results to `.rules/working/outputs/` as structured JSON |
