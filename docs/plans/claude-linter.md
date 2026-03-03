@@ -57,6 +57,7 @@ Config uses a base + mode override model:
 {
   "baseBranch": "main",
   "globalIgnore": [".git/", "node_modules/", "dist/", "build/", ".rules/working/"],
+  "additionalIgnore": [".gitignore"],
   "lastRun": {
     "read": false,
     "write": true
@@ -179,17 +180,27 @@ Every rule carries an **inclusions** field — a list of gitignore-formatted pat
 
 #### Global Ignore
 
-Before per-rule inclusions are evaluated, a **global ignore** list is applied to all rules. This is configured via the `globalIgnore` field in `.rules/config.json` and defaults to common non-source paths:
+Before per-rule inclusions are evaluated, a **global ignore** list is applied to all rules. This is configured via two fields in `.rules/config.json`:
+
+**`globalIgnore`** — an inline list of gitignore-formatted patterns, defaulting to common non-source paths:
 
 ```json
 "globalIgnore": [".git/", "node_modules/", "dist/", "build/", ".rules/working/"]
 ```
 
-Files matching any global ignore pattern are excluded from all rules — they are never considered changed files and agents are instructed to skip them. This prevents noise from vendored code, build artifacts, and tool internals.
+**`additionalIgnore`** — a list of external ignore files whose patterns are merged into the global ignore set:
 
-Setting `globalIgnore` to `[]` disables all default exclusions, meaning every file in the repo is eligible for rule matching. Users can also add project-specific patterns (e.g., `"vendor/"`, `"generated/"`) to exclude additional paths globally.
+```json
+"additionalIgnore": [".gitignore"]
+```
 
-The resolution order is: **globalIgnore → per-rule inclusions**. A file must not match any global ignore pattern AND must match the rule's inclusions to be in scope.
+This defaults to `[".gitignore"]`, so projects automatically respect their existing `.gitignore` patterns without duplicating them. Patterns from all listed files are read and combined with the `globalIgnore` inline patterns. Files that don't exist are silently skipped. Set to `[]` to not import any external ignore files.
+
+The combined ignore set (inline `globalIgnore` + patterns from `additionalIgnore` files) is applied to all rules — matching files are never considered changed and agents are instructed to skip them. This prevents noise from vendored code, build artifacts, and tool internals.
+
+Setting both `globalIgnore` to `[]` and `additionalIgnore` to `[]` disables all default exclusions, meaning every file in the repo is eligible for rule matching.
+
+The resolution order is: **globalIgnore + additionalIgnore → per-rule inclusions**. A file must not match any global/additional ignore pattern AND must match the rule's inclusions to be in scope.
 
 #### Per-Rule Inclusions
 
@@ -313,7 +324,7 @@ A failure requires a `headline` (short summary of the violation) and a `comments
 | One agent per rule | Enables parallel evaluation and clear per-rule reporting |
 | Two operating modes | CI runs autonomously; Claude Code integrates into developer workflow |
 | Plain-text rules | No DSL — rules are natural language, evaluated by LLM |
-| Global ignore by default | `globalIgnore` in config excludes `.git/`, `node_modules/`, etc. from all rules; set `[]` to disable |
+| Global ignore by default | `globalIgnore` inline patterns + `additionalIgnore` external files (defaults to `.gitignore`); set both to `[]` to disable |
 | Gitignore-formatted inclusions | Rules carry inclusion patterns; initially single directory, extensible to exclusions |
 | Pluggable rule calculators | `rules-md` and `adr` built-in; extensible via config |
 | Change detection selects rules, not context | Diffs determine which rules fire; agents see full codebase within scope |
