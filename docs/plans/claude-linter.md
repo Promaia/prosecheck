@@ -1,24 +1,50 @@
 # Claude Linter — Design Plan
 
-Claude Linter is a Claude Agents SDK-powered code linter that processes directory-scoped rules written in plain text. Rather than encoding lint logic in ASTs or regex patterns, rules are natural-language descriptions in `RULES.md` files, evaluated by LLM agents against the target codebase.
+Claude Linter is an LLM-powered code linter that processes directory-scoped rules written in plain text. Rather than encoding lint logic in ASTs or regex patterns, rules are natural-language descriptions in `RULES.md` files, evaluated by LLM agents against the target codebase.
 
 ---
 
-## Operating Modes
+## Environments and Operating Modes
 
-### CI Mode
+Claude Linter separates two orthogonal concerns: **where** the tool runs (environment) and **how** it executes agents (operating mode).
 
-In CI mode, the tool launches one agent in parallel per rule being checked. Each agent receives the relevant source context and its assigned rule, evaluates compliance, and reports findings. The system prompt for CI agents is loaded from `.rules/prompt-ci.md`.
+### Environments
 
-**Flow:** Invoke → Collect rules → Launch parallel agents (one per rule) → Aggregate results → Exit with appropriate code
+An environment controls configuration layering — which config overrides apply. Environments are passed via `--env <name>` (defaults to `local`).
 
-### Claude Code Mode
+- **`local`** — Developer workstation. Default environment when no `--env` flag is passed.
+- **`ci`** — Continuous integration. Auto-detected when `process.env.CI` is set, but can also be passed explicitly.
+- **Custom environments** — Users can define arbitrary environment names (e.g., `staging`, `nightly`) in `.rules/config.json` and pass them via `--env`. Each environment name maps to a config override block.
 
-In Claude Code mode, the tool does not launch agents itself. Instead it generates a prompt the user hands to Claude Code. That prompt asks Claude Code to spawn an agent team — one agent per rule — and directs each agent to write its results to a file with a unique name (assigned in the prompt) under `.rules/working/outputs/`. The tool then collects and processes those output files.
+Environments affect config layering only (e.g., last-run defaults, model selection). They do not determine how agents are launched — that is the operating mode's job.
 
-A generated prompt file at `.rules/prompt-claude-code.md` provides additional instructions that Claude Code agents reference during execution.
+### Operating Modes
 
-**Flow:** Invoke → Collect rules → Build prompt → Show prompt to user and wait for continue/cancel → User runs prompt in Claude Code → User confirms completion → Tool collects results from `.rules/working/outputs/` → Process and display
+An operating mode controls how the tool executes rule evaluation. Modes are selected via `--mode <name>`.
+
+#### User Prompt (implemented)
+
+The tool generates a prompt and displays it to the user. The user copies the prompt into their own Claude Code session, which spawns an agent team — one agent per rule. Each agent writes its results to a file with a unique name (assigned in the prompt) under `.rules/working/outputs/`. The tool watches for output files to appear and/or waits for the user to signal completion, then collects and processes the results.
+
+A generated prompt file at `.rules/prompt.md` provides additional instructions that Claude Code agents reference during execution.
+
+**Flow:** Invoke → Collect rules → Build prompt → Display prompt and wait for output files or user signal → Collect results from `.rules/working/outputs/` → Process and display
+
+#### Claude Code Headless (implemented)
+
+The tool programmatically launches Claude Code CLI instances — one per rule — using `claude --print` (or the Claude Code SDK's headless API). Each instance receives a prompt instructing it to evaluate its assigned rule, explore the codebase autonomously, never ask the user questions, and write structured JSON results to a specific output file under `.rules/working/outputs/`.
+
+This mode works in any environment. In CI it runs unattended. Locally, the tool provides progressive output showing per-rule status as each Claude Code instance completes.
+
+**Flow:** Invoke → Collect rules → Launch parallel Claude Code CLI instances (one per rule) → Stream progress as instances complete → Collect results from `.rules/working/outputs/` → Process and display
+
+#### Claude Agents SDK (planned — not yet implemented)
+
+Uses the `@anthropic-ai/claude-code-sdk` to launch autonomous tool-using agents directly in-process. Same one-agent-per-rule model, but without spawning external CLI processes. This eliminates the Claude Code CLI as a runtime dependency and gives tighter control over tool definitions, context management, and agent orchestration.
+
+#### Internal Loop (planned — not yet implemented)
+
+Direct Anthropic API calls with a custom agent loop. The tool manages the message history, tool execution, and retry logic itself. Most flexible but most code to maintain. Would be needed if targeting non-Claude models or requiring custom tool implementations that the SDK doesn't support.
 
 ---
 
@@ -40,18 +66,18 @@ The tool can be invoked against different scopes:
 
 A git hash stored at `.rules/last-user-run` provides an additional scope narrowing. When enabled, changed-file detection uses the last-run hash instead of the merge-base. Agents still receive the original merge-base ref for comparison — last-run tracking only affects which rules are selected to run, not the ref agents compare against.
 
-**Default behavior differs by mode:**
+**Default behavior differs by environment:**
 
-| Behavior | Claude Code (local) | CI |
+| Behavior | `local` environment | `ci` environment |
 |---|---|---|
 | Read last-run file | No (off by default) | Yes (on by default) |
 | Write last-run file | Yes (on by default) | No (off by default) |
 
-This means local runs always check against the full branch diff (safe default for developers) but record their position so CI can skip already-checked work. Each behavior is independently configurable.
+This means local runs always check against the full branch diff (safe default for developers) but record their position so CI can skip already-checked work. Each behavior is independently configurable. Custom environments inherit base defaults unless they define their own overrides.
 
 ### Configuration Layering
 
-Config uses a base + mode override model:
+Config uses a base + environment override model:
 
 ```json
 {
@@ -62,23 +88,31 @@ Config uses a base + mode override model:
     "read": false,
     "write": true
   },
-  "ci": {
-    "lastRun": {
-      "read": true,
-      "write": false
-    }
-  },
-  "local": {
-    "lastRun": {
-      "read": false,
-      "write": true
+  "environments": {
+    "ci": {
+      "lastRun": {
+        "read": true,
+        "write": false
+      }
+    },
+    "local": {
+      "lastRun": {
+        "read": false,
+        "write": true
+      }
+    },
+    "nightly": {
+      "lastRun": {
+        "read": false,
+        "write": false
+      }
     }
   },
   "ruleCalculators": []
 }
 ```
 
-Top-level keys are base defaults. The `ci` and `local` objects override base values for their respective modes. CLI flags override everything:
+Top-level keys are base defaults. The `environments` object contains named overrides — `local` and `ci` are built-in, but users can add arbitrary names (e.g., `nightly`, `staging`). The active environment is selected via `--env <name>` (defaults to `local`; auto-detects `ci` when `process.env.CI` is set). CLI flags override everything:
 
 - `--last-run-read` / `--no-last-run-read` — force enable/disable reading the last-run file
 - `--last-run-write` / `--no-last-run-write` — force enable/disable writing the last-run file
@@ -93,8 +127,7 @@ The tree below shows what a project using claude-linter looks like. Items marked
 my-project/
 ├── .rules/                          # Tool configuration root
 │   ├── config.json                  # Configuration (base branch, globalIgnore, calculators)
-│   ├── prompt-ci.md                 # System prompt for CI-mode agents
-│   ├── prompt-claude-code.md        # Generated prompt for Claude Code mode
+│   ├── prompt.md                     # System prompt / instructions for agents
 │   ├── last-user-run                # Git hash of last local run (auto-managed)
 │   └── working/                     # Ephemeral workspace (gitignored)
 │       └── outputs/                 # Agent output files (Claude Code mode)
@@ -124,7 +157,7 @@ my-project/
 └── ...
 ```
 
-**Required:** Only `.rules/config.json` is strictly required. The tool creates `prompt-ci.md`, `prompt-claude-code.md`, `last-user-run`, and `working/` as needed.
+**Required:** Only `.rules/config.json` is strictly required. The tool creates `prompt.md`, `last-user-run`, and `working/` as needed.
 
 **RULES.md files** can live at any directory depth. Each file's directory becomes the inclusion pattern for all rules it contains. A `RULES.md` deeper in the tree adds rules specific to that subtree.
 
@@ -322,14 +355,17 @@ A failure requires a `headline` (short summary of the violation) and a `comments
 | Decision | Detail |
 |---|---|
 | One agent per rule | Enables parallel evaluation and clear per-rule reporting |
-| Two operating modes | CI runs autonomously; Claude Code integrates into developer workflow |
+| Environment ≠ operating mode | Environment (local/ci/custom) controls config; operating mode (user-prompt/claude-code/future) controls execution |
+| Two operating modes initially | User Prompt (manual) and Claude Code Headless (automated); Agents SDK and Internal Loop planned |
+| Custom environments | Users define arbitrary environment names in config; selected via `--env` CLI flag |
 | Plain-text rules | No DSL — rules are natural language, evaluated by LLM |
 | Global ignore by default | `globalIgnore` inline patterns + `additionalIgnore` external files (defaults to `.gitignore`); set both to `[]` to disable |
 | Gitignore-formatted inclusions | Rules carry inclusion patterns; initially single directory, extensible to exclusions |
 | Pluggable rule calculators | `rules-md` and `adr` built-in; extensible via config |
 | Change detection selects rules, not context | Diffs determine which rules fire; agents see full codebase within scope |
 | Agents get the comparison ref | Agents can run their own diffs for fine-grained analysis |
-| Mode-specific last-run defaults | Local writes but doesn't read; CI reads but doesn't write |
-| Base + mode config layering | `ci` and `local` overrides on top of base defaults; CLI flags override all |
+| Environment-specific last-run defaults | Local writes but doesn't read; CI reads but doesn't write; custom environments inherit base |
+| Base + environment config layering | Named environment overrides on top of base defaults; CLI flags override all |
 | Structured JSON output | Pass/fail with optional comments, file paths, and line numbers |
 | Configurable base branch | `.rules/config.json` controls diff base and calculator options |
+| All modes share output contract | Every operating mode writes results to `.rules/working/outputs/` as structured JSON |
