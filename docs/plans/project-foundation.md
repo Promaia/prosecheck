@@ -27,9 +27,9 @@ claude-linter/
 │   │       ├── rules-md.ts            # rules-md calculator: discovers + parses RULES.md files
 │   │       └── adr.ts                 # adr calculator: reads ADR files, derives rules
 │   │
-│   ├── agents/
-│   │   ├── ci-agent.ts                # CI mode: launches one Anthropic agent per rule (parallel)
-│   │   └── claude-code.ts             # Claude Code mode: generates prompt, collects output files
+│   ├── modes/
+│   │   ├── user-prompt.ts             # User Prompt mode: builds prompt, watches for output files
+│   │   └── claude-code.ts             # Claude Code Headless mode: spawns claude CLI instances per rule
 │   │
 │   ├── formatters/
 │   │   ├── stylish.ts                 # Human-readable terminal output (default)
@@ -57,8 +57,9 @@ claude-linter/
 │   │   │   ├── stylish.test.ts
 │   │   │   ├── json.test.ts
 │   │   │   └── sarif.test.ts
-│   │   └── agents/
-│   │       └── ci-agent.test.ts
+│   │   └── modes/
+│   │       ├── user-prompt.test.ts
+│   │       └── claude-code.test.ts
 │   ├── integration/
 │   │   ├── cli.test.ts                # Spawns dist/cli.js with execa, asserts exit codes + stdout
 │   │   └── init.test.ts
@@ -106,7 +107,8 @@ claude-linter/
 |---|---|---|
 | `commander` | Argument parsing, subcommands | 240M weekly downloads, zero deps, 18-25ms startup, used by Claude Code and shadcn/ui |
 | `ink` + `react` | Interactive terminal UI | React-based terminal renderer, used by Claude Code, Gemini CLI, Prisma, Wrangler |
-| `@anthropic-ai/claude-code-sdk` | Claude Agents SDK | Launches autonomous tool-using agents (one per rule in CI mode); handles tool execution, context management, and parallel agent orchestration |
+| `@anthropic-ai/claude-code` | Claude Code CLI | Runtime dependency for Claude Code Headless mode; spawned as child processes (one per rule) via `claude --print` |
+| `execa` | Process spawning | Launches and manages Claude Code CLI child processes in headless mode |
 | `picocolors` | Terminal colors | 7KB, 2x faster than chalk, zero deps, NO_COLOR/FORCE_COLOR support |
 | `yocto-spinner` | Spinners | 5KB, zero deps, by ora's author — Astro migrated from ora to this |
 | `ignore` | Gitignore-pattern matching | De-facto standard for parsing gitignore patterns in Node.js |
@@ -120,8 +122,7 @@ claude-linter/
 | `tsup` | Build | Wraps esbuild, subsecond builds, generates .d.ts, injects shebang |
 | `typescript` | Type checking | `tsc --noEmit` for type checking, tsup handles emission |
 | `vitest` | Testing | First-class ESM, native TS transforms, `toMatchFileSnapshot`, github-actions reporter |
-| `msw` | API mocking | Network-level mocking for Anthropic SDK calls in tests |
-| `execa` | Process spawning | Integration tests: spawn CLI binary, assert exit codes/stdout |
+| `msw` | API mocking | Network-level mocking for future direct API modes; useful for integration tests |
 | `eslint` | Linting | With `typescript-eslint` strictTypeChecked preset |
 | `@eslint-community/eslint-plugin-eslint-comments` | Meta-linting | `no-unlimited-disable` prevents AI agents from blanket-disabling rules |
 | `prettier` | Formatting | Consistent formatting, no debates |
@@ -184,7 +185,7 @@ export default defineConfig({
   sourcemap: true,
   dts: true,
   banner: { js: '#!/usr/bin/env node' },
-  external: ['@anthropic-ai/claude-code-sdk'],
+  external: ['@anthropic-ai/claude-code'],
 });
 ```
 
@@ -260,7 +261,7 @@ export default defineConfig({
 | Integration | `tests/integration/` | Spawn CLI binary with `execa`, assert exit codes + stdout/stderr |
 | Fixtures | `tests/fixtures/` | Fake projects with known RULES.md / ADR files for deterministic tests |
 
-API mocking uses MSW to intercept Anthropic SDK calls at the network level. Filesystem-heavy tests (config loading, calculator discovery) use real fixture directories rather than mocks.
+Claude Code Headless mode tests mock `execa` to avoid spawning real CLI instances. User Prompt mode tests verify prompt generation and output file collection. Filesystem-heavy tests (config loading, calculator discovery) use real fixture directories rather than mocks.
 
 ---
 
@@ -344,16 +345,32 @@ Use `process.exitCode = n` instead of `process.exit(n)` for graceful cleanup.
 
 ---
 
-## Environment Detection
+## Environment and Mode Resolution
 
 ```typescript
-export const isCI = !!process.env.CI;
+// Environment: controls config layering
+// Resolved from: --env flag > process.env.CI auto-detect > "local" default
+export function resolveEnvironment(cliEnv?: string): string {
+  if (cliEnv) return cliEnv;
+  if (process.env.CI) return 'ci';
+  return 'local';
+}
+
+// Display: controls output presentation (orthogonal to environment)
 export const isTTY = !!process.stdout.isTTY;
-export const isInteractive = isTTY && !isCI;
+export const isInteractive = isTTY && resolveEnvironment() !== 'ci';
 ```
 
-- **Interactive mode** (local, TTY, not CI): Ink components, spinners, colors, prompts
-- **CI mode** (CI env or non-TTY): plain text or structured output, no terminal control codes
+**Environments** (`--env <name>`, default `local`):
+- `local` — developer workstation defaults
+- `ci` — auto-detected via `process.env.CI`, or passed explicitly
+- Custom — any name defined in `config.environments`, e.g. `--env nightly`
+
+**Operating modes** (`--mode <name>`):
+- `user-prompt` — generates prompt for user to paste into Claude Code
+- `claude-code` — spawns Claude Code CLI instances headlessly (one per rule)
+- `claude-agents` — (planned) uses Claude Agents SDK in-process
+- `internal-loop` — (planned) direct API calls with custom agent loop
 
 ---
 
