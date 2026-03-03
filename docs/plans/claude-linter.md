@@ -22,19 +22,64 @@ A generated prompt file at `.rules/prompt-claude-code.md` provides additional in
 
 ---
 
-## Change Scoping
+## Change Detection and Scoping
 
-The tool can be invoked against different scopes of changes:
+Change detection determines **which rules to run**, not what the agents see. The tool diffs the selected ref to find changed files, maps those files to their parent directories, and marks every rule whose scope contains at least one changed file. Rule calculators run first so directory scopes are known before change detection begins.
 
-- **Diverge from main** (default): Lint only changes since the current branch diverged from `main`. The base branch name is configurable in `.rules/config.json`.
-- **Diverge from specific ref**: Lint only changes since diverging from a named branch or arbitrary git ref.
-- **All code**: Lint the entire codebase regardless of change history.
+Agents always receive the **full codebase** within their rule's scope. They are given the comparison ref so they can run their own diff commands if needed. This means agents have complete context to evaluate compliance — change detection only controls which rules are triggered, not what context agents get.
+
+### Comparison Ref
+
+The tool can be invoked against different scopes:
+
+- **Diverge from main** (default): Changes since the current branch diverged from `main`. The base branch name is configurable in `.rules/config.json`.
+- **Diverge from specific ref**: Changes since diverging from a named branch or arbitrary git ref.
+- **All code**: All rules run regardless of change history.
 
 ### Incremental Run Tracking
 
-A git hash is stored at `.rules/last-user-run`. When present, the tool can additionally limit scope to only changes since that hash. This lets local user invocations cover only new work, preventing redundant and costly CI runs on already-checked code.
+A git hash stored at `.rules/last-user-run` provides an additional scope narrowing. When enabled, changed-file detection uses the last-run hash instead of the merge-base. Agents still receive the original merge-base ref for comparison — last-run tracking only affects which rules are selected to run, not the ref agents compare against.
 
-This behavior is on by default and can be disabled via a CLI flag (e.g., `--no-incremental`).
+**Default behavior differs by mode:**
+
+| Behavior | Claude Code (local) | CI |
+|---|---|---|
+| Read last-run file | No (off by default) | Yes (on by default) |
+| Write last-run file | Yes (on by default) | No (off by default) |
+
+This means local runs always check against the full branch diff (safe default for developers) but record their position so CI can skip already-checked work. Each behavior is independently configurable.
+
+### Configuration Layering
+
+Config uses a base + mode override model:
+
+```json
+{
+  "baseBranch": "main",
+  "lastRun": {
+    "read": false,
+    "write": true
+  },
+  "ci": {
+    "lastRun": {
+      "read": true,
+      "write": false
+    }
+  },
+  "local": {
+    "lastRun": {
+      "read": false,
+      "write": true
+    }
+  },
+  "ruleCalculators": []
+}
+```
+
+Top-level keys are base defaults. The `ci` and `local` objects override base values for their respective modes. CLI flags override everything:
+
+- `--last-run-read` / `--no-last-run-read` — force enable/disable reading the last-run file
+- `--last-run-write` / `--no-last-run-write` — force enable/disable writing the last-run file
 
 ---
 
@@ -61,9 +106,10 @@ Rule discovery is handled by **rule calculators** — pluggable modules that pro
 
 ### Config Structure
 
+Rule calculators are declared in the `ruleCalculators` array within `.rules/config.json` (see [Configuration Layering](#configuration-layering) for the full config shape):
+
 ```json
 {
-  "baseBranch": "main",
   "ruleCalculators": [
     {
       "name": "rules-md",
@@ -113,6 +159,62 @@ Rules in a `RULES.md` apply to all files in that directory and its children. A `
 
 ---
 
+## Agent Output Format
+
+Agents output structured JSON. A result is either a **pass** or a **fail**:
+
+### Pass
+
+```json
+{
+  "status": "pass",
+  "rule": "All exported functions must have JSDoc comments.",
+  "source": "src/RULES.md",
+  "comment": "All 12 exported functions in src/lib/ have JSDoc comments."
+}
+```
+
+The `comment` field is optional on pass — agents may include a summary note but are not required to.
+
+### Fail
+
+```json
+{
+  "status": "fail",
+  "rule": "No direct database queries outside of the db/ module.",
+  "source": "src/RULES.md",
+  "headline": "Direct SQL query found in src/services/user.ts",
+  "comments": [
+    {
+      "message": "Raw `db.query()` call should be moved to `src/db/users.ts`.",
+      "file": "src/services/user.ts",
+      "line": 47
+    },
+    {
+      "message": "Consider using the existing `findUserById` helper in `src/db/users.ts`."
+    }
+  ]
+}
+```
+
+A failure requires a `headline` (short summary of the violation) and a `comments` array with at least one entry. Each comment has a `message` and optional `file` and `line` fields for pinpointing the violation.
+
+### Schema Summary
+
+| Field | Pass | Fail |
+|---|---|---|
+| `status` | `"pass"` | `"fail"` |
+| `rule` | Required | Required |
+| `source` | Required | Required |
+| `comment` | Optional string | — |
+| `headline` | — | Required |
+| `comments` | — | Required, non-empty array |
+| `comments[].message` | — | Required |
+| `comments[].file` | — | Optional |
+| `comments[].line` | — | Optional |
+
+---
+
 ## Summary of Key Design Decisions
 
 | Decision | Detail |
@@ -122,5 +224,9 @@ Rules in a `RULES.md` apply to all files in that directory and its children. A `
 | Plain-text rules | No DSL — rules are natural language, evaluated by LLM |
 | Directory scoping | Rules in `RULES.md` apply to their subtree |
 | Pluggable rule calculators | `rules-md` and `adr` built-in; extensible via config |
-| Incremental tracking | `.rules/last-user-run` avoids redundant work between local and CI |
+| Change detection selects rules, not context | Diffs determine which rules fire; agents see full codebase within scope |
+| Agents get the comparison ref | Agents can run their own diffs for fine-grained analysis |
+| Mode-specific last-run defaults | Local writes but doesn't read; CI reads but doesn't write |
+| Base + mode config layering | `ci` and `local` overrides on top of base defaults; CLI flags override all |
+| Structured JSON output | Pass/fail with optional comments, file paths, and line numbers |
 | Configurable base branch | `.rules/config.json` controls diff base and calculator options |
