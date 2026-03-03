@@ -137,7 +137,8 @@ Rule calculators are declared in the `ruleCalculators` array within `.rules/conf
 
 The calculator interface is designed for extension. A calculator receives its options from config and returns a list of rules, each with:
 
-- Rule text (natural language)
+- Rule name (the heading text for `rules-md`, or equivalent for other calculators)
+- Rule description (natural language)
 - Scope (directory path the rule applies to)
 - Source reference (originating file for traceability)
 
@@ -145,15 +146,34 @@ The calculator interface is designed for extension. A calculator receives its op
 
 ## RULES.md Format
 
-Rules files contain plain-text rules, one per entry. The exact format is intentionally simple — each rule is a human-readable statement that an LLM agent can evaluate code against.
+Rules are defined using **headings as rule names**. Each top-level heading (`#`) starts a new rule. Everything from one heading to the next (or end of file) is that rule's description — the natural-language text an agent evaluates code against. Subheadings (`##`, `###`, etc.) within a rule are part of its description, not separate rules. Any text before the first heading is ignored (useful for preamble or notes).
 
 ```markdown
-# RULES.md
+Some introductory text — this is ignored by the parser.
 
-- All exported functions must have JSDoc comments.
-- No direct database queries outside of the `db/` module.
-- Error responses must use the shared ApiError class.
+# Exported functions must have JSDoc comments
+
+All functions exported from a module must have a JSDoc comment that
+describes the function's purpose, parameters, and return value.
+
+## Exceptions
+
+Private helper functions (not exported) do not require JSDoc.
+
+# No direct database queries outside of db/
+
+All SQL queries and ORM calls must go through modules in the `db/`
+directory. Service layers import from `db/` — they never construct
+queries directly.
+
+# Error responses use the shared ApiError class
+
+All error responses returned from API route handlers must use the
+`ApiError` class from `src/lib/errors.ts`. Do not throw plain `Error`
+objects or return ad-hoc `{ error: string }` shapes.
 ```
+
+This example produces three rules: "Exported functions must have JSDoc comments", "No direct database queries outside of db/", and "Error responses use the shared ApiError class". The "Exceptions" subheading is part of the first rule's description, not a separate rule.
 
 Rules in a `RULES.md` apply to all files in that directory and its children. A `RULES.md` deeper in the tree can add rules specific to that subtree.
 
