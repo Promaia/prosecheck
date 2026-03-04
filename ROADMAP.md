@@ -151,7 +151,22 @@ Full integration testing against real scenarios.
 
 ---
 
-## Milestone 13: Configuration Editor
+## Milestone 13: Interactive Lint UI
+
+Wire the LintProgress and Summary components into the lint pipeline for real-time interactive display.
+
+- [x] Add `src/ui/LintApp.tsx` — Top-level Ink app component that composes `LintProgress` and `Summary`, manages `RuleProgressEntry[]` state, and exposes callbacks for status updates
+- [x] Add `src/ui/render.ts` — Ink `render()` wrapper that creates/destroys the interactive UI. Exports `startInteractiveUI()` returning an updater interface and `stopInteractiveUI()` for cleanup
+- [x] Add progress callback to engine — Extend `RunContext` or engine options with an optional `onProgress` callback. Engine calls it at key points: rules discovered (all `waiting`), mode dispatch started (set `running`), output file detected (set `done` with result)
+- [x] Wire into lint command — When format is `stylish` and stdout is a TTY, use interactive Ink rendering instead of plain text. Fall back to current behavior for CI, piped output, or non-stylish formats
+- [x] Add output file watcher to engine — During mode dispatch, watch `.prosecheck/working/outputs/` for new files, parse each as it arrives, and fire `onProgress` with the result
+- [x] Write tests for LintApp state management (ink-testing-library — verify state transitions from waiting → running → done)
+- [x] Write tests for render.ts (verify TTY detection, fallback to non-interactive)
+- [x] Verify `npm run ci` passes
+
+---
+
+## Milestone 14: Configuration Editor
 
 Interactive `prosecheck config` command — schema-driven, no hardcoded field list.
 

@@ -2,7 +2,7 @@
 
 // Core types
 export type { Config, RuleResult } from './lib/config-schema.js';
-export type { Rule, RuleStatus, RunContext, PromptVariables } from './types/index.js';
+export type { Rule, RuleStatus, RunContext, PromptVariables, ProgressEvent, ProgressPhase, OnProgress } from './types/index.js';
 
 // Engine
 export { runEngine } from './lib/engine.js';

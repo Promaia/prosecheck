@@ -2,6 +2,7 @@ import { loadConfig, resolveEnvironment, ConfigError } from '../lib/config.js';
 import type { PartialConfig } from '../lib/config-schema.js';
 import { runEngine } from '../lib/engine.js';
 import type { RunContext } from '../types/index.js';
+import type { InteractiveUI } from '../ui/render.js';
 
 export interface LintOptions {
   /** Project root directory */
@@ -36,6 +37,7 @@ export interface LintOptions {
  */
 export async function lint(options: LintOptions): Promise<void> {
   const { projectRoot } = options;
+  let interactiveUI: InteractiveUI | undefined;
 
   try {
     // Resolve environment
@@ -83,6 +85,12 @@ export async function lint(options: LintOptions): Promise<void> {
     const mode = options.mode ?? (environment === 'ci' ? 'claude-code' : 'user-prompt');
     const format = options.format ?? 'stylish';
 
+    // Start interactive UI if applicable (lazy import to avoid loading Ink for non-interactive paths)
+    if (format === 'stylish' && process.stdout.isTTY) {
+      const { startInteractiveUI } = await import('../ui/render.js');
+      interactiveUI = startInteractiveUI();
+    }
+
     // Construct run context
     const context: RunContext = {
       config,
@@ -91,13 +99,16 @@ export async function lint(options: LintOptions): Promise<void> {
       format,
       projectRoot,
       comparisonRef: options.ref ?? '',
+      onProgress: interactiveUI?.onProgress,
     };
 
     // Run the engine
     const result = await runEngine(context);
 
     // Output results
-    if (result.output) {
+    if (interactiveUI) {
+      interactiveUI.finish(result.results);
+    } else if (result.output) {
       process.stdout.write(result.output + '\n');
     }
 
@@ -117,6 +128,8 @@ export async function lint(options: LintOptions): Promise<void> {
         process.exitCode = 0;
     }
   } catch (error: unknown) {
+    interactiveUI?.cleanup();
+
     if (error instanceof ConfigError) {
       process.stderr.write(`Configuration error: ${error.message}\n`);
       process.exitCode = 2;

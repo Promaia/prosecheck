@@ -87,6 +87,14 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     };
   }
 
+  // Fire 'discovered' progress events
+  const onProgress = context.onProgress;
+  if (onProgress) {
+    for (const rule of changeResult.triggeredRules) {
+      onProgress({ phase: 'discovered', ruleId: rule.id, ruleName: rule.name });
+    }
+  }
+
   // 4. Generate prompts for triggered rules
   const { promptPaths } = await generatePrompts({
     projectRoot,
@@ -95,8 +103,29 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     changedFilesByRule: changeResult.changedFilesByRule,
   });
 
-  // 5. Dispatch to operating mode
+  // Fire 'running' progress events
+  if (onProgress) {
+    for (const rule of changeResult.triggeredRules) {
+      onProgress({ phase: 'running', ruleId: rule.id, ruleName: rule.name });
+    }
+  }
+
+  // 5. Dispatch to operating mode (with live output watching if progress callback)
+  let stopWatcher: (() => void) | undefined;
+  if (onProgress) {
+    const { watchOutputs } = await import('./output-watcher.js');
+    stopWatcher = watchOutputs({
+      projectRoot,
+      expectedRules: changeResult.triggeredRules,
+      onResult: (ruleId, ruleName, result) => {
+        onProgress({ phase: 'result', ruleId, ruleName, result });
+      },
+    });
+  }
+
   await dispatchMode(mode, projectRoot, promptPaths, changeResult.triggeredRules, config);
+
+  stopWatcher?.();
 
   // 6. Collect results
   const collected = await collectResults({
