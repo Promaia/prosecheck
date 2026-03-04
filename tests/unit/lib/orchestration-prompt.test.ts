@@ -3,7 +3,13 @@ import { buildOrchestrationPrompt } from '../../../src/lib/orchestration-prompt.
 import type { Rule } from '../../../src/types/index.js';
 
 function makeRule(id: string, name: string): Rule {
-  return { id, name, description: 'Test rule', inclusions: [], source: 'RULES.md' };
+  return {
+    id,
+    name,
+    description: 'Test rule',
+    inclusions: [],
+    source: 'RULES.md',
+  };
 }
 
 describe('buildOrchestrationPrompt', () => {
@@ -15,7 +21,10 @@ describe('buildOrchestrationPrompt', () => {
     const result = buildOrchestrationPrompt({
       projectRoot: '/project',
       promptPaths,
-      rules: [makeRule('rule-a', 'No Console Log'), makeRule('rule-b', 'Keep Functions Short')],
+      rules: [
+        makeRule('rule-a', 'No Console Log'),
+        makeRule('rule-b', 'Keep Functions Short'),
+      ],
       agentTeams: false,
     });
 
@@ -62,7 +71,9 @@ describe('buildOrchestrationPrompt', () => {
     });
 
     expect(result).toContain('.prosecheck/working/prompts/rule-a.md');
-    expect(result).not.toContain('/project/.prosecheck/working/prompts/rule-a.md');
+    expect(result).not.toContain(
+      '/project/.prosecheck/working/prompts/rule-a.md',
+    );
   });
 
   it('falls back to rule ID when rule name not found', () => {

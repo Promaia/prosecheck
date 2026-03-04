@@ -124,7 +124,13 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     });
   }
 
-  await dispatchMode(mode, projectRoot, promptPaths, changeResult.triggeredRules, config);
+  await dispatchMode(
+    mode,
+    projectRoot,
+    promptPaths,
+    changeResult.triggeredRules,
+    config,
+  );
 
   stopWatcher?.();
 
@@ -246,7 +252,8 @@ interface RetryDroppedOptions {
  * only retries rules that are still dropped.
  */
 async function retryDroppedRules(options: RetryDroppedOptions): Promise<void> {
-  const { collected, config, projectRoot, mode, changeResult, onProgress } = options;
+  const { collected, config, projectRoot, mode, changeResult, onProgress } =
+    options;
   const maxAttempts = config.retryDroppedMaxAttempts;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -306,12 +313,21 @@ async function retryDroppedRules(options: RetryDroppedOptions): Promise<void> {
       for (const result of retryCollected.results) {
         const rule = droppedRules.find((r) => r.id === result.ruleId);
         if (rule) {
-          onProgress({ phase: 'result', ruleId: rule.id, ruleName: rule.name, result: result.result });
+          onProgress({
+            phase: 'result',
+            ruleId: rule.id,
+            ruleName: rule.name,
+            result: result.result,
+          });
         }
       }
     }
   }
 
   // Recompute overall status after retries
-  collected.overallStatus = computeOverallStatus(collected.results, collected.dropped, collected.errors);
+  collected.overallStatus = computeOverallStatus(
+    collected.results,
+    collected.dropped,
+    collected.errors,
+  );
 }

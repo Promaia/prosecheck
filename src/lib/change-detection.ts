@@ -50,7 +50,8 @@ export async function detectChanges(
 
   // Determine the comparison ref for agents (merge-base with baseBranch)
   const comparisonRef =
-    options.comparisonRef ?? (await getMergeBase(projectRoot, config.baseBranch));
+    options.comparisonRef ??
+    (await getMergeBase(projectRoot, config.baseBranch));
 
   // Determine the diff ref (may differ from comparisonRef when using last-run)
   let diffRef = comparisonRef;

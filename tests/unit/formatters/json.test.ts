@@ -98,9 +98,7 @@ describe('json formatter', () => {
   it('includes errors', () => {
     const output = makeOutput({
       overallStatus: 'fail',
-      errors: [
-        { ruleId: 'err', ruleName: 'Err Rule', message: 'bad json' },
-      ],
+      errors: [{ ruleId: 'err', ruleName: 'Err Rule', message: 'bad json' }],
     });
 
     const parsed = JSON.parse(formatJson(output)) as JsonOutput;

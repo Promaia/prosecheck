@@ -27,8 +27,7 @@ export function formatSarif(output: CollectResultsOutput): string {
     }
 
     const ruleIndex = ruleIndexMap.get(ruleId) ?? 0;
-    const level: SarifLevel =
-      result.status === 'fail' ? 'error' : 'warning';
+    const level: SarifLevel = result.status === 'fail' ? 'error' : 'warning';
 
     for (const comment of result.comments) {
       const sarifResult: SarifResult = {

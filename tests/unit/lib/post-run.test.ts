@@ -43,7 +43,9 @@ describe('executePostRun', () => {
   it('injects PROSECHECK_STATUS env var', async () => {
     const results = await executePostRun({
       projectRoot: tmpDir,
-      commands: ['node -e "process.stdout.write(process.env.PROSECHECK_STATUS || \'\')"'],
+      commands: [
+        'node -e "process.stdout.write(process.env.PROSECHECK_STATUS || \'\')"',
+      ],
       status: 'fail',
     });
 
@@ -53,7 +55,9 @@ describe('executePostRun', () => {
   it('injects PROSECHECK_RESULTS_DIR env var', async () => {
     const results = await executePostRun({
       projectRoot: tmpDir,
-      commands: ['node -e "process.stdout.write(process.env.PROSECHECK_RESULTS_DIR || \'\')"'],
+      commands: [
+        'node -e "process.stdout.write(process.env.PROSECHECK_RESULTS_DIR || \'\')"',
+      ],
       status: 'pass',
     });
 
@@ -65,7 +69,9 @@ describe('executePostRun', () => {
     const jsonPath = path.join(tmpDir, 'results.json');
     const results = await executePostRun({
       projectRoot: tmpDir,
-      commands: ['node -e "process.stdout.write(process.env.PROSECHECK_RESULTS_JSON || \'\')"'],
+      commands: [
+        'node -e "process.stdout.write(process.env.PROSECHECK_RESULTS_JSON || \'\')"',
+      ],
       status: 'pass',
       resultsJsonPath: jsonPath,
     });

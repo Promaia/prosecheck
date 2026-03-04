@@ -68,7 +68,12 @@ export function parseRulesMd(content: string, source: string): Rule[] {
       // Flush previous rule
       if (currentName !== undefined) {
         rules.push(
-          createRule(currentName, descriptionLines.join('\n').trim(), inclusions, source),
+          createRule(
+            currentName,
+            descriptionLines.join('\n').trim(),
+            inclusions,
+            source,
+          ),
         );
       }
 
@@ -83,7 +88,12 @@ export function parseRulesMd(content: string, source: string): Rule[] {
   // Flush final rule
   if (currentName !== undefined) {
     rules.push(
-      createRule(currentName, descriptionLines.join('\n').trim(), inclusions, source),
+      createRule(
+        currentName,
+        descriptionLines.join('\n').trim(),
+        inclusions,
+        source,
+      ),
     );
   }
 

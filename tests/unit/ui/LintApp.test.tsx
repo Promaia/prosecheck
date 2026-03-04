@@ -39,7 +39,11 @@ describe('LintApp', () => {
     const ref = makeRef();
     const inst = render(<LintApp progressRef={ref} />);
 
-    fireProgress(ref, { phase: 'discovered', ruleId: 'rule-a', ruleName: 'Rule A' });
+    fireProgress(ref, {
+      phase: 'discovered',
+      ruleId: 'rule-a',
+      ruleName: 'Rule A',
+    });
 
     await vi.waitFor(() => {
       expect(getFrame(inst)).toContain('WAIT');
@@ -51,8 +55,16 @@ describe('LintApp', () => {
     const ref = makeRef();
     const inst = render(<LintApp progressRef={ref} />);
 
-    fireProgress(ref, { phase: 'discovered', ruleId: 'rule-a', ruleName: 'Rule A' });
-    fireProgress(ref, { phase: 'running', ruleId: 'rule-a', ruleName: 'Rule A' });
+    fireProgress(ref, {
+      phase: 'discovered',
+      ruleId: 'rule-a',
+      ruleName: 'Rule A',
+    });
+    fireProgress(ref, {
+      phase: 'running',
+      ruleId: 'rule-a',
+      ruleName: 'Rule A',
+    });
 
     await vi.waitFor(() => {
       expect(getFrame(inst)).toContain('..');
@@ -63,8 +75,16 @@ describe('LintApp', () => {
     const ref = makeRef();
     const inst = render(<LintApp progressRef={ref} />);
 
-    fireProgress(ref, { phase: 'discovered', ruleId: 'rule-a', ruleName: 'Rule A' });
-    fireProgress(ref, { phase: 'running', ruleId: 'rule-a', ruleName: 'Rule A' });
+    fireProgress(ref, {
+      phase: 'discovered',
+      ruleId: 'rule-a',
+      ruleName: 'Rule A',
+    });
+    fireProgress(ref, {
+      phase: 'running',
+      ruleId: 'rule-a',
+      ruleName: 'Rule A',
+    });
     fireProgress(ref, {
       phase: 'result',
       ruleId: 'rule-a',
@@ -81,8 +101,16 @@ describe('LintApp', () => {
     const ref = makeRef();
     const inst = render(<LintApp progressRef={ref} />);
 
-    fireProgress(ref, { phase: 'discovered', ruleId: 'rule-a', ruleName: 'Rule A' });
-    fireProgress(ref, { phase: 'discovered', ruleId: 'rule-b', ruleName: 'Rule B' });
+    fireProgress(ref, {
+      phase: 'discovered',
+      ruleId: 'rule-a',
+      ruleName: 'Rule A',
+    });
+    fireProgress(ref, {
+      phase: 'discovered',
+      ruleId: 'rule-b',
+      ruleName: 'Rule B',
+    });
     fireProgress(ref, {
       phase: 'result',
       ruleId: 'rule-a',
@@ -101,7 +129,10 @@ describe('LintApp', () => {
     const ref = makeRef();
     const results: CollectResultsOutput = {
       results: [
-        { ruleId: 'rule-a', result: { status: 'pass', rule: 'A', source: 'RULES.md' } },
+        {
+          ruleId: 'rule-a',
+          result: { status: 'pass', rule: 'A', source: 'RULES.md' },
+        },
       ],
       dropped: [],
       errors: [],
@@ -121,7 +152,11 @@ describe('LintApp', () => {
     const ref = makeRef();
     const inst = render(<LintApp progressRef={ref} />);
 
-    fireProgress(ref, { phase: 'discovered', ruleId: 'rule-a', ruleName: 'Rule A' });
+    fireProgress(ref, {
+      phase: 'discovered',
+      ruleId: 'rule-a',
+      ruleName: 'Rule A',
+    });
     fireProgress(ref, {
       phase: 'result',
       ruleId: 'rule-a',

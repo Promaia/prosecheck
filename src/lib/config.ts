@@ -1,6 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { ConfigSchema, type Config, type PartialConfig } from './config-schema.js';
+import {
+  ConfigSchema,
+  type Config,
+  type PartialConfig,
+} from './config-schema.js';
 
 /**
  * Deep merge two objects. Arrays are replaced, not concatenated.

@@ -30,9 +30,7 @@ export async function calculateAdr(
     throw error;
   }
 
-  const mdFiles = entries
-    .filter((f) => f.endsWith('.md'))
-    .sort();
+  const mdFiles = entries.filter((f) => f.endsWith('.md')).sort();
 
   const rules: Rule[] = [];
 

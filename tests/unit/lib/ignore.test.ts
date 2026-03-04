@@ -2,12 +2,18 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { buildIgnoreFilter, buildInclusionFilter } from '../../../src/lib/ignore.js';
+import {
+  buildIgnoreFilter,
+  buildInclusionFilter,
+} from '../../../src/lib/ignore.js';
 
 let tmpDir: string;
 
 beforeEach(async () => {
-  tmpDir = path.join(os.tmpdir(), `prosecheck-ignore-test-${String(Date.now())}-${Math.random().toString(36).slice(2)}`);
+  tmpDir = path.join(
+    os.tmpdir(),
+    `prosecheck-ignore-test-${String(Date.now())}-${Math.random().toString(36).slice(2)}`,
+  );
   await mkdir(tmpDir, { recursive: true });
 });
 
@@ -27,7 +33,11 @@ describe('buildIgnoreFilter', () => {
   it('combines globalIgnore with additionalIgnore file patterns', async () => {
     await writeFile(path.join(tmpDir, '.gitignore'), 'coverage/\n*.log\n');
 
-    const ig = await buildIgnoreFilter(tmpDir, ['node_modules/'], ['.gitignore']);
+    const ig = await buildIgnoreFilter(
+      tmpDir,
+      ['node_modules/'],
+      ['.gitignore'],
+    );
 
     expect(ig.ignores('node_modules/foo.js')).toBe(true);
     expect(ig.ignores('coverage/report.html')).toBe(true);
@@ -37,7 +47,11 @@ describe('buildIgnoreFilter', () => {
 
   it('handles missing additionalIgnore files gracefully', async () => {
     // .gitignore doesn't exist — should not throw
-    const ig = await buildIgnoreFilter(tmpDir, ['node_modules/'], ['.gitignore']);
+    const ig = await buildIgnoreFilter(
+      tmpDir,
+      ['node_modules/'],
+      ['.gitignore'],
+    );
 
     expect(ig.ignores('node_modules/foo.js')).toBe(true);
     expect(ig.ignores('src/index.ts')).toBe(false);
@@ -54,7 +68,11 @@ describe('buildIgnoreFilter', () => {
     await writeFile(path.join(tmpDir, '.gitignore'), 'coverage/\n');
     await writeFile(path.join(tmpDir, '.eslintignore'), 'dist/\n');
 
-    const ig = await buildIgnoreFilter(tmpDir, [], ['.gitignore', '.eslintignore']);
+    const ig = await buildIgnoreFilter(
+      tmpDir,
+      [],
+      ['.gitignore', '.eslintignore'],
+    );
 
     expect(ig.ignores('coverage/report.html')).toBe(true);
     expect(ig.ignores('dist/index.js')).toBe(true);

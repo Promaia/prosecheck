@@ -86,12 +86,24 @@ beforeEach(() => {
 
   // Default mocks
   mockRunCalculators.mockResolvedValue([
-    { id: 'rule-a', name: 'Rule A', description: 'D', inclusions: ['src/'], source: 'RULES.md' },
+    {
+      id: 'rule-a',
+      name: 'Rule A',
+      description: 'D',
+      inclusions: ['src/'],
+      source: 'RULES.md',
+    },
   ]);
   mockDetectChanges.mockResolvedValue({
     comparisonRef: 'abc123',
     triggeredRules: [
-      { id: 'rule-a', name: 'Rule A', description: 'D', inclusions: ['src/'], source: 'RULES.md' },
+      {
+        id: 'rule-a',
+        name: 'Rule A',
+        description: 'D',
+        inclusions: ['src/'],
+        source: 'RULES.md',
+      },
     ],
     changedFiles: ['src/foo.ts'],
     changedFilesByRule: new Map([['rule-a', ['src/foo.ts']]]),
@@ -101,7 +113,12 @@ beforeEach(() => {
   });
   mockRunClaudeCode.mockResolvedValue([]);
   mockCollectResults.mockResolvedValue({
-    results: [{ ruleId: 'rule-a', result: { status: 'pass', rule: 'Rule A', source: 'RULES.md' } }],
+    results: [
+      {
+        ruleId: 'rule-a',
+        result: { status: 'pass', rule: 'Rule A', source: 'RULES.md' },
+      },
+    ],
     dropped: [],
     errors: [],
     overallStatus: 'pass',
@@ -109,13 +126,26 @@ beforeEach(() => {
   // Real implementation for computeOverallStatus used by retry logic
   const severity = ['pass', 'warn', 'dropped', 'fail'];
   mockComputeOverallStatus.mockImplementation(
-    (results: Array<{ result: { status: string } }>, dropped: unknown[], errors: unknown[]) => {
+    (
+      results: Array<{ result: { status: string } }>,
+      dropped: unknown[],
+      errors: unknown[],
+    ) => {
       let worst = 'pass';
       for (const { result } of results) {
-        if (severity.indexOf(result.status) > severity.indexOf(worst)) worst = result.status;
+        if (severity.indexOf(result.status) > severity.indexOf(worst))
+          worst = result.status;
       }
-      if (dropped.length > 0 && severity.indexOf('dropped') > severity.indexOf(worst)) worst = 'dropped';
-      if (errors.length > 0 && severity.indexOf('fail') > severity.indexOf(worst)) worst = 'fail';
+      if (
+        dropped.length > 0 &&
+        severity.indexOf('dropped') > severity.indexOf(worst)
+      )
+        worst = 'dropped';
+      if (
+        errors.length > 0 &&
+        severity.indexOf('fail') > severity.indexOf(worst)
+      )
+        worst = 'fail';
       return worst;
     },
   );
@@ -211,13 +241,18 @@ describe('runEngine', () => {
 
   it('promotes warn to fail when warnAsError is set', async () => {
     mockCollectResults.mockResolvedValue({
-      results: [{
-        ruleId: 'rule-a',
-        result: {
-          status: 'warn', rule: 'Rule A', source: 'RULES.md',
-          headline: 'h', comments: [{ message: 'm' }],
+      results: [
+        {
+          ruleId: 'rule-a',
+          result: {
+            status: 'warn',
+            rule: 'Rule A',
+            source: 'RULES.md',
+            headline: 'h',
+            comments: [{ message: 'm' }],
+          },
         },
-      }],
+      ],
       dropped: [],
       errors: [],
       overallStatus: 'warn',
@@ -252,7 +287,13 @@ describe('runEngine', () => {
     mockDetectChanges.mockResolvedValue({
       comparisonRef: 'abc123',
       triggeredRules: [
-        { id: 'rule-a', name: 'Rule A', description: 'D', inclusions: ['src/'], source: 'RULES.md' },
+        {
+          id: 'rule-a',
+          name: 'Rule A',
+          description: 'D',
+          inclusions: ['src/'],
+          source: 'RULES.md',
+        },
       ],
       changedFiles: ['src/foo.ts'],
       changedFilesByRule: new Map([['rule-a', ['src/foo.ts']]]),
@@ -266,8 +307,20 @@ describe('runEngine', () => {
   });
 
   describe('retryDropped', () => {
-    const ruleA = { id: 'rule-a', name: 'Rule A', description: 'D', inclusions: ['src/'], source: 'RULES.md' };
-    const ruleB = { id: 'rule-b', name: 'Rule B', description: 'D', inclusions: ['src/'], source: 'RULES.md' };
+    const ruleA = {
+      id: 'rule-a',
+      name: 'Rule A',
+      description: 'D',
+      inclusions: ['src/'],
+      source: 'RULES.md',
+    };
+    const ruleB = {
+      id: 'rule-b',
+      name: 'Rule B',
+      description: 'D',
+      inclusions: ['src/'],
+      source: 'RULES.md',
+    };
 
     it('does not retry when retryDropped is false', async () => {
       mockRunCalculators.mockResolvedValue([ruleA]);
@@ -285,7 +338,9 @@ describe('runEngine', () => {
       });
       mockFormatStylish.mockReturnValue('DROPPED');
 
-      const context = makeContext({ config: makeConfig({ retryDropped: false }) });
+      const context = makeContext({
+        config: makeConfig({ retryDropped: false }),
+      });
       await runEngine(context);
 
       // collectResults called once (no retry)
@@ -299,23 +354,39 @@ describe('runEngine', () => {
         comparisonRef: 'abc123',
         triggeredRules: [ruleA, ruleB],
         changedFiles: ['src/foo.ts'],
-        changedFilesByRule: new Map([['rule-a', ['src/foo.ts']], ['rule-b', ['src/foo.ts']]]),
+        changedFilesByRule: new Map([
+          ['rule-a', ['src/foo.ts']],
+          ['rule-b', ['src/foo.ts']],
+        ]),
       });
       mockGeneratePrompts.mockResolvedValue({
-        promptPaths: new Map([['rule-a', '/tmp/p/rule-a.md'], ['rule-b', '/tmp/p/rule-b.md']]),
+        promptPaths: new Map([
+          ['rule-a', '/tmp/p/rule-a.md'],
+          ['rule-b', '/tmp/p/rule-b.md'],
+        ]),
       });
 
       // First collect: rule-a passes, rule-b dropped
       mockCollectResults
         .mockResolvedValueOnce({
-          results: [{ ruleId: 'rule-a', result: { status: 'pass', rule: 'Rule A', source: 'RULES.md' } }],
+          results: [
+            {
+              ruleId: 'rule-a',
+              result: { status: 'pass', rule: 'Rule A', source: 'RULES.md' },
+            },
+          ],
           dropped: [{ rule: ruleB, attempt: 1 }],
           errors: [],
           overallStatus: 'dropped',
         })
         // Second collect (retry): rule-b now passes
         .mockResolvedValueOnce({
-          results: [{ ruleId: 'rule-b', result: { status: 'pass', rule: 'Rule B', source: 'RULES.md' } }],
+          results: [
+            {
+              ruleId: 'rule-b',
+              result: { status: 'pass', rule: 'Rule B', source: 'RULES.md' },
+            },
+          ],
           dropped: [],
           errors: [],
           overallStatus: 'pass',
@@ -387,7 +458,18 @@ describe('runEngine', () => {
           overallStatus: 'dropped',
         })
         .mockResolvedValueOnce({
-          results: [{ ruleId: 'rule-a', result: { status: 'warn', rule: 'Rule A', source: 'RULES.md', headline: 'h', comments: [] } }],
+          results: [
+            {
+              ruleId: 'rule-a',
+              result: {
+                status: 'warn',
+                rule: 'Rule A',
+                source: 'RULES.md',
+                headline: 'h',
+                comments: [],
+              },
+            },
+          ],
           dropped: [],
           errors: [],
           overallStatus: 'warn',
@@ -411,23 +493,39 @@ describe('runEngine', () => {
         comparisonRef: 'abc123',
         triggeredRules: [ruleA, ruleB],
         changedFiles: ['src/foo.ts'],
-        changedFilesByRule: new Map([['rule-a', ['src/foo.ts']], ['rule-b', ['src/foo.ts']]]),
+        changedFilesByRule: new Map([
+          ['rule-a', ['src/foo.ts']],
+          ['rule-b', ['src/foo.ts']],
+        ]),
       });
       mockGeneratePrompts.mockResolvedValue({
-        promptPaths: new Map([['rule-a', '/tmp/p/rule-a.md'], ['rule-b', '/tmp/p/rule-b.md']]),
+        promptPaths: new Map([
+          ['rule-a', '/tmp/p/rule-a.md'],
+          ['rule-b', '/tmp/p/rule-b.md'],
+        ]),
       });
 
       // First: rule-a passes, rule-b dropped
       mockCollectResults
         .mockResolvedValueOnce({
-          results: [{ ruleId: 'rule-a', result: { status: 'pass', rule: 'Rule A', source: 'RULES.md' } }],
+          results: [
+            {
+              ruleId: 'rule-a',
+              result: { status: 'pass', rule: 'Rule A', source: 'RULES.md' },
+            },
+          ],
           dropped: [{ rule: ruleB, attempt: 1 }],
           errors: [],
           overallStatus: 'dropped',
         })
         // Retry collect: rule-b passes
         .mockResolvedValueOnce({
-          results: [{ ruleId: 'rule-b', result: { status: 'pass', rule: 'Rule B', source: 'RULES.md' } }],
+          results: [
+            {
+              ruleId: 'rule-b',
+              result: { status: 'pass', rule: 'Rule B', source: 'RULES.md' },
+            },
+          ],
           dropped: [],
           errors: [],
           overallStatus: 'pass',
@@ -441,7 +539,9 @@ describe('runEngine', () => {
 
       // The retry generatePrompts should only have rule-b
       const retryPromptCall = mockGeneratePrompts.mock.calls[1] as unknown[];
-      const retryPromptRules = (retryPromptCall[0] as { rules: typeof ruleA[] }).rules;
+      const retryPromptRules = (
+        retryPromptCall[0] as { rules: (typeof ruleA)[] }
+      ).rules;
       expect(retryPromptRules).toHaveLength(1);
       expect(retryPromptRules[0]?.id).toBe('rule-b');
     });

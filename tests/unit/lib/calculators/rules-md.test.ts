@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
-import { calculateRulesMd, parseRulesMd } from '../../../../src/lib/calculators/rules-md.js';
+import {
+  calculateRulesMd,
+  parseRulesMd,
+} from '../../../../src/lib/calculators/rules-md.js';
 
 const fixturesDir = path.resolve(import.meta.dirname, '../../../fixtures');
 
@@ -106,7 +109,9 @@ describe('calculateRulesMd', () => {
     const rules = await calculateRulesMd(projectRoot);
 
     expect(rules).toHaveLength(1);
-    expect(rules[0]?.name).toBe('All exported functions must have JSDoc comments');
+    expect(rules[0]?.name).toBe(
+      'All exported functions must have JSDoc comments',
+    );
     expect(rules[0]?.source).toBe('RULES.md');
     expect(rules[0]?.inclusions).toEqual([]);
   });
@@ -121,7 +126,9 @@ describe('calculateRulesMd', () => {
     const ruleNames = rules.map((r) => r.name);
     expect(ruleNames).toContain('No console.log in production code');
     expect(ruleNames).toContain('Use strict TypeScript');
-    expect(ruleNames).toContain('Error responses use the shared ApiError class');
+    expect(ruleNames).toContain(
+      'Error responses use the shared ApiError class',
+    );
     expect(ruleNames).toContain('API routes must validate input with Zod');
   });
 
@@ -129,9 +136,13 @@ describe('calculateRulesMd', () => {
     const projectRoot = path.join(fixturesDir, 'project-nested');
     const rules = await calculateRulesMd(projectRoot);
 
-    const rootRule = rules.find((r) => r.name === 'No console.log in production code');
+    const rootRule = rules.find(
+      (r) => r.name === 'No console.log in production code',
+    );
     const srcRule = rules.find((r) => r.name === 'Use strict TypeScript');
-    const apiRule = rules.find((r) => r.name === 'Error responses use the shared ApiError class');
+    const apiRule = rules.find(
+      (r) => r.name === 'Error responses use the shared ApiError class',
+    );
 
     expect(rootRule?.inclusions).toEqual([]);
     expect(srcRule?.inclusions).toEqual(['src/']);

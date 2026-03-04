@@ -28,32 +28,34 @@ program
   .option('--no-last-run-write', 'Do not write last-run hash')
   .option('--agent-teams', 'Enable agent teams for parallel rule processing')
   .option('--no-agent-teams', 'Disable agent teams')
-  .action(async (options: {
-    env?: string;
-    mode?: string;
-    format?: string;
-    ref?: string;
-    timeout?: number;
-    warnAsError?: boolean;
-    retryDropped?: boolean;
-    lastRunRead?: boolean;
-    lastRunWrite?: boolean;
-    agentTeams?: boolean;
-  }) => {
-    await lint({
-      projectRoot: process.cwd(),
-      env: options.env,
-      mode: options.mode,
-      format: options.format,
-      ref: options.ref,
-      timeout: options.timeout,
-      warnAsError: options.warnAsError,
-      retryDropped: options.retryDropped,
-      lastRunRead: options.lastRunRead,
-      lastRunWrite: options.lastRunWrite,
-      agentTeams: options.agentTeams,
-    });
-  });
+  .action(
+    async (options: {
+      env?: string;
+      mode?: string;
+      format?: string;
+      ref?: string;
+      timeout?: number;
+      warnAsError?: boolean;
+      retryDropped?: boolean;
+      lastRunRead?: boolean;
+      lastRunWrite?: boolean;
+      agentTeams?: boolean;
+    }) => {
+      await lint({
+        projectRoot: process.cwd(),
+        env: options.env,
+        mode: options.mode,
+        format: options.format,
+        ref: options.ref,
+        timeout: options.timeout,
+        warnAsError: options.warnAsError,
+        retryDropped: options.retryDropped,
+        lastRunRead: options.lastRunRead,
+        lastRunWrite: options.lastRunWrite,
+        agentTeams: options.agentTeams,
+      });
+    },
+  );
 
 program
   .command('init')

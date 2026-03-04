@@ -11,7 +11,9 @@ export function formatStylish(output: CollectResultsOutput): string {
 
   for (const { ruleId, result } of output.results) {
     const statusLabel = formatStatus(result.status);
-    lines.push(`${statusLabel} ${pc.bold(result.rule)} ${pc.dim(`(${ruleId})`)}`);
+    lines.push(
+      `${statusLabel} ${pc.bold(result.rule)} ${pc.dim(`(${ruleId})`)}`,
+    );
     lines.push(`  ${pc.dim('source:')} ${result.source}`);
 
     if (result.status === 'pass') {
@@ -31,7 +33,9 @@ export function formatStylish(output: CollectResultsOutput): string {
 
   for (const { rule } of output.dropped) {
     const statusLabel = formatStatus('dropped');
-    lines.push(`${statusLabel} ${pc.bold(rule.name)} ${pc.dim(`(${rule.id})`)}`);
+    lines.push(
+      `${statusLabel} ${pc.bold(rule.name)} ${pc.dim(`(${rule.id})`)}`,
+    );
     lines.push(`  ${pc.dim('source:')} ${rule.source}`);
     lines.push(`  No output produced by agent`);
     lines.push('');
@@ -39,7 +43,9 @@ export function formatStylish(output: CollectResultsOutput): string {
 
   for (const error of output.errors) {
     const statusLabel = formatStatus('error');
-    lines.push(`${statusLabel} ${pc.bold(error.ruleName)} ${pc.dim(`(${error.ruleId})`)}`);
+    lines.push(
+      `${statusLabel} ${pc.bold(error.ruleName)} ${pc.dim(`(${error.ruleId})`)}`,
+    );
     lines.push(`  ${error.message}`);
     lines.push('');
   }
@@ -76,9 +82,15 @@ function formatLocation(file?: string, line?: number): string {
 function buildSummary(output: CollectResultsOutput): string {
   const total =
     output.results.length + output.dropped.length + output.errors.length;
-  const passed = output.results.filter((r) => r.result.status === 'pass').length;
-  const warned = output.results.filter((r) => r.result.status === 'warn').length;
-  const failed = output.results.filter((r) => r.result.status === 'fail').length;
+  const passed = output.results.filter(
+    (r) => r.result.status === 'pass',
+  ).length;
+  const warned = output.results.filter(
+    (r) => r.result.status === 'warn',
+  ).length;
+  const failed = output.results.filter(
+    (r) => r.result.status === 'fail',
+  ).length;
   const droppedCount = output.dropped.length;
   const errorCount = output.errors.length;
 
@@ -86,7 +98,8 @@ function buildSummary(output: CollectResultsOutput): string {
   if (passed > 0) parts.push(pc.green(`${String(passed)} passed`));
   if (warned > 0) parts.push(pc.yellow(`${String(warned)} warned`));
   if (failed > 0) parts.push(pc.red(`${String(failed)} failed`));
-  if (droppedCount > 0) parts.push(pc.magenta(`${String(droppedCount)} dropped`));
+  if (droppedCount > 0)
+    parts.push(pc.magenta(`${String(droppedCount)} dropped`));
   if (errorCount > 0) parts.push(pc.red(`${String(errorCount)} errors`));
 
   return `${pc.bold(String(total) + ' rules')} | ${parts.join(' | ')}`;

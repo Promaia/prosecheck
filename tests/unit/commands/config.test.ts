@@ -24,14 +24,18 @@ beforeEach(async () => {
 
   stdoutData = '';
   stderrData = '';
-  vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
-    stdoutData += String(chunk);
-    return true;
-  });
-  vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
-    stderrData += String(chunk);
-    return true;
-  });
+  vi.spyOn(process.stdout, 'write').mockImplementation(
+    (chunk: string | Uint8Array) => {
+      stdoutData += String(chunk);
+      return true;
+    },
+  );
+  vi.spyOn(process.stderr, 'write').mockImplementation(
+    (chunk: string | Uint8Array) => {
+      stderrData += String(chunk);
+      return true;
+    },
+  );
 });
 
 afterEach(async () => {
@@ -46,10 +50,15 @@ async function writeConfig(
 ): Promise<void> {
   const configDir = path.join(projectRoot, '.prosecheck');
   await mkdir(configDir, { recursive: true });
-  await writeFile(path.join(configDir, 'config.json'), JSON.stringify(configObj));
+  await writeFile(
+    path.join(configDir, 'config.json'),
+    JSON.stringify(configObj),
+  );
 }
 
-async function readConfig(projectRoot: string): Promise<Record<string, unknown>> {
+async function readConfig(
+  projectRoot: string,
+): Promise<Record<string, unknown>> {
   const content = await readFile(
     path.join(projectRoot, '.prosecheck', 'config.json'),
     'utf-8',
@@ -61,7 +70,10 @@ async function readConfig(projectRoot: string): Promise<Record<string, unknown>>
 
 describe('extractFields', () => {
   it('extracts top-level fields from ConfigSchema', () => {
-    const defaults = ConfigSchema.parse({}) as unknown as Record<string, unknown>;
+    const defaults = ConfigSchema.parse({}) as unknown as Record<
+      string,
+      unknown
+    >;
     const fields = extractFields(ConfigSchema, defaults, defaults);
 
     const paths = fields.map((f) => f.path);
@@ -71,7 +83,10 @@ describe('extractFields', () => {
   });
 
   it('recurses into nested objects (lastRun)', () => {
-    const defaults = ConfigSchema.parse({}) as unknown as Record<string, unknown>;
+    const defaults = ConfigSchema.parse({}) as unknown as Record<
+      string,
+      unknown
+    >;
     const fields = extractFields(ConfigSchema, defaults, defaults);
 
     const paths = fields.map((f) => f.path);
@@ -82,7 +97,10 @@ describe('extractFields', () => {
   });
 
   it('includes descriptions from .describe()', () => {
-    const defaults = ConfigSchema.parse({}) as unknown as Record<string, unknown>;
+    const defaults = ConfigSchema.parse({}) as unknown as Record<
+      string,
+      unknown
+    >;
     const fields = extractFields(ConfigSchema, defaults, defaults);
 
     const baseBranch = fields.find((f) => f.path === 'baseBranch');
@@ -90,7 +108,10 @@ describe('extractFields', () => {
   });
 
   it('includes default values', () => {
-    const defaults = ConfigSchema.parse({}) as unknown as Record<string, unknown>;
+    const defaults = ConfigSchema.parse({}) as unknown as Record<
+      string,
+      unknown
+    >;
     const fields = extractFields(ConfigSchema, defaults, defaults);
 
     const timeout = fields.find((f) => f.path === 'timeout');
@@ -116,7 +137,9 @@ describe('resolveSchemaType', () => {
   });
 
   it('returns undefined for invalid nested paths', () => {
-    expect(resolveSchemaType(ConfigSchema, 'baseBranch.nested')).toBeUndefined();
+    expect(
+      resolveSchemaType(ConfigSchema, 'baseBranch.nested'),
+    ).toBeUndefined();
   });
 });
 

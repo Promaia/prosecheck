@@ -22,7 +22,15 @@ describe('watchOutputs', () => {
     const onResult = vi.fn();
     const stop = watchOutputs({
       projectRoot: tmpDir,
-      expectedRules: [{ id: 'rule-a', name: 'Rule A', description: '', inclusions: [], source: 'RULES.md' }],
+      expectedRules: [
+        {
+          id: 'rule-a',
+          name: 'Rule A',
+          description: '',
+          inclusions: [],
+          source: 'RULES.md',
+        },
+      ],
       onResult,
     });
 
@@ -33,9 +41,12 @@ describe('watchOutputs', () => {
     );
 
     // Wait for the watcher to pick it up
-    await vi.waitFor(() => {
-      expect(onResult).toHaveBeenCalledOnce();
-    }, { timeout: 3000 });
+    await vi.waitFor(
+      () => {
+        expect(onResult).toHaveBeenCalledOnce();
+      },
+      { timeout: 3000 },
+    );
 
     expect(onResult).toHaveBeenCalledWith(
       'rule-a',
@@ -50,7 +61,15 @@ describe('watchOutputs', () => {
     const onResult = vi.fn();
     const stop = watchOutputs({
       projectRoot: tmpDir,
-      expectedRules: [{ id: 'rule-a', name: 'Rule A', description: '', inclusions: [], source: 'RULES.md' }],
+      expectedRules: [
+        {
+          id: 'rule-a',
+          name: 'Rule A',
+          description: '',
+          inclusions: [],
+          source: 'RULES.md',
+        },
+      ],
       onResult,
     });
 
@@ -61,7 +80,9 @@ describe('watchOutputs', () => {
     );
 
     // Give the watcher time to process
-    await new Promise((resolve) => { setTimeout(resolve, 200); });
+    await new Promise((resolve) => {
+      setTimeout(resolve, 200);
+    });
 
     expect(onResult).not.toHaveBeenCalled();
 
@@ -72,13 +93,23 @@ describe('watchOutputs', () => {
     const onResult = vi.fn();
     const stop = watchOutputs({
       projectRoot: tmpDir,
-      expectedRules: [{ id: 'rule-a', name: 'Rule A', description: '', inclusions: [], source: 'RULES.md' }],
+      expectedRules: [
+        {
+          id: 'rule-a',
+          name: 'Rule A',
+          description: '',
+          inclusions: [],
+          source: 'RULES.md',
+        },
+      ],
       onResult,
     });
 
     await writeFile(path.join(outputsDir, 'rule-a.txt'), 'not json');
 
-    await new Promise((resolve) => { setTimeout(resolve, 200); });
+    await new Promise((resolve) => {
+      setTimeout(resolve, 200);
+    });
 
     expect(onResult).not.toHaveBeenCalled();
 
@@ -89,21 +120,38 @@ describe('watchOutputs', () => {
     const onResult = vi.fn();
     const stop = watchOutputs({
       projectRoot: tmpDir,
-      expectedRules: [{ id: 'rule-a', name: 'Rule A', description: '', inclusions: [], source: 'RULES.md' }],
+      expectedRules: [
+        {
+          id: 'rule-a',
+          name: 'Rule A',
+          description: '',
+          inclusions: [],
+          source: 'RULES.md',
+        },
+      ],
       onResult,
     });
 
-    const content = JSON.stringify({ status: 'pass', rule: 'Rule A', source: 'RULES.md' });
+    const content = JSON.stringify({
+      status: 'pass',
+      rule: 'Rule A',
+      source: 'RULES.md',
+    });
     await writeFile(path.join(outputsDir, 'rule-a.json'), content);
 
-    await vi.waitFor(() => {
-      expect(onResult).toHaveBeenCalledOnce();
-    }, { timeout: 3000 });
+    await vi.waitFor(
+      () => {
+        expect(onResult).toHaveBeenCalledOnce();
+      },
+      { timeout: 3000 },
+    );
 
     // Overwrite the same file
     await writeFile(path.join(outputsDir, 'rule-a.json'), content);
 
-    await new Promise((resolve) => { setTimeout(resolve, 200); });
+    await new Promise((resolve) => {
+      setTimeout(resolve, 200);
+    });
 
     expect(onResult).toHaveBeenCalledOnce();
 
@@ -114,7 +162,15 @@ describe('watchOutputs', () => {
     const onResult = vi.fn();
     const stop = watchOutputs({
       projectRoot: tmpDir,
-      expectedRules: [{ id: 'rule-a', name: 'Rule A', description: '', inclusions: [], source: 'RULES.md' }],
+      expectedRules: [
+        {
+          id: 'rule-a',
+          name: 'Rule A',
+          description: '',
+          inclusions: [],
+          source: 'RULES.md',
+        },
+      ],
       onResult,
     });
 
@@ -126,7 +182,9 @@ describe('watchOutputs', () => {
       JSON.stringify({ status: 'pass', rule: 'Rule A', source: 'RULES.md' }),
     );
 
-    await new Promise((resolve) => { setTimeout(resolve, 200); });
+    await new Promise((resolve) => {
+      setTimeout(resolve, 200);
+    });
 
     expect(onResult).not.toHaveBeenCalled();
   });

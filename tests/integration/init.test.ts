@@ -90,7 +90,8 @@ describe('init command', () => {
 
   it('does not reinitialize if already initialized', async () => {
     await init({ projectRoot: tmpDir, createRules: false });
-    const stdoutCalls = (process.stdout.write as ReturnType<typeof vi.fn>).mock.calls;
+    const stdoutCalls = (process.stdout.write as ReturnType<typeof vi.fn>).mock
+      .calls;
     const callCountAfterFirst = stdoutCalls.length;
 
     await init({ projectRoot: tmpDir, createRules: false });

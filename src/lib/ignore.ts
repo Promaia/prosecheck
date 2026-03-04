@@ -50,7 +50,9 @@ export async function buildIgnoreFilter(
  * Uses the `ignore` package (gitignore semantics) so directory patterns like
  * "src/api/" match all files under that directory.
  */
-export function buildInclusionFilter(inclusions: string[]): (filePath: string) => boolean {
+export function buildInclusionFilter(
+  inclusions: string[],
+): (filePath: string) => boolean {
   if (inclusions.length === 0) {
     // No inclusions means the rule applies to everything
     return () => true;

@@ -24,7 +24,10 @@ export interface LintAppProps {
  * Writes its progress handler into `progressRef.current` on mount,
  * scoped to this specific render instance.
  */
-export function LintApp({ progressRef, finalResults }: LintAppProps): React.ReactElement {
+export function LintApp({
+  progressRef,
+  finalResults,
+}: LintAppProps): React.ReactElement {
   const { entries } = useLintAppState(progressRef);
 
   return (
@@ -39,7 +42,9 @@ export function LintApp({ progressRef, finalResults }: LintAppProps): React.Reac
 
 type EntriesMap = Map<string, RuleProgressEntry>;
 
-function useLintAppState(progressRef: ProgressRef): { entries: RuleProgressEntry[] } {
+function useLintAppState(progressRef: ProgressRef): {
+  entries: RuleProgressEntry[];
+} {
   const [entriesMap, setEntriesMap] = useState<EntriesMap>(new Map());
 
   const handleProgress = useCallback((event: ProgressEvent) => {

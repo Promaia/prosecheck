@@ -25,9 +25,7 @@ export interface UserPromptModeOptions {
  * Uses the shared orchestration prompt builder — same code path as
  * claude-code single-instance mode.
  */
-export function buildUserPrompt(
-  options: UserPromptModeOptions,
-): string {
+export function buildUserPrompt(options: UserPromptModeOptions): string {
   return buildOrchestrationPrompt({
     projectRoot: options.projectRoot,
     promptPaths: options.promptPaths,
@@ -63,14 +61,12 @@ export async function watchForOutputs(
     }
 
     const watcher = watch(outputsDir, () => {
-      void getCompletedRuleIds(outputsDir, expectedIds).then(
-        (nowCompleted) => {
-          if (nowCompleted.size >= expectedIds.size) {
-            watcher.close();
-            resolve(nowCompleted);
-          }
-        },
-      );
+      void getCompletedRuleIds(outputsDir, expectedIds).then((nowCompleted) => {
+        if (nowCompleted.size >= expectedIds.size) {
+          watcher.close();
+          resolve(nowCompleted);
+        }
+      });
     });
 
     signal?.addEventListener(
@@ -78,8 +74,12 @@ export async function watchForOutputs(
       () => {
         watcher.close();
         void getCompletedRuleIds(outputsDir, expectedIds).then(
-          (ids) => { resolve(ids); },
-          () => { resolve(completed); },
+          (ids) => {
+            resolve(ids);
+          },
+          () => {
+            resolve(completed);
+          },
         );
       },
       { once: true },

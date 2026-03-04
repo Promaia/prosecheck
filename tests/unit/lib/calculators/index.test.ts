@@ -12,7 +12,9 @@ describe('runCalculators', () => {
     const rules = await runCalculators(projectRoot, config);
 
     expect(rules).toHaveLength(1);
-    expect(rules[0]?.name).toBe('All exported functions must have JSDoc comments');
+    expect(rules[0]?.name).toBe(
+      'All exported functions must have JSDoc comments',
+    );
   });
 
   it('dispatches to named calculators from config', async () => {
@@ -70,9 +72,7 @@ describe('runCalculators', () => {
 
   it('throws for unknown calculator name', async () => {
     const config = ConfigSchema.parse({
-      ruleCalculators: [
-        { name: 'nonexistent', enabled: true },
-      ],
+      ruleCalculators: [{ name: 'nonexistent', enabled: true }],
     });
 
     await expect(

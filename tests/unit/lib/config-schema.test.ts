@@ -110,7 +110,13 @@ describe('RuleResultSchema', () => {
       rule: 'No console.log',
       source: 'src/RULES.md',
       headline: 'Minor issue found',
-      comments: [{ message: 'Consider removing console.log', file: 'src/foo.ts', line: 42 }],
+      comments: [
+        {
+          message: 'Consider removing console.log',
+          file: 'src/foo.ts',
+          line: 42,
+        },
+      ],
     });
     expect(result.success).toBe(true);
   });

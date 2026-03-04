@@ -30,8 +30,10 @@ vi.mock('../../src/modes/claude-code.js', () => ({
 const mockBuildUserPrompt = vi.fn();
 const mockWatchForOutputs = vi.fn();
 vi.mock('../../src/modes/user-prompt.js', () => ({
-  buildUserPrompt: (...args: unknown[]) => mockBuildUserPrompt(...args) as unknown,
-  watchForOutputs: (...args: unknown[]) => mockWatchForOutputs(...args) as unknown,
+  buildUserPrompt: (...args: unknown[]) =>
+    mockBuildUserPrompt(...args) as unknown,
+  watchForOutputs: (...args: unknown[]) =>
+    mockWatchForOutputs(...args) as unknown,
 }));
 
 const { runEngine } = await import('../../src/lib/engine.js');
@@ -67,7 +69,10 @@ function makeContext(overrides: Partial<RunContext> = {}): RunContext {
 }
 
 /** Write a rule result JSON file to the outputs directory */
-async function writeAgentOutput(ruleId: string, result: Record<string, unknown>): Promise<void> {
+async function writeAgentOutput(
+  ruleId: string,
+  result: Record<string, unknown>,
+): Promise<void> {
   const outputDir = path.join(tmpDir, '.prosecheck/working/outputs');
   await mkdir(outputDir, { recursive: true });
   await writeFile(
@@ -228,7 +233,9 @@ describe('E2E: claude-code mode', () => {
         rule: 'No console.log',
         source: 'RULES.md',
         headline: 'Found one console.log',
-        comments: [{ message: 'Consider removing', file: 'src/foo.ts', line: 5 }],
+        comments: [
+          { message: 'Consider removing', file: 'src/foo.ts', line: 5 },
+        ],
       });
     });
 
@@ -334,7 +341,9 @@ describe('E2E: init creates working project scaffold', () => {
     await init({ projectRoot: tmpDir, createRules: true });
 
     // Verify scaffold
-    const config = JSON.parse(await readFile(path.join(tmpDir, '.prosecheck/config.json'), 'utf-8')) as Record<string, unknown>;
+    const config = JSON.parse(
+      await readFile(path.join(tmpDir, '.prosecheck/config.json'), 'utf-8'),
+    ) as Record<string, unknown>;
     expect(config['baseBranch']).toBe('main');
 
     const rules = await readFile(path.join(tmpDir, 'RULES.md'), 'utf-8');
@@ -530,7 +539,9 @@ describe('E2E: SARIF output validation', () => {
 
     // Validate physical locations
     for (const r of results) {
-      const locations = r['locations'] as Array<Record<string, unknown>> | undefined;
+      const locations = r['locations'] as
+        | Array<Record<string, unknown>>
+        | undefined;
       if (locations) {
         for (const loc of locations) {
           const physLoc = loc['physicalLocation'] as Record<string, unknown>;
@@ -569,6 +580,8 @@ describe('E2E: SARIF output validation', () => {
     // Dropped rules should appear as error-level
     const droppedResult = results[0] as Record<string, unknown>;
     expect(droppedResult['level']).toBe('error');
-    expect((droppedResult['message'] as Record<string, string>)['text']).toContain('no output');
+    expect(
+      (droppedResult['message'] as Record<string, string>)['text'],
+    ).toContain('no output');
   });
 });

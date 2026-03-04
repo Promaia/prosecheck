@@ -60,7 +60,11 @@ function getDescription(zodType: z.ZodType): string | undefined {
  */
 function unwrap(zodType: z.ZodType): z.ZodType {
   const typeName = getTypeString(zodType);
-  if (typeName === 'default' || typeName === 'optional' || typeName === 'nullable') {
+  if (
+    typeName === 'default' ||
+    typeName === 'optional' ||
+    typeName === 'nullable'
+  ) {
     const inner = getDef(zodType).innerType;
     if (inner) return unwrap(inner);
   }
@@ -95,7 +99,11 @@ export function extractFields(
     const currentVal = current[key];
 
     // For nested plain objects with a known Zod object shape, recurse
-    if (isZodObject(inner) && isPlainObject(currentVal) && isPlainObject(defaultVal)) {
+    if (
+      isZodObject(inner) &&
+      isPlainObject(currentVal) &&
+      isPlainObject(defaultVal)
+    ) {
       fields.push(
         ...extractFields(
           inner as z.ZodObject<z.ZodRawShape>,
@@ -128,7 +136,8 @@ async function configList(projectRoot: string): Promise<void> {
   );
 
   for (const field of fields) {
-    const isDefault = JSON.stringify(field.currentValue) === JSON.stringify(field.defaultValue);
+    const isDefault =
+      JSON.stringify(field.currentValue) === JSON.stringify(field.defaultValue);
     const valueStr = formatValue(field.currentValue);
     const marker = isDefault ? pc.dim('(default)') : pc.yellow('(modified)');
 
@@ -176,7 +185,9 @@ async function configSet(projectRoot: string, args: string[]): Promise<void> {
   for (const arg of args) {
     const eqIdx = arg.indexOf('=');
     if (eqIdx === -1) {
-      process.stderr.write(`Invalid argument: ${arg}. Expected key=value format.\n`);
+      process.stderr.write(
+        `Invalid argument: ${arg}. Expected key=value format.\n`,
+      );
       process.exitCode = 2;
       return;
     }
@@ -188,7 +199,9 @@ async function configSet(projectRoot: string, args: string[]): Promise<void> {
     const schemaType = resolveSchemaType(ConfigSchema, key);
     if (!schemaType) {
       process.stderr.write(`Unknown config key: ${key}\n`);
-      process.stderr.write(`Run "prosecheck config list" to see available keys.\n`);
+      process.stderr.write(
+        `Run "prosecheck config list" to see available keys.\n`,
+      );
       process.exitCode = 2;
       return;
     }
@@ -226,7 +239,11 @@ async function configSet(projectRoot: string, args: string[]): Promise<void> {
 
   // Write
   await mkdir(configDir, { recursive: true });
-  await writeFile(configPath, JSON.stringify(rawConfig, null, 2) + '\n', 'utf-8');
+  await writeFile(
+    configPath,
+    JSON.stringify(rawConfig, null, 2) + '\n',
+    'utf-8',
+  );
 
   for (const arg of args) {
     const eqIdx = arg.indexOf('=');
@@ -262,7 +279,9 @@ export function resolveSchemaType(
   return current;
 }
 
-type CoerceResult = { value: unknown; error?: never } | { value?: never; error: string };
+type CoerceResult =
+  | { value: unknown; error?: never }
+  | { value?: never; error: string };
 
 /**
  * Coerce a string value to the expected type based on Zod schema type.
@@ -281,7 +300,8 @@ export function coerceValue(raw: string, zodType: z.ZodType): CoerceResult {
 
     case 'number': {
       const num = Number(raw);
-      if (Number.isNaN(num)) return { error: `expected a number, got "${raw}"` };
+      if (Number.isNaN(num))
+        return { error: `expected a number, got "${raw}"` };
       return { value: num };
     }
 
@@ -306,7 +326,11 @@ export function coerceValue(raw: string, zodType: z.ZodType): CoerceResult {
       // Records must be JSON
       try {
         const parsed = JSON.parse(raw) as unknown;
-        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        if (
+          typeof parsed !== 'object' ||
+          parsed === null ||
+          Array.isArray(parsed)
+        ) {
           return { error: 'expected a JSON object' };
         }
         return { value: parsed };
@@ -327,7 +351,10 @@ export function coerceValue(raw: string, zodType: z.ZodType): CoerceResult {
 
 // --- Object path helpers ---
 
-function getNestedValue(obj: Record<string, unknown>, dotPath: string): unknown {
+function getNestedValue(
+  obj: Record<string, unknown>,
+  dotPath: string,
+): unknown {
   const parts = dotPath.split('.');
   let current: unknown = obj;
   for (const part of parts) {
@@ -337,7 +364,11 @@ function getNestedValue(obj: Record<string, unknown>, dotPath: string): unknown 
   return current;
 }
 
-function setNestedValue(obj: Record<string, unknown>, dotPath: string, value: unknown): void {
+function setNestedValue(
+  obj: Record<string, unknown>,
+  dotPath: string,
+  value: unknown,
+): void {
   const parts = dotPath.split('.');
   let current = obj;
   for (let i = 0; i < parts.length - 1; i++) {
