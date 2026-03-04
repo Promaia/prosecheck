@@ -24,6 +24,10 @@ After making changes to the codebase, you MUST:
 
 3. **Check ROADMAP.md before starting work** — Before implementing anything, read `ROADMAP.md` to understand current implementation status, what has been completed, and what the next priorities are. Follow the milestone ordering — earlier milestones should be completed before later ones.
 
+## Verification
+
+After completing each milestone (or any significant set of changes), run `npm run ci` to verify everything passes. This runs typecheck, lint, test, and build in sequence. Do not move to the next milestone until CI passes cleanly. If CI fails, fix the issue before proceeding.
+
 ## Code style
 
 - TypeScript strict mode with ESM-only (`"type": "module"`)
