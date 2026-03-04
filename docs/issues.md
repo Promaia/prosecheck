@@ -36,6 +36,10 @@ The ROADMAP originally specified execa for process spawning, but `execFile` from
 
 If `fs.watch` fires rapid file events, `getCompletedRuleIds` may be called multiple times concurrently. Each call independently checks completion and may call `resolve()`. This is harmless since `resolve()` is idempotent after the first call, but the redundant I/O could be avoided with a debounce or guard flag.
 
+### `engine.ts`: No retry loop for dropped rules
+
+The engine detects dropped rules (missing output files) via `collectResults` but does not re-dispatch them. The data structures are in place (`DroppedRule.attempt`, `config.retryDropped`, `config.retryDroppedMaxAttempts`) but the retry loop itself is not implemented. Currently dropped rules are reported but never retried regardless of config.
+
 ### `config.ts`: Environment overrides bypass static type constraints via `Partial<Config>` cast
 
 When environment overrides are deep-merged at `config.ts:126`, the `EnvironmentOverrideSchema` (a subset of `Config`) is cast as `Partial<Config>`. This means TypeScript won't catch if extra keys sneak in. Not a runtime bug — Zod's final `safeParse()` strips unknown keys — but it's the same family of dynamic-config-meets-static-types looseness as issue 2.
