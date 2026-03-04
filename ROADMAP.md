@@ -87,11 +87,11 @@ Transform results into human-readable and machine-readable formats.
 
 The execution backends that launch agents.
 
-- [ ] Implement `src/modes/user-prompt.ts` — Build orchestration prompt listing all prompt file paths, display to user, watch `.prosecheck/working/outputs/` for result files, support user-signal completion in interactive environments
-- [ ] Implement `src/modes/claude-code.ts` — Spawn `claude --print` processes via execa (one per rule, parallel), feed prompt file content to each instance, collect outputs, support `claudeCode.singleInstance` config for agent-team strategy
-- [ ] Write unit tests for user-prompt mode (prompt generation, file watching)
-- [ ] Write unit tests for claude-code mode (mock execa, process management, single-instance toggle)
-- [ ] Verify `npm run ci` passes
+- [x] Implement `src/modes/user-prompt.ts` — Build orchestration prompt listing all prompt file paths, display to user, watch `.prosecheck/working/outputs/` for result files, support user-signal completion in interactive environments
+- [x] Implement `src/modes/claude-code.ts` — Spawn `claude --print` processes via execFile (one per rule, parallel), feed prompt file content to each instance, collect outputs, support `claudeCode.singleInstance` config for agent-team strategy
+- [x] Write unit tests for user-prompt mode (prompt generation, file watching)
+- [x] Write unit tests for claude-code mode (mock spawnClaude, process management, single-instance toggle)
+- [x] Verify `npm run ci` passes
 
 ---
 
