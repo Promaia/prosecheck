@@ -53,9 +53,9 @@ Git integration for determining which rules to run.
 
 Build the per-rule prompt files that agents consume.
 
-- [ ] Implement `src/lib/prompt.ts` — Load default template, load custom template from `.prosecheck/prompt-template.md` if present, load global system prompt from `.prosecheck/prompt.md` if present, interpolate variables (rule text, comparison ref, changed files, scope, output path), write to `.prosecheck/working/prompts/<rule-id>.md`
-- [ ] Write unit tests for prompt generation (template interpolation, custom templates, system prompt prepending)
-- [ ] Verify `npm run ci` passes
+- [x] Implement `src/lib/prompt.ts` — Load default template, load custom template from `.prosecheck/prompt-template.md` if present, load global system prompt from `.prosecheck/prompt.md` if present, interpolate variables (rule text, comparison ref, changed files, scope, output path), write to `.prosecheck/working/prompts/<rule-id>.md`
+- [x] Write unit tests for prompt generation (template interpolation, custom templates, system prompt prepending)
+- [x] Verify `npm run ci` passes
 
 ---
 
