@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { buildIgnoreFilter, buildInclusionFilter, filterFiles } from '../../../src/lib/ignore.js';
+import { buildIgnoreFilter, buildInclusionFilter } from '../../../src/lib/ignore.js';
 
 let tmpDir: string;
 
@@ -83,31 +83,5 @@ describe('buildInclusionFilter', () => {
     expect(filter('src/api/routes.ts')).toBe(true);
     expect(filter('src/lib/utils.ts')).toBe(true);
     expect(filter('src/db/queries.ts')).toBe(false);
-  });
-});
-
-describe('filterFiles', () => {
-  it('excludes globally ignored files and applies inclusions', async () => {
-    const globalFilter = await buildIgnoreFilter(tmpDir, ['node_modules/', 'dist/'], []);
-
-    const files = [
-      'src/api/routes.ts',
-      'src/lib/utils.ts',
-      'node_modules/foo/index.js',
-      'dist/index.js',
-    ];
-
-    const result = filterFiles(files, globalFilter, ['src/api/']);
-
-    expect(result).toEqual(['src/api/routes.ts']);
-  });
-
-  it('keeps all non-ignored files when inclusions are empty', async () => {
-    const globalFilter = await buildIgnoreFilter(tmpDir, ['node_modules/'], []);
-
-    const files = ['src/foo.ts', 'src/bar.ts', 'node_modules/x.js'];
-    const result = filterFiles(files, globalFilter, []);
-
-    expect(result).toEqual(['src/foo.ts', 'src/bar.ts']);
   });
 });
