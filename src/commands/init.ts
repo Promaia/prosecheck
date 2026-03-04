@@ -54,7 +54,8 @@ export async function init(options: InitOptions): Promise<void> {
     return;
   }
 
-  // 1. Create directories
+  // 1. Create directories (working/ shows users the full structure upfront;
+  //    the engine wipes and recreates it on each lint run)
   await mkdir(prosecheckDir, { recursive: true });
   await mkdir(path.join(prosecheckDir, 'working'), { recursive: true });
 
