@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { lint } from './commands/lint.js';
 import { init } from './commands/init.js';
+import { config } from './commands/config.js';
 
 const program = new Command();
 
@@ -62,6 +63,32 @@ program
     await init({
       projectRoot: process.cwd(),
       createRules: options.rules ?? false,
+    });
+  });
+
+const configCmd = program
+  .command('config')
+  .description('View or modify prosecheck configuration');
+
+configCmd
+  .command('list')
+  .description('List all configuration fields with current values')
+  .action(async () => {
+    await config({
+      projectRoot: process.cwd(),
+      action: 'list',
+      args: [],
+    });
+  });
+
+configCmd
+  .command('set <entries...>')
+  .description('Set configuration values (key=value format)')
+  .action(async (entries: string[]) => {
+    await config({
+      projectRoot: process.cwd(),
+      action: 'set',
+      args: entries,
     });
   });
 
