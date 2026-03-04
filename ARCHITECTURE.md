@@ -174,13 +174,13 @@ Reads Architecture Decision Records from a configured path (default `docs/adr/`)
 
 Control how agents are launched. Independent of environment (any mode runs in any environment).
 
-### `user-prompt.ts` — User Prompt Mode **[STUB]**
+### `user-prompt.ts` — User Prompt Mode [IMPLEMENTED]
 
-Generates per-rule prompt files, then builds a single orchestration prompt listing all prompt file paths. Displays the prompt for the user to paste into Claude Code. Watches `.prosecheck/working/outputs/` for result files and/or waits for user signal.
+Builds a single orchestration prompt listing all prompt file paths and their corresponding output paths. The user pastes this into Claude Code or another LLM interface. Watches `.prosecheck/working/outputs/` via `fs.watch` for result files and resolves when all expected outputs exist. Supports abort signals for early termination with partial results. Key functions: `buildOrchestrationPrompt()`, `watchForOutputs()`.
 
-### `claude-code.ts` — Claude Code Headless Mode **[STUB]**
+### `claude-code.ts` — Claude Code Headless Mode [IMPLEMENTED]
 
-Spawns `claude --print` processes (one per rule, in parallel). Each instance receives its prompt file content and writes results to `.prosecheck/working/outputs/`. Config option `claudeCode.singleInstance` switches to a single-instance agent-team strategy.
+Spawns `claude --print` processes (one per rule, in parallel) via `execFile`. Each instance receives its prompt file content via the `-p` flag and writes results to `.prosecheck/working/outputs/`. Config option `claudeCode.singleInstance` switches to a single-instance agent-team strategy that combines all rule prompts into one invocation. Key functions: `runClaudeCode()`, `spawnClaude()`.
 
 ### Claude Agents SDK Mode **[PLANNED]**
 
