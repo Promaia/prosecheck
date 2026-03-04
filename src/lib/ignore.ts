@@ -61,22 +61,3 @@ export function buildInclusionFilter(inclusions: string[]): (filePath: string) =
 
   return (filePath: string) => ig.ignores(filePath);
 }
-
-/**
- * Filter a list of file paths: keep only those that are NOT globally ignored
- * AND ARE included by the rule's inclusion patterns.
- */
-export function filterFiles(
-  files: string[],
-  globalFilter: Ignore,
-  inclusions: string[],
-): string[] {
-  const inclusionFilter = buildInclusionFilter(inclusions);
-
-  return files.filter((file) => {
-    // Skip globally ignored files
-    if (globalFilter.ignores(file)) return false;
-    // Keep only files matching the rule's inclusions
-    return inclusionFilter(file);
-  });
-}

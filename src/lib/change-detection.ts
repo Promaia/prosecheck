@@ -41,7 +41,7 @@ export interface ChangeDetectionResult {
  * 3. Run `git diff --name-only` to get changed files
  * 4. Filter through global ignore patterns
  * 5. Match files to rule scopes
- * 6. Optionally write the current HEAD as the new last-run hash
+ * 6. Optionally prepare a deferred callback to persist the current HEAD hash
  */
 export async function detectChanges(
   options: ChangeDetectionOptions,
