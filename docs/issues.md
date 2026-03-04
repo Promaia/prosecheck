@@ -55,3 +55,7 @@ The e2e tests set `additionalIgnore: []` in the config, skipping the `.gitignore
 ### `pipeline.test.ts`: E2E tests don't cover post-run tasks
 
 Post-run task execution (`config.postRun` → `executePostRun`) is unit-tested but not included in the e2e pipeline tests. A future test could verify that post-run commands receive the correct environment variables after a full pipeline run.
+
+### `claude-code.test.ts`: No test for `env` var propagation in `spawnClaude`
+
+The claude-code tests mock `execFile` but don't verify that `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is passed through in the `env` option when `agentTeams` is true. The env var injection logic in `runSingleInstance` is untested at the unit level.
