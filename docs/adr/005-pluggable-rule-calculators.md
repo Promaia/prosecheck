@@ -16,7 +16,7 @@ Alternatives considered:
 
 ## Decision
 
-Rule discovery is handled by **rule calculators** — named modules declared in `.prosecheck/config.json`. Each calculator receives its config options and returns a list of rules with name, description, inclusions, and source reference. Two calculators are built-in: `rules-md` (discovers and parses RULES.md files) and `adr` (derives rules from ADR documents).
+Rule discovery is handled by **rule calculators** — named modules declared in `.prosecheck/config.json`. Each calculator receives its config options and returns a list of rules with name, description, inclusions, and source reference. Two calculators are built-in: `rules-md` (discovers and parses RULES.md files) and `adr` (derives rules from ADR documents that contain an explicit `## Rules` heading — ADRs without this heading are documentation-only and produce no rules).
 
 ## Consequences
 

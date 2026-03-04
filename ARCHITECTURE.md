@@ -156,7 +156,7 @@ Discovers `RULES.md` files throughout the project tree. Parses top-level `#` hea
 
 ### `adr.ts` — ADR Calculator **[STUB]**
 
-Reads Architecture Decision Records from a configured path (default `docs/adr/`). Derives enforceable rules from recorded decisions. ADR-derived rules apply project-wide (inclusions: root).
+Reads Architecture Decision Records from a configured path (default `docs/adr/`). Only ADRs containing an explicit `## Rules` heading produce prosecheck rules — ADRs without this heading are documentation-only and skipped. The content under `## Rules` becomes the rule description; the ADR title (`# ...`) becomes the rule name. ADR-derived rules apply project-wide (inclusions: root).
 
 ---
 

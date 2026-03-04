@@ -281,8 +281,8 @@ my-project/
 │
 ├── docs/
 │   └── adr/                         # (optional) Architecture Decision Records
-│       ├── 001-use-zod.md           # (optional) ADR → becomes enforceable rule
-│       ├── 002-api-error-class.md   # (optional) ADR → becomes enforceable rule
+│       ├── 001-use-zod.md           # (optional) ADR with ## Rules heading → enforceable rule
+│       ├── 002-api-error-class.md   # (optional) ADR without ## Rules → documentation only, skipped
 │       └── ...
 │
 ├── package.json
@@ -293,7 +293,7 @@ my-project/
 
 **RULES.md files** can live at any directory depth. Each file's directory becomes the inclusion pattern for all rules it contains. A `RULES.md` deeper in the tree adds rules specific to that subtree.
 
-**ADR files** are read from the path configured in the `adr` calculator (default `docs/adr/`). These are optional — the `adr` calculator can be disabled in config.
+**ADR files** are read from the path configured in the `adr` calculator (default `docs/adr/`). Only ADRs with an explicit `## Rules` heading produce prosecheck rules — others are documentation-only. The `adr` calculator can be disabled entirely in config.
 
 ---
 
@@ -328,7 +328,7 @@ Rule calculators are declared in the `ruleCalculators` array within `.prosecheck
 
 **`rules-md`** — The default calculator. Discovers `RULES.md` files throughout the project tree and parses each rule entry from them. Each rule's inclusions are set to the directory containing its `RULES.md` (e.g., a `RULES.md` at `src/api/` produces inclusions of `src/api/`). In the initial implementation, this is a single directory path per rule. In the future, `RULES.md` could support exclusion patterns or frontmatter to refine scope further. Enabled by default.
 
-**`adr`** — Calculates rules from Architecture Decision Records. Reads ADR files from a configured path (default `docs/adr`) and derives enforceable rules from recorded decisions. For example, an ADR that decides "use Zod for all external data validation" becomes a rule agents can check against. In the initial implementation, ADR-derived rules apply project-wide (inclusions: root). In the future, ADR files could use YAML frontmatter to define specific inclusion/exclusion patterns. Enabled by default.
+**`adr`** — Calculates rules from Architecture Decision Records. Reads ADR files from a configured path (default `docs/adr`). Only ADRs that contain an explicit `## Rules` heading produce prosecheck rules — ADRs without this heading are treated as documentation-only and skipped. The content under the `## Rules` heading (up to the next same-level heading or end of file) becomes the rule description. The ADR title (`# ...` heading) becomes the rule name. This opt-in approach means teams can have a mix of enforceable and documentation-only ADRs in the same directory. ADR-derived rules apply project-wide (inclusions: root). In the future, ADR files could use YAML frontmatter to define specific inclusion/exclusion patterns. Enabled by default.
 
 ### Custom Calculators
 
