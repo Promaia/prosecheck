@@ -37,6 +37,23 @@ export interface PromptVariables {
   ruleId: string;
 }
 
+// --- Progress tracking ---
+
+export type ProgressPhase = 'discovered' | 'running' | 'result';
+
+export interface ProgressEvent {
+  /** Which phase triggered this event */
+  phase: ProgressPhase;
+  /** Rule ID this event is about */
+  ruleId: string;
+  /** Rule name (human-readable) */
+  ruleName: string;
+  /** Agent result — present only when phase is 'result' */
+  result?: RuleResult | undefined;
+}
+
+export type OnProgress = (event: ProgressEvent) => void;
+
 // --- Run context ---
 
 export interface RunContext {
@@ -52,4 +69,6 @@ export interface RunContext {
   projectRoot: string;
   /** Git comparison ref */
   comparisonRef: string;
+  /** Optional progress callback for interactive UI */
+  onProgress?: OnProgress | undefined;
 }

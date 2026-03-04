@@ -45,7 +45,7 @@ Programmatic entry point for use as a library dependency. Exports: core types (`
 
 ### `src/commands/lint.ts` — Lint Command [IMPLEMENTED]
 
-Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, timeout), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). Key function: `lint(options: LintOptions)`.
+Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, timeout, agentTeams), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). When stdout is a TTY and format is `stylish`, lazy-imports the Ink UI (`src/ui/render.ts`) for interactive progress display instead of plain text output. Key function: `lint(options: LintOptions)`.
 
 ### `src/commands/init.ts` — Init Command [IMPLEMENTED]
 
@@ -92,15 +92,18 @@ Central coordinator that drives the lint pipeline:
 1. Cleanup `.prosecheck/working/`
 2. Run rule calculators → collect all rules (early return if none)
 3. Run change detection → get triggered rules (early return if none)
-4. Generate per-rule prompts
-5. Dispatch to operating mode (`claude-code` or `user-prompt`)
-6. Collect results (with dropped detection)
-7. Apply `warnAsError` promotion
-8. Format output (stylish/json/sarif)
-9. Execute post-run tasks
-10. Persist last-run hash if applicable
+4. Fire `discovered` and `running` progress events (if `onProgress` callback set)
+5. Generate per-rule prompts
+6. Start output file watcher (if `onProgress` set) — lazy-imports `output-watcher.ts`
+7. Dispatch to operating mode (`claude-code` or `user-prompt`)
+8. Stop output watcher
+9. Collect results (with dropped detection)
+10. Apply `warnAsError` promotion
+11. Format output (stylish/json/sarif)
+12. Execute post-run tasks
+13. Persist last-run hash if applicable
 
-Key function: `runEngine(context: RunContext): Promise<EngineResult>`. Returns formatted output string, overall status, and raw results.
+Key function: `runEngine(context: RunContext): Promise<EngineResult>`. Returns formatted output string, overall status, and raw results. Accepts optional `onProgress` callback on `RunContext` for real-time progress tracking.
 
 ### `change-detection.ts` — Git Diff & File Filtering [IMPLEMENTED]
 
@@ -220,17 +223,29 @@ SARIF 2.1.0 schema for GitHub Code Scanning. Maps warn/fail results to SARIF res
 
 ---
 
-## UI Components (`src/ui/components/`) [IMPLEMENTED]
+## UI Components (`src/ui/`) [IMPLEMENTED]
 
-Ink + React components for interactive terminal display.
+Ink + React components for interactive terminal display. Lazy-loaded via dynamic `import()` to avoid loading Ink/React for non-interactive code paths (CI, piped output, JSON/SARIF format).
 
-### `LintProgress.tsx` — Live Progress Table [IMPLEMENTED]
+### `components/LintProgress.tsx` — Live Progress Table [IMPLEMENTED]
 
 Renders a live table showing each rule's name, run status (`waiting` / `running` / `done`), and result as agents complete. Each row displays a colored status label (WAIT/`..`/PASS/WARN/FAIL/DROP) with the rule name and, when done, the result headline or pass comment. Accepts a `RuleProgressEntry[]` prop. Supports rerendering with updated status for real-time progress tracking.
 
-### `Summary.tsx` — Results Summary [IMPLEMENTED]
+### `components/Summary.tsx` — Results Summary [IMPLEMENTED]
 
 Final results summary component. Displays total rule count, per-status counts (passed/warned/failed/dropped/errors), and overall status (PASS/WARN/FAIL/DROPPED) with color coding. Accepts a `CollectResultsOutput` prop from the results collector.
+
+### `LintApp.tsx` — Top-Level App [IMPLEMENTED]
+
+Composes `LintProgress` and `Summary` into a single Ink app. Manages `RuleProgressEntry[]` state via a React hook, accepting `ProgressEvent` updates from the engine. Exposes a module-level `getProgressHandler()` for the render wrapper to push events imperatively. Shows `Summary` only when `finalResults` prop is provided.
+
+### `render.ts` — Ink Render Wrapper [IMPLEMENTED]
+
+Manages the Ink render lifecycle. `shouldUseInteractiveUI(format)` checks for TTY + stylish format. `startInteractiveUI()` renders `LintApp`, returns an `InteractiveUI` interface with `onProgress` (feed to engine), `finish(results)` (show summary + unmount), and `cleanup()` (unmount on error).
+
+### `output-watcher.ts` (`src/lib/`) — Live Output Watcher [IMPLEMENTED]
+
+Watches `.prosecheck/working/outputs/` via `fs.watch` for new result files during mode dispatch. When a file matching an expected rule ID appears, reads and validates it via `parseResultFile()`, then fires the `onResult` callback. Deduplicates by rule ID (each rule fires at most once). Returns a stop function. Lazy-imported by the engine only when `onProgress` is set.
 
 ---
 
