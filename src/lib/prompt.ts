@@ -151,7 +151,7 @@ export function buildPromptVariables(
   changedFiles: string[],
   projectRoot: string,
 ): PromptVariables {
-  const outputPath = path.join(projectRoot, OUTPUTS_DIR, `${rule.id}.json`);
+  const outputPath = path.join(projectRoot, OUTPUTS_DIR, `${rule.id}.json`).replaceAll('\\', '/');
   return {
     ruleText: `# ${rule.name}\n\n${rule.description}`,
     comparisonRef,
