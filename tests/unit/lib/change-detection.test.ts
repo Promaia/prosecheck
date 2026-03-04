@@ -13,7 +13,7 @@ import { createRule } from '../../../src/lib/rule.js';
 
 // Mock execa
 vi.mock('execa', () => ({
-  execaCommand: vi.fn(),
+  execa: vi.fn(),
 }));
 
 // Mock fs/promises
@@ -23,13 +23,12 @@ vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn(),
 }));
 
-// Mock buildIgnoreFilter from ignore module — filterFiles is kept as-is via passthrough
+// Mock buildIgnoreFilter from ignore module — buildInclusionFilter is kept as-is via passthrough
 vi.mock('../../../src/lib/ignore.js', async () => {
-  const { filterFiles, buildInclusionFilter } = await vi.importActual<
+  const { buildInclusionFilter } = await vi.importActual<
     Record<string, unknown>
   >('../../../src/lib/ignore.js');
   return {
-    filterFiles,
     buildInclusionFilter,
     buildIgnoreFilter: vi.fn().mockResolvedValue({
       ignores: () => false,
@@ -37,11 +36,11 @@ vi.mock('../../../src/lib/ignore.js', async () => {
   };
 });
 
-import { execaCommand } from 'execa';
+import { execa } from 'execa';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { buildIgnoreFilter } from '../../../src/lib/ignore.js';
 
-const mockedExeca = vi.mocked(execaCommand);
+const mockedExeca = vi.mocked(execa);
 const mockedReadFile = vi.mocked(readFile);
 const mockedWriteFile = vi.mocked(writeFile);
 const mockedMkdir = vi.mocked(mkdir);
@@ -60,9 +59,11 @@ describe('getMergeBase', () => {
     const result = await getMergeBase(PROJECT_ROOT, 'main');
 
     expect(result).toBe('abc123');
-    expect(mockedExeca).toHaveBeenCalledWith('git merge-base HEAD main', {
-      cwd: PROJECT_ROOT,
-    });
+    expect(mockedExeca).toHaveBeenCalledWith(
+      'git',
+      ['merge-base', 'HEAD', 'main'],
+      { cwd: PROJECT_ROOT },
+    );
   });
 
   it('falls back to branch name when merge-base fails', async () => {
@@ -83,9 +84,11 @@ describe('getChangedFiles', () => {
     const result = await getChangedFiles(PROJECT_ROOT, 'abc123');
 
     expect(result).toEqual(['src/foo.ts', 'src/bar.ts']);
-    expect(mockedExeca).toHaveBeenCalledWith('git diff --name-only abc123', {
-      cwd: PROJECT_ROOT,
-    });
+    expect(mockedExeca).toHaveBeenCalledWith(
+      'git',
+      ['diff', '--name-only', 'abc123'],
+      { cwd: PROJECT_ROOT },
+    );
   });
 
   it('returns empty array when no changes', async () => {
@@ -132,6 +135,14 @@ describe('readLastRunHash', () => {
 
   it('returns undefined for empty file', async () => {
     mockedReadFile.mockResolvedValueOnce('');
+
+    const result = await readLastRunHash(PROJECT_ROOT);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for invalid (non-hex) hash', async () => {
+    mockedReadFile.mockResolvedValueOnce('not-a-hex-hash\n');
 
     const result = await readLastRunHash(PROJECT_ROOT);
 
@@ -207,7 +218,7 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: baseConfig,
-      environment: 'interactive',
+
       rules,
     });
 
@@ -228,7 +239,7 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: baseConfig,
-      environment: 'interactive',
+
       rules,
     });
 
@@ -248,7 +259,7 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: baseConfig,
-      environment: 'interactive',
+
       rules: makeRules(),
     });
 
@@ -271,7 +282,7 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: baseConfig,
-      environment: 'interactive',
+
       rules: makeRules(),
       comparisonRef: 'explicit-ref',
     });
@@ -279,7 +290,8 @@ describe('detectChanges', () => {
     expect(result.comparisonRef).toBe('explicit-ref');
     // First execa call should be getChangedFiles with explicit ref
     expect(mockedExeca).toHaveBeenCalledWith(
-      'git diff --name-only explicit-ref',
+      'git',
+      ['diff', '--name-only', 'explicit-ref'],
       { cwd: PROJECT_ROOT },
     );
   });
@@ -295,8 +307,8 @@ describe('detectChanges', () => {
     } as never);
     // getChangedFiles — should use last-run hash, not merge-base
     mockedExeca.mockResolvedValueOnce({ stdout: 'src/foo.ts' } as never);
-    // readLastRunHash
-    mockedReadFile.mockResolvedValueOnce('last-run-hash\n');
+    // readLastRunHash — must be valid hex
+    mockedReadFile.mockResolvedValueOnce('aabbccdd1122\n');
     mockedBuildIgnoreFilter.mockResolvedValueOnce({
       ignores: () => false,
     } as never);
@@ -304,14 +316,15 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: ciConfig,
-      environment: 'ci',
+
       rules: makeRules(),
     });
 
     // comparisonRef should be merge-base (agents get this), but diff used last-run
     expect(result.comparisonRef).toBe('merge-base-hash');
     expect(mockedExeca).toHaveBeenCalledWith(
-      'git diff --name-only last-run-hash',
+      'git',
+      ['diff', '--name-only', 'aabbccdd1122'],
       { cwd: PROJECT_ROOT },
     );
   });
@@ -338,19 +351,20 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: ciConfig,
-      environment: 'ci',
+
       rules: makeRules(),
     });
 
     // Should fall back to merge-base
     expect(mockedExeca).toHaveBeenCalledWith(
-      'git diff --name-only merge-base-hash',
+      'git',
+      ['diff', '--name-only', 'merge-base-hash'],
       { cwd: PROJECT_ROOT },
     );
     expect(result.comparisonRef).toBe('merge-base-hash');
   });
 
-  it('writes last-run hash when lastRun.write is enabled', async () => {
+  it('returns commitLastRunHash callback when lastRun.write is enabled', async () => {
     const config = ConfigSchema.parse({
       lastRun: { read: false, write: true },
     });
@@ -359,15 +373,24 @@ describe('detectChanges', () => {
     mockedBuildIgnoreFilter.mockResolvedValueOnce({
       ignores: () => false,
     } as never);
-    mockedMkdir.mockResolvedValueOnce(undefined);
-    mockedWriteFile.mockResolvedValueOnce(undefined);
 
-    await detectChanges({
+    const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config,
-      environment: 'interactive',
+
       rules: [],
     });
+
+    // Should NOT write immediately — deferred to caller
+    expect(mockedWriteFile).not.toHaveBeenCalled();
+    expect(result.commitLastRunHash).toBeDefined();
+
+    // Caller invokes the callback after successful run
+    mockedMkdir.mockResolvedValueOnce(undefined);
+    mockedWriteFile.mockResolvedValueOnce(undefined);
+    const commit = result.commitLastRunHash;
+    expect(commit).toBeDefined();
+    if (commit) await commit();
 
     expect(mockedWriteFile).toHaveBeenCalledWith(
       path.join(PROJECT_ROOT, '.prosecheck/last-user-run'),
@@ -376,7 +399,7 @@ describe('detectChanges', () => {
     );
   });
 
-  it('does not write last-run hash when lastRun.write is disabled', async () => {
+  it('does not return commitLastRunHash when lastRun.write is disabled', async () => {
     const config = ConfigSchema.parse({
       lastRun: { read: false, write: false },
     });
@@ -392,13 +415,14 @@ describe('detectChanges', () => {
       ignores: () => false,
     } as never);
 
-    await detectChanges({
+    const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config,
-      environment: 'ci',
+
       rules: [],
     });
 
+    expect(result.commitLastRunHash).toBeUndefined();
     expect(mockedWriteFile).not.toHaveBeenCalled();
   });
 
@@ -414,7 +438,7 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: baseConfig,
-      environment: 'interactive',
+
       rules,
     });
 
@@ -457,7 +481,7 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: baseConfig,
-      environment: 'interactive',
+
       rules: makeRules(),
     });
 

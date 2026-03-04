@@ -19,3 +19,4 @@
 ## Process
 
 Rank each finding by severity (high/med/low) and present them before taking any action.
+After user approval, add all findings to `docs/issues.md` under the appropriate severity heading.

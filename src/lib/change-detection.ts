@@ -1,17 +1,15 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { execaCommand } from 'execa';
+import { execa } from 'execa';
 import type { Config } from './config-schema.js';
 import type { Rule } from '../types/index.js';
-import { buildIgnoreFilter, filterFiles } from './ignore.js';
+import { buildIgnoreFilter, buildInclusionFilter } from './ignore.js';
 
 export interface ChangeDetectionOptions {
   /** Project root directory */
   projectRoot: string;
   /** Resolved configuration */
   config: Config;
-  /** Active environment name */
-  environment: string;
   /** All discovered rules */
   rules: Rule[];
   /** Explicit comparison ref override (from CLI --ref flag) */
@@ -27,6 +25,12 @@ export interface ChangeDetectionResult {
   changedFiles: string[];
   /** Map from rule ID to the changed files within that rule's scope */
   changedFilesByRule: Map<string, string[]>;
+  /**
+   * Callback to persist the current HEAD as the last-run hash.
+   * Only present when `config.lastRun.write` is enabled.
+   * The caller (engine) should invoke this after a successful run.
+   */
+  commitLastRunHash?: () => Promise<void>;
 }
 
 /**
@@ -69,30 +73,33 @@ export async function detectChanges(
 
   const changedFiles = rawChangedFiles.filter((f) => !globalFilter.ignores(f));
 
-  // Match changed files to rule scopes
+  // Match changed files to rule scopes (global ignore already applied above)
   const changedFilesByRule = new Map<string, string[]>();
   const triggeredRules: Rule[] = [];
 
   for (const rule of rules) {
-    const ruleFiles = filterFiles(changedFiles, globalFilter, rule.inclusions);
+    const inclusionFilter = buildInclusionFilter(rule.inclusions);
+    const ruleFiles = changedFiles.filter(inclusionFilter);
     if (ruleFiles.length > 0) {
       changedFilesByRule.set(rule.id, ruleFiles);
       triggeredRules.push(rule);
     }
   }
 
-  // Write current HEAD as last-run hash if configured
-  if (config.lastRun.write) {
-    const headHash = await getCurrentHead(projectRoot);
-    await writeLastRunHash(projectRoot, headHash);
-  }
-
-  return {
+  const result: ChangeDetectionResult = {
     comparisonRef,
     triggeredRules,
     changedFiles,
     changedFilesByRule,
   };
+
+  // Prepare deferred last-run write for the caller (engine) to invoke after success
+  if (config.lastRun.write) {
+    const headHash = await getCurrentHead(projectRoot);
+    result.commitLastRunHash = () => writeLastRunHash(projectRoot, headHash);
+  }
+
+  return result;
 }
 
 /**
@@ -105,10 +112,9 @@ export async function getMergeBase(
   baseBranch: string,
 ): Promise<string> {
   try {
-    const { stdout } = await execaCommand(
-      `git merge-base HEAD ${baseBranch}`,
-      { cwd: projectRoot },
-    );
+    const { stdout } = await execa('git', ['merge-base', 'HEAD', baseBranch], {
+      cwd: projectRoot,
+    });
     return stdout.trim();
   } catch {
     // Fallback: use the branch ref directly (e.g. shallow clone)
@@ -124,10 +130,9 @@ export async function getChangedFiles(
   projectRoot: string,
   ref: string,
 ): Promise<string[]> {
-  const { stdout } = await execaCommand(
-    `git diff --name-only ${ref}`,
-    { cwd: projectRoot },
-  );
+  const { stdout } = await execa('git', ['diff', '--name-only', ref], {
+    cwd: projectRoot,
+  });
 
   if (!stdout.trim()) {
     return [];
@@ -140,7 +145,7 @@ export async function getChangedFiles(
  * Get the current HEAD commit hash.
  */
 export async function getCurrentHead(projectRoot: string): Promise<string> {
-  const { stdout } = await execaCommand('git rev-parse HEAD', {
+  const { stdout } = await execa('git', ['rev-parse', 'HEAD'], {
     cwd: projectRoot,
   });
   return stdout.trim();
@@ -148,9 +153,11 @@ export async function getCurrentHead(projectRoot: string): Promise<string> {
 
 const LAST_RUN_PATH = '.prosecheck/last-user-run';
 
+const GIT_HASH_RE = /^[0-9a-f]{4,40}$/;
+
 /**
  * Read the last-run hash from `.prosecheck/last-user-run`.
- * Returns undefined if the file doesn't exist.
+ * Returns undefined if the file doesn't exist or contains an invalid hash.
  */
 export async function readLastRunHash(
   projectRoot: string,
@@ -161,7 +168,9 @@ export async function readLastRunHash(
       'utf-8',
     );
     const hash = content.trim();
-    return hash || undefined;
+    if (!hash) return undefined;
+    if (!GIT_HASH_RE.test(hash)) return undefined;
+    return hash;
   } catch (error: unknown) {
     if (isEnoent(error)) {
       return undefined;
