@@ -35,9 +35,9 @@ Commander-based argument parsing. Registers `lint` and `init` subcommands with f
 
 **Exit codes:** 0 = all passed, 1 = rule failures, 2 = tool/config error.
 
-### `src/index.ts` — Library API **[STUB]**
+### `src/index.ts` — Library API [IMPLEMENTED]
 
-Programmatic entry point. Exports core types and the engine for use as a library dependency.
+Programmatic entry point for use as a library dependency. Exports: core types (`Config`, `RuleResult`, `Rule`, `RuleStatus`, `RunContext`, `PromptVariables`), engine (`runEngine`, `EngineResult`), config loading (`loadConfig`, `resolveEnvironment`, `ConfigError`), result types (`CollectResultsOutput`, `RuleResultWithId`, `DroppedRule`), all three formatters (`formatStylish`, `formatJson`, `formatSarif`), and commands (`init`, `lint`).
 
 ---
 

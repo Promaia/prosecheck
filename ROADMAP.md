@@ -133,8 +133,8 @@ Interactive display for real-time progress.
 
 Public programmatic interface for use as a dependency.
 
-- [ ] Implement `src/index.ts` — Export core types (Rule, RuleResult, Config), engine function, and formatter utilities for programmatic consumption
-- [ ] Verify `npm run ci` passes
+- [x] Implement `src/index.ts` — Export core types (Rule, RuleResult, Config), engine function, and formatter utilities for programmatic consumption
+- [x] Verify `npm run ci` passes
 
 ---
 
@@ -142,12 +142,12 @@ Public programmatic interface for use as a dependency.
 
 Full integration testing against real scenarios.
 
-- [ ] End-to-end test: user-prompt mode with fixture project — verify prompt files generated, simulate agent output, verify formatted results
-- [ ] End-to-end test: claude-code mode with fixture project (mocked execa) — verify full pipeline from CLI invocation to exit code
-- [ ] End-to-end test: init command creates working project scaffold
-- [ ] End-to-end test: incremental run tracking across multiple invocations
-- [ ] End-to-end test: SARIF output validates against SARIF schema
-- [ ] Verify CI pipeline passes (`npm run ci`) — typecheck, lint, format, test, build
+- [x] End-to-end test: user-prompt mode with fixture project — verify prompt files generated, simulate agent output, verify formatted results
+- [x] End-to-end test: claude-code mode with fixture project (mocked execa) — verify full pipeline from CLI invocation to exit code
+- [x] End-to-end test: init command creates working project scaffold
+- [x] End-to-end test: incremental run tracking across multiple invocations
+- [x] End-to-end test: SARIF output validates against SARIF schema
+- [x] Verify CI pipeline passes (`npm run ci`) — typecheck, lint, format, test, build
 
 ---
 
