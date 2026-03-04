@@ -43,3 +43,7 @@ The engine detects dropped rules (missing output files) via `collectResults` but
 ### `config.ts`: Environment overrides bypass static type constraints via `Partial<Config>` cast
 
 When environment overrides are deep-merged at `config.ts:126`, the `EnvironmentOverrideSchema` (a subset of `Config`) is cast as `Partial<Config>`. This means TypeScript won't catch if extra keys sneak in. Not a runtime bug — Zod's final `safeParse()` strips unknown keys — but it's the same family of dynamic-config-meets-static-types looseness as issue 2.
+
+### `cli.test.ts`: Integration tests use `npx tsx` instead of built artifact
+
+CLI integration tests spawn `npx tsx src/cli.ts` rather than the built `dist/cli.js`. This means they don't exercise the actual bundled artifact. Acceptable since the build step is separately verified by CI, but a future e2e test against `dist/cli.js` would provide more confidence in the shipped binary.
