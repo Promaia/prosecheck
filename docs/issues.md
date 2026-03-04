@@ -28,4 +28,6 @@ The mapped type handles `Config[K] extends Record<string, unknown> ? Partial<Con
 
 ## LOW
 
-*(none currently)*
+### `config.ts`: Environment overrides bypass static type constraints via `Partial<Config>` cast
+
+When environment overrides are deep-merged at `config.ts:126`, the `EnvironmentOverrideSchema` (a subset of `Config`) is cast as `Partial<Config>`. This means TypeScript won't catch if extra keys sneak in. Not a runtime bug — Zod's final `safeParse()` strips unknown keys — but it's the same family of dynamic-config-meets-static-types looseness as issue 2.
