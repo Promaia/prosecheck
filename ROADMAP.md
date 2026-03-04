@@ -122,10 +122,10 @@ Top-level CLI wiring and project scaffolding.
 
 Interactive display for real-time progress.
 
-- [ ] Implement `src/ui/components/LintProgress.tsx` — Ink/React component showing live table of rule names, run statuses (waiting/running/done), and results as agents complete
-- [ ] Implement `src/ui/components/Summary.tsx` — Final results summary component with pass/warn/fail/dropped counts and overall status
-- [ ] Write component tests using ink-testing-library
-- [ ] Verify `npm run ci` passes
+- [x] Implement `src/ui/components/LintProgress.tsx` — Ink/React component showing live table of rule names, run statuses (waiting/running/done), and results as agents complete
+- [x] Implement `src/ui/components/Summary.tsx` — Final results summary component with pass/warn/fail/dropped counts and overall status
+- [x] Write component tests using ink-testing-library
+- [x] Verify `npm run ci` passes
 
 ---
 
