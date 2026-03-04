@@ -28,12 +28,6 @@ The mapped type handles `Config[K] extends Record<string, unknown> ? Partial<Con
 
 ## LOW
 
-### `LintApp.tsx`: Module-level global for progress handler
-
-`getProgressHandler()` returns a module-level `globalDispatch` variable set by `useEffect`. Only one `LintApp` instance can exist at a time. Acceptable for a CLI tool where one render is active, but not ideal for library consumers who might attempt concurrent renders.
-
-**Potential fix:** Replace the module-level global with a ref-based pattern (e.g., return the handler from `startInteractiveUI` via the render instance's state, or use React context + a subscription model).
-
 ### `claude-code.ts`: Uses `execFile` instead of `execa`
 
 The ROADMAP originally specified execa for process spawning, but `execFile` from `node:child_process` was used instead. The execa package remains in `package.json` as an unused dependency. Consider switching to execa if more advanced process management is needed (e.g., streaming output, better signal handling), or remove the execa dependency if it stays unused.
