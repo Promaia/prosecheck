@@ -4,6 +4,8 @@ Implementation status for prosecheck. All source files currently exist as stubs 
 
 Items are grouped by milestone. Within each milestone, items are roughly ordered by dependency (implement earlier items first). Check the box when implementation is complete and tests pass.
 
+**Verification:** Every milestone ends with a `npm run ci` gate (typecheck + lint + test + build). Do not move to the next milestone until CI passes cleanly.
+
 ---
 
 ## Milestone 1: Core Types & Configuration
@@ -18,6 +20,7 @@ Foundation types and config loading — everything else depends on these.
 - [ ] Write unit tests for Zod schema (defaults applied on empty input, validation errors for bad types, partial schema accepts subsets, `.describe()` present on all fields)
 - [ ] Write unit tests for config loading (layering, deep merge, missing files, invalid JSON, Zod validation errors)
 - [ ] Write unit tests for ignore pattern matching (globalIgnore, additionalIgnore, edge cases)
+- [ ] Verify `npm run ci` passes
 
 ---
 
@@ -31,6 +34,7 @@ Rule calculators that find and parse rules from project files.
 - [ ] Write unit tests for rules-md calculator using `tests/fixtures/project-simple/` and `tests/fixtures/project-nested/`
 - [ ] Write unit tests for adr calculator using `tests/fixtures/project-adr/` — test ADRs with `## Rules` heading produce rules, ADRs without it are skipped, mixed directories work correctly
 - [ ] Write unit tests for calculator registry (dispatch, disabled calculators, unknown names)
+- [ ] Verify `npm run ci` passes
 
 ---
 
@@ -41,6 +45,7 @@ Git integration for determining which rules to run.
 - [ ] Implement `src/lib/change-detection.ts` — Run `git diff --name-only` against comparison ref, compute merge-base, map changed files to parent directories, match against rule inclusions with ignore filtering
 - [ ] Implement incremental run tracking — Read/write `.prosecheck/last-user-run`, respect environment-specific `lastRun.read`/`lastRun.write` defaults
 - [ ] Write unit tests for change detection (mock git commands, test file-to-rule matching, test incremental tracking)
+- [ ] Verify `npm run ci` passes
 
 ---
 
@@ -50,6 +55,7 @@ Build the per-rule prompt files that agents consume.
 
 - [ ] Implement `src/lib/prompt.ts` — Load default template, load custom template from `.prosecheck/prompt-template.md` if present, load global system prompt from `.prosecheck/prompt.md` if present, interpolate variables (rule text, comparison ref, changed files, scope, output path), write to `.prosecheck/working/prompts/<rule-id>.md`
 - [ ] Write unit tests for prompt generation (template interpolation, custom templates, system prompt prepending)
+- [ ] Verify `npm run ci` passes
 
 ---
 
@@ -61,6 +67,7 @@ Collect agent outputs and handle edge cases.
 - [ ] Implement `src/lib/post-run.ts` — Execute shell commands from `config.postRun`, inject `PROSECHECK_STATUS`, `PROSECHECK_RESULTS_DIR`, `PROSECHECK_RESULTS_JSON` environment variables
 - [ ] Write unit tests for result collection (all statuses, dropped detection, retry logic, overall status computation)
 - [ ] Write unit tests for post-run task execution
+- [ ] Verify `npm run ci` passes
 
 ---
 
@@ -72,6 +79,7 @@ Transform results into human-readable and machine-readable formats.
 - [ ] Implement `src/formatters/json.ts` — Structured JSON output of all results
 - [ ] Implement `src/formatters/sarif.ts` — SARIF schema output for GitHub Code Scanning inline PR annotations
 - [ ] Write unit tests for all three formatters (snapshot tests recommended)
+- [ ] Verify `npm run ci` passes
 
 ---
 
@@ -83,6 +91,7 @@ The execution backends that launch agents.
 - [ ] Implement `src/modes/claude-code.ts` — Spawn `claude --print` processes via execa (one per rule, parallel), feed prompt file content to each instance, collect outputs, support `claudeCode.singleInstance` config for agent-team strategy
 - [ ] Write unit tests for user-prompt mode (prompt generation, file watching)
 - [ ] Write unit tests for claude-code mode (mock execa, process management, single-instance toggle)
+- [ ] Verify `npm run ci` passes
 
 ---
 
@@ -93,6 +102,7 @@ Wire everything together into the main lint pipeline.
 - [ ] Implement `src/lib/engine.ts` — Full pipeline: cleanup working dir → run calculators → change detection → filter rules → generate prompts → dispatch to mode → collect results → format → post-run → set exit code
 - [ ] Implement `src/commands/lint.ts` — Parse lint-specific CLI flags, construct RunContext, invoke engine, handle errors with exit code 2
 - [ ] Write unit tests for engine (mock all subsystems, test pipeline ordering, test error handling)
+- [ ] Verify `npm run ci` passes
 
 ---
 
@@ -104,6 +114,7 @@ Top-level CLI wiring and project scaffolding.
 - [ ] Implement `src/commands/init.ts` — Create `.prosecheck/` directory, write default `config.json`, add `.prosecheck/working/`, `.prosecheck/config.local.json`, `.prosecheck/last-user-run` to `.gitignore`, optionally create starter `RULES.md`
 - [ ] Write integration tests for CLI (`tests/integration/cli.test.ts`) — Spawn `dist/cli.js` with execa, assert exit codes and stdout/stderr for various scenarios
 - [ ] Write integration tests for init command (`tests/integration/init.test.ts`) — Verify scaffolded files and gitignore entries
+- [ ] Verify `npm run ci` passes
 
 ---
 
@@ -114,6 +125,7 @@ Interactive display for real-time progress.
 - [ ] Implement `src/ui/components/LintProgress.tsx` — Ink/React component showing live table of rule names, run statuses (waiting/running/done), and results as agents complete
 - [ ] Implement `src/ui/components/Summary.tsx` — Final results summary component with pass/warn/fail/dropped counts and overall status
 - [ ] Write component tests using ink-testing-library
+- [ ] Verify `npm run ci` passes
 
 ---
 
@@ -122,6 +134,7 @@ Interactive display for real-time progress.
 Public programmatic interface for use as a dependency.
 
 - [ ] Implement `src/index.ts` — Export core types (Rule, RuleResult, Config), engine function, and formatter utilities for programmatic consumption
+- [ ] Verify `npm run ci` passes
 
 ---
 
@@ -150,6 +163,7 @@ Interactive `prosecheck config` command — schema-driven, no hardcoded field li
 - [ ] Write unit tests for schema walker (field discovery, description extraction, default extraction, nested field paths)
 - [ ] Write unit tests for config editor (ink-testing-library — field navigation, value editing, validation feedback)
 - [ ] Write integration test — Run `prosecheck config`, modify a field, verify written JSON is valid
+- [ ] Verify `npm run ci` passes
 
 ---
 
