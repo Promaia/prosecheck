@@ -100,9 +100,18 @@ Central coordinator that drives the lint pipeline:
 9. Execute post-run tasks
 10. Set exit code
 
-### `change-detection.ts` — Git Diff & File Filtering **[STUB]**
+### `change-detection.ts` — Git Diff & File Filtering [IMPLEMENTED]
 
-Runs `git diff --name-only` against the comparison ref (default: merge-base with `baseBranch`). Maps changed files to parent directories. Supports incremental tracking via `.prosecheck/last-user-run`.
+Detects changed files via `git diff --name-only` and determines which rules to trigger. Pipeline:
+
+1. Compute comparison ref via `git merge-base HEAD <baseBranch>` (with fallback to branch name for shallow clones)
+2. Optionally read `.prosecheck/last-user-run` hash for incremental narrowing (last-run hash narrows which rules fire, but agents still get the merge-base ref for comparison)
+3. Run `git diff --name-only <ref>` to get changed files
+4. Filter through global ignore patterns (`buildIgnoreFilter`)
+5. Match remaining files to rule scopes via `filterFiles` — a rule triggers if at least one changed file matches its inclusions
+6. Optionally write current HEAD to `.prosecheck/last-user-run`
+
+Returns `ChangeDetectionResult` with: `comparisonRef` (for agents), `triggeredRules`, `changedFiles`, and `changedFilesByRule` map.
 
 Default last-run behavior by environment:
 

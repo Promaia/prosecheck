@@ -42,10 +42,10 @@ Rule calculators that find and parse rules from project files.
 
 Git integration for determining which rules to run.
 
-- [ ] Implement `src/lib/change-detection.ts` — Run `git diff --name-only` against comparison ref, compute merge-base, map changed files to parent directories, match against rule inclusions with ignore filtering
-- [ ] Implement incremental run tracking — Read/write `.prosecheck/last-user-run`, respect environment-specific `lastRun.read`/`lastRun.write` defaults
-- [ ] Write unit tests for change detection (mock git commands, test file-to-rule matching, test incremental tracking)
-- [ ] Verify `npm run ci` passes
+- [x] Implement `src/lib/change-detection.ts` — Run `git diff --name-only` against comparison ref, compute merge-base, map changed files to parent directories, match against rule inclusions with ignore filtering
+- [x] Implement incremental run tracking — Read/write `.prosecheck/last-user-run`, respect environment-specific `lastRun.read`/`lastRun.write` defaults
+- [x] Write unit tests for change detection (20 tests: mock git commands, test file-to-rule matching, test incremental tracking, last-run read/write, global ignore filtering)
+- [x] Verify `npm run ci` passes
 
 ---
 
