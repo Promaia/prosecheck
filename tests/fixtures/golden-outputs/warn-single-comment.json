@@ -1,0 +1,13 @@
+{
+  "status": "warn",
+  "rule": "error-handling",
+  "source": "docs/adr/002-error-handling.md",
+  "headline": "Some catch blocks swallow errors without logging",
+  "comments": [
+    {
+      "message": "This catch block discards the error silently. Consider logging or re-throwing.",
+      "file": "src/lib/config.ts",
+      "line": 42
+    }
+  ]
+}

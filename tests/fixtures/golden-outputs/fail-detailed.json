@@ -1,0 +1,23 @@
+{
+  "status": "fail",
+  "rule": "input-validation",
+  "source": "docs/adr/005-input-validation.md",
+  "headline": "Multiple user inputs are not validated before use",
+  "comments": [
+    {
+      "message": "The 'name' parameter is used directly in a SQL query without sanitization.",
+      "file": "src/routes/users.ts",
+      "line": 23
+    },
+    {
+      "message": "Request body is passed to the template engine without escaping HTML entities.",
+      "file": "src/routes/comments.ts",
+      "line": 57
+    },
+    {
+      "message": "File path from user input is used in fs.readFile without path traversal checks.",
+      "file": "src/routes/files.ts",
+      "line": 12
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "status": "warn",
+  "rule": "documentation-coverage",
+  "source": "RULES.md",
+  "headline": "Several public functions lack JSDoc comments",
+  "comments": [
+    {
+      "message": "Missing JSDoc for exported function parseConfig()",
+      "file": "src/lib/config.ts",
+      "line": 15
+    },
+    {
+      "message": "Module src/lib/engine.ts has no top-level module doc comment"
+    },
+    {
+      "message": "Exported type PartialConfig should have a description",
+      "file": "src/lib/config-schema.ts"
+    }
+  ]
+}

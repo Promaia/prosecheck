@@ -1,0 +1,5 @@
+{
+  "status": "pass",
+  "rule": "no-todo-comments",
+  "source": "RULES.md"
+}
