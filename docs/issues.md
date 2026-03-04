@@ -28,10 +28,6 @@ The mapped type handles `Config[K] extends Record<string, unknown> ? Partial<Con
 
 ## LOW
 
-### `claude-code.ts`: Uses `execFile` instead of `execa`
-
-The ROADMAP originally specified execa for process spawning, but `execFile` from `node:child_process` was used instead. The execa package remains in `package.json` as an unused dependency. Consider switching to execa if more advanced process management is needed (e.g., streaming output, better signal handling), or remove the execa dependency if it stays unused.
-
 ### `user-prompt.ts`: `watchForOutputs` watcher callback has benign race condition
 
 If `fs.watch` fires rapid file events, `getCompletedRuleIds` may be called multiple times concurrently. Each call independently checks completion and may call `resolve()`. This is harmless since `resolve()` is idempotent after the first call, but the redundant I/O could be avoided with a debounce or guard flag.
