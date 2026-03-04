@@ -63,11 +63,11 @@ Build the per-rule prompt files that agents consume.
 
 Collect agent outputs and handle edge cases.
 
-- [ ] Implement `src/lib/results.ts` — Read output JSON files from `.prosecheck/working/outputs/`, validate each against `RuleResultSchema` (Zod) with actionable error messages for malformed agent output, detect dropped rules (missing output files), orchestrate retries when `retryDropped` enabled, compute overall run status from worst individual status
-- [ ] Implement `src/lib/post-run.ts` — Execute shell commands from `config.postRun`, inject `PROSECHECK_STATUS`, `PROSECHECK_RESULTS_DIR`, `PROSECHECK_RESULTS_JSON` environment variables
-- [ ] Write unit tests for result collection (all statuses, dropped detection, retry logic, overall status computation)
-- [ ] Write unit tests for post-run task execution
-- [ ] Verify `npm run ci` passes
+- [x] Implement `src/lib/results.ts` — Read output JSON files from `.prosecheck/working/outputs/`, validate each against `RuleResultSchema` (Zod) with actionable error messages for malformed agent output, detect dropped rules (missing output files), orchestrate retries when `retryDropped` enabled, compute overall run status from worst individual status
+- [x] Implement `src/lib/post-run.ts` — Execute shell commands from `config.postRun`, inject `PROSECHECK_STATUS`, `PROSECHECK_RESULTS_DIR`, `PROSECHECK_RESULTS_JSON` environment variables
+- [x] Write unit tests for result collection (all statuses, dropped detection, retry logic, overall status computation)
+- [x] Write unit tests for post-run task execution
+- [x] Verify `npm run ci` passes
 
 ---
 
