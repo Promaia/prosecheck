@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 
 describe('claude-code mode', () => {
   it.todo('spawns one claude --print process per rule');

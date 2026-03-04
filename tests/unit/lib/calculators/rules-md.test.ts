@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 
 describe('rules-md calculator', () => {
   it.todo('discovers RULES.md files in project tree');

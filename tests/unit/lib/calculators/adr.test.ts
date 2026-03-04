@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 
 describe('adr calculator', () => {
   it.todo('reads ADR files from configured path');

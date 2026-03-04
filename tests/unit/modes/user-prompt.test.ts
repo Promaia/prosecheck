@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 
 describe('user-prompt mode', () => {
   it.todo('builds orchestration prompt listing all prompt files');

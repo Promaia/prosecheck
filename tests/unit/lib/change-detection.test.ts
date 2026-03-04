@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 
 describe('change-detection', () => {
   it.todo('detects changed files from git diff');
