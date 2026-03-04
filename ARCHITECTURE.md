@@ -142,13 +142,13 @@ Generates per-rule prompt files at `.prosecheck/working/prompts/<rule-id>.md`. E
 
 Template is configurable via `.prosecheck/prompt-template.md` (falls back to built-in default). Global system prompt from `.prosecheck/prompt.md` is prepended when present. Interpolation uses `{{variable}}` placeholders. Key functions: `loadTemplate()`, `loadGlobalPrompt()`, `buildPromptVariables()`, `interpolateTemplate()`, `generatePrompt()`, `generatePrompts()`.
 
-### `results.ts` — Result Collection **[STUB]**
+### `results.ts` — Result Collection [IMPLEMENTED]
 
-Collects agent output JSON files. Each file is validated against `RuleResultSchema` (Zod) — malformed agent output produces clear errors rather than downstream crashes. Detects dropped rules (no output). Orchestrates retries when `retryDropped` is enabled. Determines overall run status from worst individual status: fail > dropped > warn > pass.
+Collects agent output JSON files from `.prosecheck/working/outputs/`. Each file is validated against `RuleResultSchema` (Zod) — malformed agent output produces clear error messages rather than downstream crashes. Detects dropped rules (missing output files). Determines overall run status from worst individual status: fail > dropped > warn > pass. Malformed outputs are treated as fail severity. Key functions: `parseResultFile()`, `collectResults()`, `computeOverallStatus()`.
 
-### `post-run.ts` — Post-Run Tasks **[STUB]**
+### `post-run.ts` — Post-Run Tasks [IMPLEMENTED]
 
-Executes shell commands from `config.postRun` array after results collection. Injects environment variables: `PROSECHECK_STATUS`, `PROSECHECK_RESULTS_DIR`, `PROSECHECK_RESULTS_JSON`.
+Executes shell commands from `config.postRun` array sequentially after results collection. Injects environment variables: `PROSECHECK_STATUS` (overall status), `PROSECHECK_RESULTS_DIR` (absolute path to outputs directory), `PROSECHECK_RESULTS_JSON` (absolute path to results JSON file, when available). Captures stdout, stderr, and exit codes for each command. Key function: `executePostRun()`.
 
 ---
 
