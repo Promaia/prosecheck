@@ -1,0 +1,12 @@
+{
+  "baseBranch": "main",
+  "ruleCalculators": [
+    {
+      "name": "adr",
+      "enabled": true,
+      "options": {
+        "path": "docs/adr"
+      }
+    }
+  ]
+}

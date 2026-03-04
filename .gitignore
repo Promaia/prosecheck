@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.prosecheck/working/
+.prosecheck/config.local.json
+.prosecheck/last-user-run
+coverage/
