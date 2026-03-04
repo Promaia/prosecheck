@@ -183,14 +183,14 @@ Non-interactive `prosecheck config` command for viewing and modifying configurat
 
 Real git repos in temp directories to catch platform-specific behavior (path separators, shallow clones, merge-base edge cases) without mocking.
 
-- [ ] Add `tests/git/change-detection.test.ts` — Real git repo fixture helper: `createTestRepo()` that inits a repo, commits files, creates branches, returns `{ dir, cleanup }`
-- [ ] Test `detectChanges()` against real repo — create branch with changes, verify correct changed files returned, verify merge-base computation
-- [ ] Test incremental run tracking with real repo — write last-run hash, make more commits, verify only new changes detected
-- [ ] Test shallow clone behavior — `git clone --depth=1` fixture, verify graceful fallback when merge-base unavailable
-- [ ] Test global ignore filtering with real repo — add ignored files to git, verify they are excluded from results
-- [ ] Test file-to-rule scope matching with real directory structure — nested RULES.md files, verify correct inclusion matching
-- [ ] Ensure all tests use cross-platform path handling (forward slashes in assertions, `path.join` for filesystem ops)
-- [ ] Verify `npm run ci` passes on both Linux and Windows
+- [x] Add `tests/git/change-detection.test.ts` — Real git repo fixture helper: `createTestRepo()` that inits a repo, commits files, creates branches, returns `{ dir, cleanup }`
+- [x] Test `detectChanges()` against real repo — create branch with changes, verify correct changed files returned, verify merge-base computation
+- [x] Test incremental run tracking with real repo — write last-run hash, make more commits, verify only new changes detected
+- [x] Test shallow clone behavior — `git clone --depth=1` fixture, verify graceful fallback when merge-base unavailable
+- [x] Test global ignore filtering with real repo — add ignored files to git, verify they are excluded from results
+- [x] Test file-to-rule scope matching with real directory structure — nested RULES.md files, verify correct inclusion matching
+- [x] Ensure all tests use cross-platform path handling (forward slashes in assertions, `path.join` for filesystem ops)
+- [x] Verify `npm run ci` passes on both Linux and Windows
 
 ---
 
