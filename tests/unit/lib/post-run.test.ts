@@ -43,34 +43,34 @@ describe('executePostRun', () => {
   it('injects PROSECHECK_STATUS env var', async () => {
     const results = await executePostRun({
       projectRoot: tmpDir,
-      commands: ['echo $PROSECHECK_STATUS'],
+      commands: ['node -e "process.stdout.write(process.env.PROSECHECK_STATUS || \'\')"'],
       status: 'fail',
     });
 
-    expect(first(results).stdout.trim()).toBe('fail');
+    expect(first(results).stdout).toBe('fail');
   });
 
   it('injects PROSECHECK_RESULTS_DIR env var', async () => {
     const results = await executePostRun({
       projectRoot: tmpDir,
-      commands: ['echo $PROSECHECK_RESULTS_DIR'],
+      commands: ['node -e "process.stdout.write(process.env.PROSECHECK_RESULTS_DIR || \'\')"'],
       status: 'pass',
     });
 
     const expected = path.resolve(tmpDir, '.prosecheck/working/outputs');
-    expect(first(results).stdout.trim()).toBe(expected);
+    expect(first(results).stdout).toBe(expected);
   });
 
   it('injects PROSECHECK_RESULTS_JSON when provided', async () => {
     const jsonPath = path.join(tmpDir, 'results.json');
     const results = await executePostRun({
       projectRoot: tmpDir,
-      commands: ['echo $PROSECHECK_RESULTS_JSON'],
+      commands: ['node -e "process.stdout.write(process.env.PROSECHECK_RESULTS_JSON || \'\')"'],
       status: 'pass',
       resultsJsonPath: jsonPath,
     });
 
-    expect(first(results).stdout.trim()).toBe(path.resolve(jsonPath));
+    expect(first(results).stdout).toBe(path.resolve(jsonPath));
   });
 
   it('executes multiple commands sequentially', async () => {

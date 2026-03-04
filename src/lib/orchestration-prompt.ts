@@ -37,7 +37,7 @@ export function buildOrchestrationPrompt(
   const ruleEntries: string[] = [];
   for (const [ruleId, promptPath] of promptPaths) {
     const name = ruleNames.get(ruleId) ?? ruleId;
-    const relativePath = path.relative(projectRoot, promptPath);
+    const relativePath = path.relative(projectRoot, promptPath).replaceAll('\\', '/');
     ruleEntries.push(`* ${name}: ${relativePath}`);
   }
 
@@ -67,7 +67,7 @@ function buildSequentialPrompt(
   const outputEntries: string[] = [];
   for (const [ruleId] of promptPaths) {
     const name = ruleNames.get(ruleId) ?? ruleId;
-    const outputPath = path.join(projectRoot, OUTPUTS_DIR, `${ruleId}.json`);
+    const outputPath = path.join(projectRoot, OUTPUTS_DIR, `${ruleId}.json`).replaceAll('\\', '/');
     outputEntries.push(`  - ${name}: \`${outputPath}\``);
   }
 
