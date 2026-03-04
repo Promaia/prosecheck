@@ -3,7 +3,7 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {
-  buildOrchestrationPrompt,
+  buildUserPrompt,
   watchForOutputs,
 } from '../../../src/modes/user-prompt.js';
 import type { UserPromptModeOptions } from '../../../src/modes/user-prompt.js';
@@ -34,38 +34,55 @@ function makeOptions(
     projectRoot: tmpDir,
     promptPaths: new Map(),
     expectedRuleIds: [],
+    rules: [],
+    agentTeams: false,
     ...overrides,
   };
 }
 
-describe('buildOrchestrationPrompt', () => {
-  it('builds orchestration prompt listing all prompt files', () => {
+describe('buildUserPrompt', () => {
+  it('builds sequential prompt listing all prompt files', () => {
     const promptPaths = new Map<string, string>();
-    promptPaths.set('rule-a', '/tmp/prompts/rule-a.md');
-    promptPaths.set('rule-b', '/tmp/prompts/rule-b.md');
+    promptPaths.set('rule-a', path.join(tmpDir, '.prosecheck/working/prompts/rule-a.md'));
+    promptPaths.set('rule-b', path.join(tmpDir, '.prosecheck/working/prompts/rule-b.md'));
 
     const options = makeOptions({
       promptPaths,
       expectedRuleIds: ['rule-a', 'rule-b'],
+      rules: [
+        { id: 'rule-a', name: 'Rule A', description: 'D', inclusions: [], source: 'RULES.md' },
+        { id: 'rule-b', name: 'Rule B', description: 'D', inclusions: [], source: 'RULES.md' },
+      ],
     });
 
-    const prompt = buildOrchestrationPrompt(options);
+    const prompt = buildUserPrompt(options);
 
-    expect(prompt).toContain('rule-a');
-    expect(prompt).toContain('rule-b');
-    expect(prompt).toContain('/tmp/prompts/rule-a.md');
-    expect(prompt).toContain('/tmp/prompts/rule-b.md');
-    expect(prompt).toContain('rule-a.json');
-    expect(prompt).toContain('rule-b.json');
+    expect(prompt).toContain('Rule A');
+    expect(prompt).toContain('Rule B');
+    expect(prompt).toContain('rule-a.md');
+    expect(prompt).toContain('rule-b.md');
     expect(prompt).toContain('Read each prompt file');
+    expect(prompt).toContain('lint agent');
   });
 
-  it('produces empty rules section for no rules', () => {
-    const options = makeOptions();
-    const prompt = buildOrchestrationPrompt(options);
+  it('builds agent teams prompt when agentTeams is true', () => {
+    const promptPaths = new Map<string, string>();
+    promptPaths.set('rule-a', path.join(tmpDir, '.prosecheck/working/prompts/rule-a.md'));
 
-    expect(prompt).toContain('Rules to Evaluate');
-    expect(prompt).toContain('Instructions');
+    const options = makeOptions({
+      promptPaths,
+      expectedRuleIds: ['rule-a'],
+      rules: [
+        { id: 'rule-a', name: 'Rule A', description: 'D', inclusions: [], source: 'RULES.md' },
+      ],
+      agentTeams: true,
+    });
+
+    const prompt = buildUserPrompt(options);
+
+    expect(prompt).toContain('orchestrator');
+    expect(prompt).toContain('agent teams');
+    expect(prompt).toContain('Rule A');
   });
 });
 

@@ -95,6 +95,8 @@ function makeOptions(
     projectRoot: tmpDir,
     promptPaths: new Map(),
     singleInstance: false,
+    agentTeams: false,
+    rules: [],
     ...overrides,
   };
 }

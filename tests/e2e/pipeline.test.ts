@@ -27,10 +27,10 @@ vi.mock('../../src/modes/claude-code.js', () => ({
 }));
 
 // Mock user-prompt mode (requires interactive terminal)
-const mockBuildOrchestrationPrompt = vi.fn();
+const mockBuildUserPrompt = vi.fn();
 const mockWatchForOutputs = vi.fn();
 vi.mock('../../src/modes/user-prompt.js', () => ({
-  buildOrchestrationPrompt: (...args: unknown[]) => mockBuildOrchestrationPrompt(...args) as unknown,
+  buildUserPrompt: (...args: unknown[]) => mockBuildUserPrompt(...args) as unknown,
   watchForOutputs: (...args: unknown[]) => mockWatchForOutputs(...args) as unknown,
 }));
 
@@ -46,7 +46,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     warnAsError: false,
     retryDropped: false,
     retryDroppedMaxAttempts: 1,
-    claudeCode: { singleInstance: false },
+    claudeCode: { singleInstance: false, agentTeams: false },
     postRun: [],
     environments: {},
     ruleCalculators: [{ name: 'rules-md', enabled: true, options: {} }],
@@ -123,7 +123,7 @@ describe('E2E: user-prompt mode', () => {
     );
 
     // Mock user-prompt mode: simulate agent writing output
-    mockBuildOrchestrationPrompt.mockReturnValue('Copy this prompt...');
+    mockBuildUserPrompt.mockReturnValue('Copy this prompt...');
     mockWatchForOutputs.mockImplementation(async () => {
       // Simulate agent writing output while "watching"
       await writeAgentOutput('rules-md--no-console-log', {

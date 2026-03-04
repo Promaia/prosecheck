@@ -7,7 +7,7 @@ import { detectChanges } from './change-detection.js';
 import { generatePrompts } from './prompt.js';
 import { collectResults } from './results.js';
 import { executePostRun } from './post-run.js';
-import { buildOrchestrationPrompt, watchForOutputs } from '../modes/user-prompt.js';
+import { buildUserPrompt, watchForOutputs } from '../modes/user-prompt.js';
 import { runClaudeCode } from '../modes/claude-code.js';
 import { formatStylish } from '../formatters/stylish.js';
 import { formatJson } from '../formatters/json.js';
@@ -140,17 +140,22 @@ async function dispatchMode(
 ): Promise<void> {
   const expectedRuleIds = triggeredRules.map((r) => r.id);
 
+  const agentTeams = config.claudeCode.agentTeams;
+
   switch (mode) {
     case 'user-prompt': {
-      const orchestrationPrompt = buildOrchestrationPrompt({
+      const userPromptOptions = {
         projectRoot,
         promptPaths,
         expectedRuleIds,
-      });
+        rules: triggeredRules,
+        agentTeams,
+      };
+      const orchestrationPrompt = buildUserPrompt(userPromptOptions);
       // Print prompt for user to copy
       process.stdout.write(orchestrationPrompt + '\n');
       // Watch for outputs
-      await watchForOutputs({ projectRoot, promptPaths, expectedRuleIds });
+      await watchForOutputs(userPromptOptions);
       break;
     }
     case 'claude-code': {
@@ -158,6 +163,8 @@ async function dispatchMode(
         projectRoot,
         promptPaths,
         singleInstance: config.claudeCode.singleInstance,
+        agentTeams,
+        rules: triggeredRules,
       });
       break;
     }

@@ -1,16 +1,19 @@
 import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
-import path from 'node:path';
-
-const OUTPUTS_DIR = '.prosecheck/working/outputs';
+import type { Rule } from '../types/index.js';
+import { buildOrchestrationPrompt } from '../lib/orchestration-prompt.js';
 
 export interface ClaudeCodeModeOptions {
   /** Project root directory */
   projectRoot: string;
   /** Map of rule ID to prompt file path */
   promptPaths: Map<string, string>;
-  /** Whether to use single-instance (agent-team) strategy */
+  /** Whether to use single-instance strategy */
   singleInstance: boolean;
+  /** Whether to enable agent teams */
+  agentTeams: boolean;
+  /** Triggered rules (needed for orchestration prompt rule names) */
+  rules: Rule[];
 }
 
 export interface ClaudeCodeResult {
@@ -28,7 +31,9 @@ export interface ClaudeCodeResult {
  * stdin and is expected to write results to the outputs directory.
  *
  * In single-instance mode: spawns a single `claude --print` process with
- * an orchestration prompt that covers all rules.
+ * an orchestration prompt that covers all rules. When `agentTeams` is true,
+ * CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 is set and the prompt instructs
+ * the agent to launch sub-agents.
  */
 export async function runClaudeCode(
   options: ClaudeCodeModeOptions,
@@ -56,30 +61,21 @@ async function runMultiInstance(
 async function runSingleInstance(
   options: ClaudeCodeModeOptions,
 ): Promise<ClaudeCodeResult[]> {
-  const { projectRoot, promptPaths } = options;
+  const { projectRoot, promptPaths, rules, agentTeams } = options;
 
-  // Build a combined prompt listing all rules
-  const lines: string[] = [
-    'You are a code linter. Evaluate each rule below and write results to the specified output files.',
-    '',
-  ];
+  const orchestrationPrompt = buildOrchestrationPrompt({
+    projectRoot,
+    promptPaths,
+    rules,
+    agentTeams,
+  });
 
-  for (const [ruleId, promptPath] of promptPaths) {
-    const content = await readFile(promptPath, 'utf-8');
-    const outputPath = path.join(projectRoot, OUTPUTS_DIR, `${ruleId}.json`);
-    lines.push(`## Rule: ${ruleId}`);
-    lines.push(`Output to: ${outputPath}`);
-    lines.push('');
-    lines.push(content);
-    lines.push('');
-    lines.push('---');
-    lines.push('');
-  }
+  const env = agentTeams
+    ? { ...process.env, CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' }
+    : undefined;
 
-  const combinedPrompt = lines.join('\n');
-  const result = await spawnClaude(combinedPrompt, projectRoot);
+  const result = await spawnClaude(orchestrationPrompt, projectRoot, env);
 
-  // Map to a single result with a synthetic rule ID
   return [
     {
       ruleId: '__single_instance__',
@@ -119,12 +115,13 @@ interface SpawnResult {
 export function spawnClaude(
   prompt: string,
   cwd: string,
+  env?: NodeJS.ProcessEnv,
 ): Promise<SpawnResult> {
   return new Promise((resolve) => {
     const child = execFile(
       'claude',
       ['--print', '-p', prompt],
-      { cwd, maxBuffer: 10 * 1024 * 1024 },
+      { cwd, maxBuffer: 10 * 1024 * 1024, env },
       (error, stdout, stderr) => {
         resolve({
           exitCode: error
