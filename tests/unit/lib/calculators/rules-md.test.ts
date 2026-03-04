@@ -82,6 +82,17 @@ describe('parseRulesMd', () => {
     expect(rules).toEqual([]);
   });
 
+  it('produces empty description when heading is immediately followed by another heading', () => {
+    const content = '# Rule One\n# Rule Two\n\nDescription two.';
+    const rules = parseRulesMd(content, 'RULES.md');
+
+    expect(rules).toHaveLength(2);
+    expect(rules[0]?.name).toBe('Rule One');
+    expect(rules[0]?.description).toBe('');
+    expect(rules[1]?.name).toBe('Rule Two');
+    expect(rules[1]?.description).toBe('Description two.');
+  });
+
   it('generates stable IDs from name and source', () => {
     const rules = parseRulesMd('# No console.log\n\nDesc.', 'src/RULES.md');
 

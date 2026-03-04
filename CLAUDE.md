@@ -28,6 +28,10 @@ After making changes to the codebase, you MUST:
 
 After completing each milestone (or any significant set of changes), run `npm run ci` to verify everything passes. This runs typecheck, lint, test, and build in sequence. Do not move to the next milestone until CI passes cleanly. If CI fails, fix the issue before proceeding.
 
+## Known issues
+
+`docs/issues.md` tracks known bugs and architectural concerns. Fixed issues should be removed from the file.
+
 ## Code style
 
 - TypeScript strict mode with ESM-only (`"type": "module"`)

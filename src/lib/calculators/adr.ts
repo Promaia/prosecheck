@@ -39,6 +39,9 @@ export async function calculateAdr(
   for (const file of mdFiles) {
     const absolutePath = path.join(absoluteDir, file);
     const content = await readFile(absolutePath, 'utf-8');
+    // Use posix join for the source path so rule IDs are consistent across
+    // platforms (forward slashes always), while absolutePath uses OS-native
+    // separators for actual filesystem access.
     const relativePath = path.posix.join(adrDir, file);
     const parsed = parseAdr(content, relativePath);
     if (parsed) {

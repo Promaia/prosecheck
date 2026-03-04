@@ -22,11 +22,13 @@ export async function calculateRulesMd(
 ): Promise<Rule[]> {
   const pattern = options.pattern ?? '**/RULES.md';
 
-  const files = await glob(pattern, {
-    cwd: projectRoot,
-    ignore: ['node_modules/**', '.git/**'],
-    posix: true,
-  });
+  const files = (
+    await glob(pattern, {
+      cwd: projectRoot,
+      ignore: ['node_modules/**', '.git/**'],
+      posix: true,
+    })
+  ).sort();
 
   const rules: Rule[] = [];
 

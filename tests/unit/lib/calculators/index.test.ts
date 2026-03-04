@@ -59,6 +59,15 @@ describe('runCalculators', () => {
     expect(rules).toHaveLength(2);
   });
 
+  it('throws on rule ID collision', async () => {
+    const config = ConfigSchema.parse({});
+    const projectRoot = path.join(fixturesDir, 'project-collision');
+
+    await expect(runCalculators(projectRoot, config)).rejects.toThrow(
+      /Rule ID collision.*rules-md--no-console-log/,
+    );
+  });
+
   it('throws for unknown calculator name', async () => {
     const config = ConfigSchema.parse({
       ruleCalculators: [
