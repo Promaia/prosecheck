@@ -14,7 +14,7 @@ An environment controls configuration layering — which config overrides apply.
 
 - **`interactive`** — Developer workstation. Default environment when no `--env` flag is passed.
 - **`ci`** — Continuous integration. Auto-detected when `process.env.CI` is set, but can also be passed explicitly.
-- **Custom environments** — Users can define arbitrary environment names (e.g., `staging`, `nightly`) in `.rules/config.json` and pass them via `--env`. Each environment name maps to a config override block.
+- **Custom environments** — Users can define arbitrary environment names (e.g., `staging`, `nightly`) in `.prosecheck/config.json` and pass them via `--env`. Each environment name maps to a config override block.
 
 Environments affect config layering only (e.g., last-run defaults, model selection). They do not determine how agents are launched — that is the operating mode's job.
 
@@ -26,7 +26,7 @@ An operating mode controls how the tool executes rule evaluation. Modes are sele
 
 The tool generates per-rule prompt files (see [Prompt Generation and Execution Pipeline](#prompt-generation-and-execution-pipeline)), then builds a single orchestration prompt for the user to paste into Claude Code. This orchestration prompt instructs Claude Code to create an agent team — one agent per prompt file — and lists all the prompt file paths. The user copies the prompt into their Claude Code session, which spawns the agents.
 
-The tool then watches `.rules/working/outputs/` for result files to appear and/or waits for the user to signal completion, then collects and processes the results.
+The tool then watches `.prosecheck/working/outputs/` for result files to appear and/or waits for the user to signal completion, then collects and processes the results.
 
 **Flow:** Invoke → Collect rules → Generate per-rule prompts → Build orchestration prompt → Display prompt and watch for output files or user signal → Collect results → Post-run tasks → Report
 
@@ -34,7 +34,7 @@ The tool then watches `.rules/working/outputs/` for result files to appear and/o
 
 The tool generates per-rule prompt files (see [Prompt Generation and Execution Pipeline](#prompt-generation-and-execution-pipeline)), then launches Claude Code CLI instances to execute them.
 
-By default, it spawns one `claude --print` process per rule in parallel. Each instance receives its prompt file content, evaluates the rule autonomously, and writes results to `.rules/working/outputs/`.
+By default, it spawns one `claude --print` process per rule in parallel. Each instance receives its prompt file content, evaluates the rule autonomously, and writes results to `.prosecheck/working/outputs/`.
 
 A config option `claudeCode.singleInstance` switches to an alternative strategy: launch a single Claude Code instance with the same orchestration prompt used in User Prompt mode (instructing it to spawn an agent team internally). This trades parallelism control for lower process overhead.
 
@@ -58,11 +58,11 @@ All operating modes share the same prompt generation phase. The execution and co
 
 ### 1. Cleanup
 
-At the start of every run, the tool deletes all files in `.rules/working/prompts/` and `.rules/working/outputs/`. This ensures no stale artifacts from a previous run contaminate results.
+At the start of every run, the tool deletes all files in `.prosecheck/working/prompts/` and `.prosecheck/working/outputs/`. This ensures no stale artifacts from a previous run contaminate results.
 
 ### 2. Per-Rule Prompt Generation
 
-For each rule triggered by change detection, the tool generates a prompt file at `.rules/working/prompts/<rule-id>.md`. The rule ID is a stable, filesystem-safe slug derived from the rule name and source file (e.g., `src-rules-md--exported-functions-must-have-jsdoc`).
+For each rule triggered by change detection, the tool generates a prompt file at `.prosecheck/working/prompts/<rule-id>.md`. The rule ID is a stable, filesystem-safe slug derived from the rule name and source file (e.g., `src-rules-md--exported-functions-must-have-jsdoc`).
 
 Each prompt includes:
 
@@ -70,12 +70,12 @@ Each prompt includes:
 - **Comparison ref** — the git ref to diff against (e.g., `origin/main`, a specific commit)
 - **Changed files** — the list of changed files (modifications, additions, and deletions) that triggered this rule, so the agent knows where to focus
 - **Scope** — the rule's inclusion patterns, so the agent knows its boundaries
-- **Output path** — the exact file path to write results to: `.rules/working/outputs/<rule-id>.json`
+- **Output path** — the exact file path to write results to: `.prosecheck/working/outputs/<rule-id>.json`
 - **General guidance** — instructions included in every prompt:
 
 > These files changed, but they may interact with related code in important ways. Look at the changes since the listed git ref and evaluate the full codebase within the rule's scope. Output your pass/warn/fail status to the specified output file. Do not prompt the user for any questions. Output only to the JSON file without user interaction.
 
-The prompt template is configurable. The tool ships a default template, and users can override it by placing a custom template at `.rules/prompt-template.md`. The template receives all the above variables for interpolation. A separate global system prompt at `.rules/prompt.md` is prepended to every per-rule prompt and can contain project-wide agent instructions.
+The prompt template is configurable. The tool ships a default template, and users can override it by placing a custom template at `.prosecheck/prompt-template.md`. The template receives all the above variables for interpolation. A separate global system prompt at `.prosecheck/prompt.md` is prepended to every per-rule prompt and can contain project-wide agent instructions.
 
 ### 3. Mode-Specific Execution
 
@@ -90,7 +90,7 @@ After prompt generation, the operating mode takes over:
 
 The tool waits for results using mode-appropriate strategies:
 
-- **Output file watching** — watches `.rules/working/outputs/` for `<rule-id>.json` files to appear (all modes)
+- **Output file watching** — watches `.prosecheck/working/outputs/` for `<rule-id>.json` files to appear (all modes)
 - **Process exit** — waits for Claude Code processes to exit (Claude Code Headless mode)
 - **User signal** — waits for the user to press a key or confirm completion (User Prompt mode, interactive only)
 - **Timeout** — configurable per-run timeout (`timeout` in config, `--timeout` CLI flag). When reached, any rule without output is marked `dropped`
@@ -118,20 +118,20 @@ After results are collected and reported, the tool optionally runs a sequence of
 Post-run commands receive environment variables with run metadata:
 
 - `PROSECHECK_STATUS` — overall run status (`pass`, `warn`, `fail`)
-- `PROSECHECK_RESULTS_DIR` — path to `.rules/working/outputs/`
+- `PROSECHECK_RESULTS_DIR` — path to `.prosecheck/working/outputs/`
 - `PROSECHECK_RESULTS_JSON` — path to a combined results JSON file
 
 In the future, post-run tasks will support structured actions (e.g., `post-pr-comment`, `update-check-run`) in addition to shell commands.
 
 ### 7. Artifact Retention
 
-Prompt files (`.rules/working/prompts/`) and output files (`.rules/working/outputs/`) are **not** cleaned up after a run. They remain on disk for:
+Prompt files (`.prosecheck/working/prompts/`) and output files (`.prosecheck/working/outputs/`) are **not** cleaned up after a run. They remain on disk for:
 
 - Debugging — inspect exactly what the agent was asked and what it produced
 - External tooling — other tools can read the structured outputs
 - Re-runs — a user can manually re-feed a prompt file to Claude Code
 
-The `.rules/working/` directory should be gitignored.
+The `.prosecheck/working/` directory should be gitignored.
 
 ---
 
@@ -145,13 +145,13 @@ Agents always receive the **full codebase** within their rule's scope. They are 
 
 The tool can be invoked against different scopes:
 
-- **Diverge from main** (default): Changes since the current branch diverged from `main`. The base branch name is configurable in `.rules/config.json`.
+- **Diverge from main** (default): Changes since the current branch diverged from `main`. The base branch name is configurable in `.prosecheck/config.json`.
 - **Diverge from specific ref**: Changes since diverging from a named branch or arbitrary git ref.
 - **All code**: All rules run regardless of change history.
 
 ### Incremental Run Tracking
 
-A git hash stored at `.rules/last-user-run` provides an additional scope narrowing. When enabled, changed-file detection uses the last-run hash instead of the merge-base. Agents still receive the original merge-base ref for comparison — last-run tracking only affects which rules are selected to run, not the ref agents compare against.
+A git hash stored at `.prosecheck/last-user-run` provides an additional scope narrowing. When enabled, changed-file detection uses the last-run hash instead of the merge-base. Agents still receive the original merge-base ref for comparison — last-run tracking only affects which rules are selected to run, not the ref agents compare against.
 
 **Default behavior differs by environment:**
 
@@ -169,7 +169,7 @@ Config uses a base + environment override model:
 ```json
 {
   "baseBranch": "main",
-  "globalIgnore": [".git/", "node_modules/", "dist/", "build/", ".rules/working/"],
+  "globalIgnore": [".git/", "node_modules/", "dist/", "build/", ".prosecheck/working/"],
   "additionalIgnore": [".gitignore"],
   "lastRun": {
     "read": false,
@@ -224,7 +224,7 @@ Top-level keys are base defaults. The `environments` object contains named overr
 
 ### Local Config Overrides
 
-An optional file `.rules/config.local.json` provides personal overrides that are not committed to the repository. This file should be gitignored (the `init` command adds it to `.gitignore` automatically).
+An optional file `.prosecheck/config.local.json` provides personal overrides that are not committed to the repository. This file should be gitignored (the `init` command adds it to `.gitignore` automatically).
 
 `config.local.json` has the same schema as `config.json`. Its values are deep-merged on top of `config.json` before environment layering is applied. The full resolution order is:
 
@@ -243,7 +243,7 @@ The tree below shows what a project using prosecheck looks like. Items marked **
 
 ```
 my-project/
-├── .rules/                          # Tool configuration root
+├── .prosecheck/                          # Tool configuration root
 │   ├── config.json                  # Configuration (base branch, globalIgnore, calculators)
 │   ├── prompt.md                    # (optional) Global system prompt prepended to all agent prompts
 │   ├── prompt-template.md           # (optional) Custom per-rule prompt template
@@ -278,7 +278,7 @@ my-project/
 └── ...
 ```
 
-**Required:** Only `.rules/config.json` is strictly required. The tool creates `last-user-run` and `working/` as needed. `prompt.md`, `prompt-template.md`, and `config.local.json` are optional overrides.
+**Required:** Only `.prosecheck/config.json` is strictly required. The tool creates `last-user-run` and `working/` as needed. `prompt.md`, `prompt-template.md`, and `config.local.json` are optional overrides.
 
 **RULES.md files** can live at any directory depth. Each file's directory becomes the inclusion pattern for all rules it contains. A `RULES.md` deeper in the tree adds rules specific to that subtree.
 
@@ -288,11 +288,11 @@ my-project/
 
 ## Rule Calculators
 
-Rule discovery is handled by **rule calculators** — pluggable modules that produce a list of rules from a given source. The architecture supports multiple calculators; which ones are active and their options are declared in `.rules/config.json`.
+Rule discovery is handled by **rule calculators** — pluggable modules that produce a list of rules from a given source. The architecture supports multiple calculators; which ones are active and their options are declared in `.prosecheck/config.json`.
 
 ### Config Structure
 
-Rule calculators are declared in the `ruleCalculators` array within `.rules/config.json` (see [Configuration Layering](#configuration-layering) for the full config shape):
+Rule calculators are declared in the `ruleCalculators` array within `.prosecheck/config.json` (see [Configuration Layering](#configuration-layering) for the full config shape):
 
 ```json
 {
@@ -334,12 +334,12 @@ Every rule carries an **inclusions** field — a list of gitignore-formatted pat
 
 #### Global Ignore
 
-Before per-rule inclusions are evaluated, a **global ignore** list is applied to all rules. This is configured via two fields in `.rules/config.json`:
+Before per-rule inclusions are evaluated, a **global ignore** list is applied to all rules. This is configured via two fields in `.prosecheck/config.json`:
 
 **`globalIgnore`** — an inline list of gitignore-formatted patterns, defaulting to common non-source paths:
 
 ```json
-"globalIgnore": [".git/", "node_modules/", "dist/", "build/", ".rules/working/"]
+"globalIgnore": [".git/", "node_modules/", "dist/", "build/", ".prosecheck/working/"]
 ```
 
 **`additionalIgnore`** — a list of external ignore files whose patterns are merged into the global ignore set:
@@ -417,7 +417,7 @@ Rules in a `RULES.md` are scoped to that file's directory and its children (the 
 
 ## Agent Output Format
 
-Agents output structured JSON to `.rules/working/outputs/<rule-id>.json`. Each result has one of four statuses.
+Agents output structured JSON to `.prosecheck/working/outputs/<rule-id>.json`. Each result has one of four statuses.
 
 ### Pass
 
@@ -522,9 +522,9 @@ The overall run status is determined by the worst status across all rules:
 | Custom environments | Users define arbitrary environment names in config; selected via `--env` CLI flag |
 | Plain-text rules | No DSL — rules are natural language, evaluated by LLM |
 | Shared prompt generation | All modes generate the same per-rule prompt files; only execution differs |
-| Configurable prompt templates | Default template ships with the tool; users override via `.rules/prompt-template.md` and `.rules/prompt.md` |
+| Configurable prompt templates | Default template ships with the tool; users override via `.prosecheck/prompt-template.md` and `.prosecheck/prompt.md` |
 | Four rule statuses | `pass`, `warn`, `fail`, `dropped` — dropped is tool-assigned when no output received |
-| Clean before, retain after | `.rules/working/` is wiped at run start; prompts and outputs are kept after for inspection |
+| Clean before, retain after | `.prosecheck/working/` is wiped at run start; prompts and outputs are kept after for inspection |
 | Dropped rule retries | Configurable retry for rules that produce no output; dropped counts as failure after retries exhausted |
 | Post-run tasks | Shell commands run after results collection; future: structured actions (PR comments, check runs) |
 | Global ignore by default | `globalIgnore` inline patterns + `additionalIgnore` external files (defaults to `.gitignore`); set both to `[]` to disable |
@@ -537,6 +537,6 @@ The overall run status is determined by the worst status across all rules:
 | Base + environment config layering | Named environment overrides on top of base defaults; CLI flags override all |
 | Local config overrides | `config.local.json` is gitignored and merged on top of `config.json` for personal settings |
 | Structured JSON output | Pass/warn/fail with optional comments, file paths, and line numbers |
-| Configurable base branch | `.rules/config.json` controls diff base and calculator options |
-| All modes share output contract | Every operating mode writes results to `.rules/working/outputs/` as structured JSON |
+| Configurable base branch | `.prosecheck/config.json` controls diff base and calculator options |
+| All modes share output contract | Every operating mode writes results to `.prosecheck/working/outputs/` as structured JSON |
 | Claude Code Headless single-instance option | Config toggle to use one instance with agent-team prompt vs. one-per-rule (default) |

@@ -14,7 +14,7 @@ prosecheck/
 │   │
 │   ├── commands/
 │   │   ├── lint.ts                    # Lint command — main flow for both CI and interactive modes
-│   │   └── init.ts                    # `init` command — scaffolds .rules/ in a target project
+│   │   └── init.ts                    # `init` command — scaffolds .prosecheck/ in a target project
 │   │
 │   ├── lib/
 │   │   ├── engine.ts                  # Orchestrator: collects rules, generates prompts, dispatches mode, collects results
