@@ -1,12 +1,12 @@
-# Claude Linter — Design Plan
+# Prosecheck — Design Plan
 
-Claude Linter is an LLM-powered code linter that processes directory-scoped rules written in plain text. Rather than encoding lint logic in ASTs or regex patterns, rules are natural-language descriptions in `RULES.md` files, evaluated by LLM agents against the target codebase.
+Prosecheck is an LLM-powered code linter that processes directory-scoped rules written in plain text. Rather than encoding lint logic in ASTs or regex patterns, rules are natural-language descriptions in `RULES.md` files, evaluated by LLM agents against the target codebase.
 
 ---
 
 ## Environments and Operating Modes
 
-Claude Linter separates two orthogonal concerns: **where** the tool runs (environment) and **how** it executes agents (operating mode).
+Prosecheck separates two orthogonal concerns: **where** the tool runs (environment) and **how** it executes agents (operating mode).
 
 ### Environments
 
@@ -117,9 +117,9 @@ After results are collected and reported, the tool optionally runs a sequence of
 
 Post-run commands receive environment variables with run metadata:
 
-- `CLAUDE_LINTER_STATUS` — overall run status (`pass`, `warn`, `fail`)
-- `CLAUDE_LINTER_RESULTS_DIR` — path to `.rules/working/outputs/`
-- `CLAUDE_LINTER_RESULTS_JSON` — path to a combined results JSON file
+- `PROSECHECK_STATUS` — overall run status (`pass`, `warn`, `fail`)
+- `PROSECHECK_RESULTS_DIR` — path to `.rules/working/outputs/`
+- `PROSECHECK_RESULTS_JSON` — path to a combined results JSON file
 
 In the future, post-run tasks will support structured actions (e.g., `post-pr-comment`, `update-check-run`) in addition to shell commands.
 
@@ -239,7 +239,7 @@ This allows developers to set personal preferences (e.g., a different timeout, e
 
 ## Project Tree
 
-The tree below shows what a project using claude-linter looks like. Items marked **(optional)** are not required for the tool to function.
+The tree below shows what a project using prosecheck looks like. Items marked **(optional)** are not required for the tool to function.
 
 ```
 my-project/

@@ -1,13 +1,13 @@
 # Project Foundation
 
-Repository structure, tooling, and configuration for claude-linter.
+Repository structure, tooling, and configuration for prosecheck.
 
 ---
 
 ## Repository Tree
 
 ```
-claude-linter/
+prosecheck/
 ├── src/
 │   ├── cli.ts                         # CLI entry: Commander arg parsing, mode detection, process.exit
 │   ├── index.ts                       # Library entry: exports core API for programmatic use
@@ -74,7 +74,7 @@ claude-linter/
 │       └── project-adr/              # Project with docs/adr/ for adr calculator tests
 │
 ├── docs/
-│   ├── plans/                         # Design plans (this file, claude-linter.md)
+│   ├── plans/                         # Design plans (this file, prosecheck.md)
 │   ├── adr/                           # Architecture Decision Records
 │   └── research/                      # Immutable, date-tagged research documents
 │
@@ -204,11 +204,11 @@ Two entry points:
 
 ```jsonc
 {
-  "name": "claude-linter",
+  "name": "prosecheck",
   "version": "0.0.1",
   "type": "module",
   "bin": {
-    "claude-linter": "./dist/cli.js"
+    "prosecheck": "./dist/cli.js"
   },
   "exports": {
     ".": {
