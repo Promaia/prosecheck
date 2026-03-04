@@ -29,7 +29,7 @@ export const ClaudeCodeSchema = z
       ),
     agentTeams: z
       .boolean()
-      .default(false)
+      .default(true)
       .describe(
         'Enable agent teams support. When true, the orchestration prompt instructs the agent to launch sub-agents for each rule, and sets CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1.',
       ),
@@ -118,7 +118,7 @@ export const ConfigSchema = z
       .nonnegative()
       .default(1)
       .describe('Max retry attempts per dropped rule'),
-    claudeCode: ClaudeCodeSchema.default(() => ({ singleInstance: false, agentTeams: false })),
+    claudeCode: ClaudeCodeSchema.default(() => ({ singleInstance: false, agentTeams: true })),
     postRun: z
       .array(z.string())
       .default([])

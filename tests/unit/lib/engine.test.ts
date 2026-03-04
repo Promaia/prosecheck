@@ -61,7 +61,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     warnAsError: false,
     retryDropped: false,
     retryDroppedMaxAttempts: 1,
-    claudeCode: { singleInstance: false, agentTeams: false },
+    claudeCode: { singleInstance: false, agentTeams: true },
     postRun: [],
     environments: {},
     ruleCalculators: [],
