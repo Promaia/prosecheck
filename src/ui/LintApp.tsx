@@ -6,7 +6,14 @@ import type { RuleProgressEntry } from './components/LintProgress.js';
 import type { CollectResultsOutput } from '../lib/results.js';
 import type { ProgressEvent } from '../types/index.js';
 
+/** Mutable ref that the component writes its progress handler into. */
+export interface ProgressRef {
+  current: ((event: ProgressEvent) => void) | undefined;
+}
+
 export interface LintAppProps {
+  /** Ref that receives the progress handler on mount */
+  progressRef: ProgressRef;
   /** Final collected results — shown after all rules complete */
   finalResults?: CollectResultsOutput | undefined;
 }
@@ -14,12 +21,11 @@ export interface LintAppProps {
 /**
  * Top-level Ink app that composes LintProgress and Summary.
  *
- * Exposes an imperative `handleProgress` callback via a ref-like pattern:
- * the parent calls `useLintAppUpdater()` to get the handler, then passes
- * progress events from the engine.
+ * Writes its progress handler into `progressRef.current` on mount,
+ * scoped to this specific render instance.
  */
-export function LintApp({ finalResults }: LintAppProps): React.ReactElement {
-  const { entries } = useLintAppState();
+export function LintApp({ progressRef, finalResults }: LintAppProps): React.ReactElement {
+  const { entries } = useLintAppState(progressRef);
 
   return (
     <Box flexDirection="column">
@@ -29,22 +35,11 @@ export function LintApp({ finalResults }: LintAppProps): React.ReactElement {
   );
 }
 
-// --- State management hook (shared via module-level ref) ---
+// --- State management hook ---
 
 type EntriesMap = Map<string, RuleProgressEntry>;
 
-/** Module-level ref for the state updater so the render wrapper can push events */
-let globalDispatch: ((event: ProgressEvent) => void) | undefined;
-
-/**
- * Get the progress event handler. Call this after rendering the LintApp
- * to get a function you can pass as `onProgress` to the engine.
- */
-export function getProgressHandler(): ((event: ProgressEvent) => void) | undefined {
-  return globalDispatch;
-}
-
-function useLintAppState(): { entries: RuleProgressEntry[] } {
+function useLintAppState(progressRef: ProgressRef): { entries: RuleProgressEntry[] } {
   const [entriesMap, setEntriesMap] = useState<EntriesMap>(new Map());
 
   const handleProgress = useCallback((event: ProgressEvent) => {
@@ -84,13 +79,13 @@ function useLintAppState(): { entries: RuleProgressEntry[] } {
     });
   }, []);
 
-  // Register the handler globally so the render wrapper can access it
+  // Write the handler into the caller's ref
   useEffect(() => {
-    globalDispatch = handleProgress;
+    progressRef.current = handleProgress;
     return () => {
-      globalDispatch = undefined;
+      progressRef.current = undefined;
     };
-  }, [handleProgress]);
+  }, [handleProgress, progressRef]);
 
   // Convert map to sorted array (insertion order)
   const entries = Array.from(entriesMap.values());

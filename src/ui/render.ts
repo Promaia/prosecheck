@@ -1,6 +1,7 @@
 import React from 'react';
 import { render } from 'ink';
-import { LintApp, getProgressHandler } from './LintApp.js';
+import { LintApp } from './LintApp.js';
+import type { ProgressRef } from './LintApp.js';
 import type { CollectResultsOutput } from '../lib/results.js';
 import type { OnProgress } from '../types/index.js';
 
@@ -32,22 +33,21 @@ export function shouldUseInteractiveUI(format: string): boolean {
  * when the engine completes to show the summary.
  */
 export function startInteractiveUI(): InteractiveUI {
+  const progressRef: ProgressRef = { current: undefined };
+
   const inkInstance = render(
-    React.createElement(LintApp),
+    React.createElement(LintApp, { progressRef }),
   );
 
-  // The LintApp registers its progress handler on mount via useEffect.
-  // Since Ink renders synchronously on first render, the handler is
-  // available immediately after render().
-  const handler = getProgressHandler();
-
+  // Ink renders synchronously on first render, so the handler
+  // is available in progressRef.current immediately after render().
   const onProgress: OnProgress = (event) => {
-    handler?.(event);
+    progressRef.current?.(event);
   };
 
   const finish = (results: CollectResultsOutput): void => {
     inkInstance.rerender(
-      React.createElement(LintApp, { finalResults: results }),
+      React.createElement(LintApp, { progressRef, finalResults: results }),
     );
     inkInstance.unmount();
   };
