@@ -7,13 +7,26 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: [
+            'eslint.config.ts',
+            '*.config.ts',
+          ],
+          defaultProject: 'tsconfig.json',
+        },
+        tsconfigRootDir: import.meta.dirname,
       },
     },
     rules: {
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-unnecessary-type-assertion': 'error',
       '@eslint-community/eslint-comments/no-unlimited-disable': 'error',
+    },
+  },
+  {
+    files: ['eslint.config.ts'],
+    rules: {
+      '@typescript-eslint/no-deprecated': 'off',
     },
   },
   {

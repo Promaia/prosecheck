@@ -40,14 +40,17 @@
     "ink": "^6.8.0",
     "picocolors": "^1.1.1",
     "react": "^19.2.4",
-    "yocto-spinner": "^1.1.0"
+    "yocto-spinner": "^1.1.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@commander-js/extra-typings": "^14.0.0",
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.1",
+    "@types/node": "^25.3.3",
     "@types/react": "^19.2.14",
     "eslint": "^10.0.2",
     "ink-testing-library": "^4.0.0",
+    "jiti": "^2.6.1",
     "msw": "^2.12.10",
     "prettier": "^3.8.1",
     "tsup": "^8.5.1",

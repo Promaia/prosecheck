@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 
 describe('prompt', () => {
   it.todo('generates per-rule prompt with default template');

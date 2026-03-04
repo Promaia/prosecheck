@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 
 describe('CLI', () => {
   it.todo('exits 0 when all rules pass');

@@ -12,15 +12,15 @@ Items are grouped by milestone. Within each milestone, items are roughly ordered
 
 Foundation types and config loading — everything else depends on these.
 
-- [ ] Define Zod config schema in `src/lib/config-schema.ts` — `ConfigSchema` with `.describe()` on every field and `.default()` for all defaults. Break into sub-schemas: `LastRunSchema`, `ClaudeCodeSchema`, `CalculatorConfigSchema`, `EnvironmentOverrideSchema`. Export `Config` type via `z.infer<typeof ConfigSchema>`. Define `PartialConfigSchema` via `.deepPartial()` for overlay layers. Define `RuleResultSchema` for agent output validation
-- [ ] Define remaining shared types in `src/types/index.ts` — Rule, RuleStatus, PromptVariables, RunContext (Config type comes from Zod schema, not manually defined here)
-- [ ] Implement `src/lib/rule.ts` — Rule type helpers, stable ID slug generation from rule name + source path
-- [ ] Implement `src/lib/config.ts` — Load `config.json`, validate with `ConfigSchema.safeParse()`, deep-merge `config.local.json` (validated with `PartialConfigSchema`), apply environment overrides (validated with `PartialConfigSchema`), apply CLI flag overrides. Invalid config produces exit code 2 with Zod error paths
-- [ ] Implement `src/lib/ignore.ts` — Combine `globalIgnore` inline patterns with patterns from `additionalIgnore` files, expose a file-matching predicate using the `ignore` package
-- [ ] Write unit tests for Zod schema (defaults applied on empty input, validation errors for bad types, partial schema accepts subsets, `.describe()` present on all fields)
-- [ ] Write unit tests for config loading (layering, deep merge, missing files, invalid JSON, Zod validation errors)
-- [ ] Write unit tests for ignore pattern matching (globalIgnore, additionalIgnore, edge cases)
-- [ ] Verify `npm run ci` passes
+- [x] Define Zod config schema in `src/lib/config-schema.ts` — `ConfigSchema` with `.describe()` on every field and `.default()` for all defaults. Sub-schemas: `LastRunSchema`, `ClaudeCodeSchema`, `CalculatorConfigSchema`, `EnvironmentOverrideSchema`. `Config` type via `z.infer`. `PartialConfig` as TypeScript mapped type (Zod v4 has no `.deepPartial()`). `RuleResultSchema` as discriminated union for agent output validation
+- [x] Define remaining shared types in `src/types/index.ts` — Rule, RuleStatus, PromptVariables, RunContext (Config type re-exported from Zod schema)
+- [x] Implement `src/lib/rule.ts` — Rule type helpers, stable ID slug generation from rule name + source path
+- [x] Implement `src/lib/config.ts` — 4-layer config loading: config.json → config.local.json → environment overrides → CLI flags. Zod validation on base and final merged config. `ConfigError` with structured issue details
+- [x] Implement `src/lib/ignore.ts` — Combine `globalIgnore` inline patterns with `additionalIgnore` file patterns via `ignore` package, inclusion filter, `filterFiles` utility
+- [x] Write unit tests for Zod schema (15 tests: defaults, validation, descriptions, RuleResult variants)
+- [x] Write unit tests for config loading (20 tests: layering, deep merge, missing files, Zod errors, environment resolution)
+- [x] Write unit tests for ignore pattern matching (10 tests: globalIgnore, additionalIgnore, inclusions, filterFiles)
+- [x] Verify `npm run ci` passes
 
 ---
 
