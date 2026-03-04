@@ -220,17 +220,17 @@ SARIF 2.1.0 schema for GitHub Code Scanning. Maps warn/fail results to SARIF res
 
 ---
 
-## UI Components (`src/ui/components/`) **[STUB]**
+## UI Components (`src/ui/components/`) [IMPLEMENTED]
 
 Ink + React components for interactive terminal display.
 
-### `LintProgress.tsx`
+### `LintProgress.tsx` — Live Progress Table [IMPLEMENTED]
 
-Live table showing each rule's name, run status (waiting / running / done), and result as agents complete.
+Renders a live table showing each rule's name, run status (`waiting` / `running` / `done`), and result as agents complete. Each row displays a colored status label (WAIT/`..`/PASS/WARN/FAIL/DROP) with the rule name and, when done, the result headline or pass comment. Accepts a `RuleProgressEntry[]` prop. Supports rerendering with updated status for real-time progress tracking.
 
-### `Summary.tsx`
+### `Summary.tsx` — Results Summary [IMPLEMENTED]
 
-Final results summary after all rules have been evaluated.
+Final results summary component. Displays total rule count, per-status counts (passed/warned/failed/dropped/errors), and overall status (PASS/WARN/FAIL/DROPPED) with color coding. Accepts a `CollectResultsOutput` prop from the results collector.
 
 ---
 
