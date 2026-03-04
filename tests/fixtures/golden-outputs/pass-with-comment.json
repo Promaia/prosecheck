@@ -1,0 +1,6 @@
+{
+  "status": "pass",
+  "rule": "consistent-naming",
+  "source": "RULES.md",
+  "comment": "All exported functions follow camelCase convention consistently."
+}

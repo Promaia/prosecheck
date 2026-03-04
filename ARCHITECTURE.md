@@ -155,7 +155,7 @@ Template is configurable via `.prosecheck/prompt-template.md` (falls back to bui
 
 ### `results.ts` — Result Collection [IMPLEMENTED]
 
-Collects agent output JSON files from `.prosecheck/working/outputs/`. Each file is validated against `RuleResultSchema` (Zod) — malformed agent output produces clear error messages rather than downstream crashes. Detects dropped rules (missing output files). Determines overall run status from worst individual status: fail > dropped > warn > pass. Malformed outputs are treated as fail severity. Key functions: `parseResultFile()`, `collectResults()`, `computeOverallStatus()`.
+Collects agent output JSON files from `.prosecheck/working/outputs/`. Before JSON parsing, `sanitizeAgentOutput()` handles common LLM quirks: strips UTF-8 BOM, extracts JSON from markdown fences, truncates trailing text after the last `}`, and trims whitespace. Each file is then validated against `RuleResultSchema` (Zod) — malformed agent output produces clear error messages (including input preview and rule ID) rather than downstream crashes. Detects dropped rules (missing output files). Determines overall run status from worst individual status: fail > dropped > warn > pass. Malformed outputs are treated as fail severity. Key functions: `sanitizeAgentOutput()`, `parseResultFile()`, `collectResults()`, `computeOverallStatus()`.
 
 ### `orchestration-prompt.ts` — Shared Orchestration Prompt [IMPLEMENTED]
 

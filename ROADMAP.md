@@ -212,14 +212,14 @@ Fake Claude binary that simulates agent behavior, enabling full pipeline tests w
 
 Harden result parsing against common LLM output quirks and validate against golden files from real Claude outputs.
 
-- [ ] Fuzz `collectResults()` with malformed inputs — trailing commas, BOM characters, markdown-wrapped JSON (`` ```json ... ``` ``), extra fields, truncated JSON, empty files, non-JSON text
-- [ ] Fuzz with LLM-typical mistakes — comments in JSON, single-quoted strings, unquoted keys, trailing text after valid JSON, multiple JSON objects concatenated
-- [ ] Test Zod validation error messages — verify actionable error details for each malformed variant (users need to debug agent output)
-- [ ] Add `tests/fixtures/golden-outputs/` directory — curated set of real Claude outputs (pass, warn, fail, edge cases) as golden files
-- [ ] Write golden file contract tests — parse each golden file against `RuleResultSchema`, assert expected status and structure
-- [ ] Add prompt template regression test — when prompt template changes, verify golden outputs still parse correctly (catch prompt/schema drift)
-- [ ] Document golden file update process — instructions for re-recording golden files when prompt templates change
-- [ ] Verify `npm run ci` passes
+- [x] Fuzz `collectResults()` with malformed inputs — trailing commas, BOM characters, markdown-wrapped JSON (`` ```json ... ``` ``), extra fields, truncated JSON, empty files, non-JSON text
+- [x] Fuzz with LLM-typical mistakes — comments in JSON, single-quoted strings, unquoted keys, trailing text after valid JSON, multiple JSON objects concatenated
+- [x] Test Zod validation error messages — verify actionable error details for each malformed variant (users need to debug agent output)
+- [x] Add `tests/fixtures/golden-outputs/` directory — curated set of real Claude outputs (pass, warn, fail, edge cases) as golden files
+- [x] Write golden file contract tests — parse each golden file against `RuleResultSchema`, assert expected status and structure
+- [x] Add prompt template regression test — when prompt template changes, verify golden outputs still parse correctly (catch prompt/schema drift)
+- [x] Document golden file update process — instructions for re-recording golden files when prompt templates change
+- [x] Verify `npm run ci` passes
 
 ---
 

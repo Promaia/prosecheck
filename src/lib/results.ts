@@ -44,6 +44,31 @@ export interface ResultError {
 }
 
 /**
+ * Sanitize common LLM output quirks before JSON parsing.
+ * Non-lossy transforms: BOM removal, markdown fence extraction,
+ * trailing text truncation, whitespace trimming.
+ */
+export function sanitizeAgentOutput(content: string): string {
+  // Strip UTF-8 BOM
+  let cleaned = content.replace(/^\uFEFF/, '');
+
+  // Extract from markdown fences: ```json\n...\n``` or ```\n...\n```
+  const fenceMatch = cleaned.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
+  if (fenceMatch?.[1]) {
+    cleaned = fenceMatch[1];
+  }
+
+  // Strip trailing text after JSON — find last } and truncate
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (lastBrace !== -1) {
+    cleaned = cleaned.slice(0, lastBrace + 1);
+  }
+
+  // Trim whitespace
+  return cleaned.trim();
+}
+
+/**
  * Parse and validate a single output file.
  * Returns the validated RuleResult or an error message.
  */
@@ -51,13 +76,15 @@ export function parseResultFile(
   content: string,
   ruleId: string,
 ): { ok: true; result: RuleResult } | { ok: false; message: string } {
+  const sanitized = sanitizeAgentOutput(content);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(content);
+    parsed = JSON.parse(sanitized);
   } catch {
+    const preview = content.slice(0, 200);
     return {
       ok: false,
-      message: `Output for rule "${ruleId}" is not valid JSON`,
+      message: `Output for rule "${ruleId}" is not valid JSON. Input preview: ${preview}`,
     };
   }
 

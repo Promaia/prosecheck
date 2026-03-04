@@ -1,0 +1,13 @@
+{
+  "status": "fail",
+  "rule": "no-hardcoded-secrets",
+  "source": "RULES.md",
+  "headline": "Hardcoded API key found in source code",
+  "comments": [
+    {
+      "message": "This line contains what appears to be a hardcoded API key. Move it to an environment variable.",
+      "file": "src/lib/api-client.ts",
+      "line": 8
+    }
+  ]
+}

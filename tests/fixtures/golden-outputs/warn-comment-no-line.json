@@ -1,0 +1,12 @@
+{
+  "status": "warn",
+  "rule": "test-coverage",
+  "source": "RULES.md",
+  "headline": "New utility module lacks test coverage",
+  "comments": [
+    {
+      "message": "The file src/lib/helpers.ts was added but has no corresponding test file.",
+      "file": "src/lib/helpers.ts"
+    }
+  ]
+}
