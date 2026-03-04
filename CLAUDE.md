@@ -28,6 +28,10 @@ After making changes to the codebase, you MUST:
 
 After completing each milestone (or any significant set of changes), run `npm run ci` to verify everything passes. This runs typecheck, lint, test, and build in sequence. Do not move to the next milestone until CI passes cleanly. If CI fails, fix the issue before proceeding.
 
+## Self-review
+
+After completing implementation work, consult `docs/self-review.md` for the self-review checklist — criteria and severity levels for evaluating changes before presenting findings.
+
 ## Known issues
 
 `docs/issues.md` tracks known bugs and architectural concerns. Fixed issues should be removed from the file.
