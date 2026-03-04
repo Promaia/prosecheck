@@ -33,6 +33,7 @@ This ADR records the collection of framework and tooling decisions that define t
 
 - **picocolors** for terminal colors. 7KB, 2x faster than chalk, zero dependencies, respects NO_COLOR/FORCE_COLOR.
 - **yocto-spinner** for progress spinners. 5KB, zero dependencies, by ora's author. Chosen over ora (larger).
+- **zod** for schema validation and type inference. Defines config schema once — infers TypeScript types, validates at runtime, carries descriptions and defaults for config editor introspection. See ADR 010.
 - **ignore** for gitignore-pattern matching. De-facto standard in the Node.js ecosystem.
 - **execa** for process spawning. Used to launch and manage Claude Code CLI child processes.
 
