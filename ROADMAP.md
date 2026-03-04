@@ -110,11 +110,11 @@ Wire everything together into the main lint pipeline.
 
 Top-level CLI wiring and project scaffolding.
 
-- [ ] Implement `src/cli.ts` — Commander program definition, register lint and init subcommands, global flags (`--env`, `--mode`, `--format`, `--timeout`, `--warn-as-error`, `--last-run-read`, `--last-run-write`, `--retry-dropped`), environment resolution, `process.exitCode` handling
-- [ ] Implement `src/commands/init.ts` — Create `.prosecheck/` directory, write default `config.json`, add `.prosecheck/working/`, `.prosecheck/config.local.json`, `.prosecheck/last-user-run` to `.gitignore`, optionally create starter `RULES.md`
-- [ ] Write integration tests for CLI (`tests/integration/cli.test.ts`) — Spawn `dist/cli.js` with execa, assert exit codes and stdout/stderr for various scenarios
-- [ ] Write integration tests for init command (`tests/integration/init.test.ts`) — Verify scaffolded files and gitignore entries
-- [ ] Verify `npm run ci` passes
+- [x] Implement `src/cli.ts` — Commander program definition, register lint and init subcommands, global flags (`--env`, `--mode`, `--format`, `--timeout`, `--warn-as-error`, `--last-run-read`, `--last-run-write`, `--retry-dropped`), environment resolution, `process.exitCode` handling
+- [x] Implement `src/commands/init.ts` — Create `.prosecheck/` directory, write default `config.json`, add `.prosecheck/working/`, `.prosecheck/config.local.json`, `.prosecheck/last-user-run` to `.gitignore`, optionally create starter `RULES.md`
+- [x] Write integration tests for CLI (`tests/integration/cli.test.ts`) — Spawn `dist/cli.js` with execa, assert exit codes and stdout/stderr for various scenarios
+- [x] Write integration tests for init command (`tests/integration/init.test.ts`) — Verify scaffolded files and gitignore entries
+- [x] Verify `npm run ci` passes
 
 ---
 

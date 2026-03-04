@@ -29,9 +29,9 @@ All source files are TypeScript (strict mode, ESM-only, Node >= 20). The project
 
 ## Entry Points
 
-### `src/cli.ts` — CLI Binary **[STUB]**
+### `src/cli.ts` — CLI Binary [IMPLEMENTED]
 
-Commander-based argument parsing. Resolves environment (`--env`) and operating mode (`--mode`) as orthogonal concerns. Sets `process.exitCode` (never `process.exit()`) for graceful cleanup.
+Commander-based argument parsing. Registers `lint` and `init` subcommands with full flag support. Resolves environment (`--env`) and operating mode (`--mode`) as orthogonal concerns. Sets `process.exitCode` (never `process.exit()`) for graceful cleanup. Supports boolean flag pairs (e.g., `--warn-as-error` / `--no-warn-as-error`).
 
 **Exit codes:** 0 = all passed, 1 = rule failures, 2 = tool/config error.
 
@@ -47,9 +47,9 @@ Programmatic entry point. Exports core types and the engine for use as a library
 
 Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, timeout), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). Key function: `lint(options: LintOptions)`.
 
-### `src/commands/init.ts` — Init Command **[STUB]**
+### `src/commands/init.ts` — Init Command [IMPLEMENTED]
 
-Scaffolds `.prosecheck/` directory with default `config.json`, adds entries to `.gitignore`, and optionally creates a starter `RULES.md`.
+Scaffolds `.prosecheck/` directory with default `config.json` (baseBranch, globalIgnore, ruleCalculators defaults), creates `working/` subdirectory, adds entries to `.gitignore` (working/, config.local.json, last-user-run) with a `# prosecheck` header, and optionally creates a starter `RULES.md` with example rules. Idempotent — detects existing initialization and skips. Key function: `init(options: InitOptions)`.
 
 ### `src/commands/config.ts` — Config Editor Command **[PLANNED]**
 

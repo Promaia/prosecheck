@@ -7,23 +7,23 @@ export interface LintOptions {
   /** Project root directory */
   projectRoot: string;
   /** Environment name (from --env flag) */
-  env?: string;
+  env?: string | undefined;
   /** Operating mode (from --mode flag) */
-  mode?: string;
+  mode?: string | undefined;
   /** Output format (from --format flag) */
-  format?: string;
+  format?: string | undefined;
   /** Git comparison ref override */
-  ref?: string;
+  ref?: string | undefined;
   /** Override warnAsError config */
-  warnAsError?: boolean;
+  warnAsError?: boolean | undefined;
   /** Override retryDropped config */
-  retryDropped?: boolean;
+  retryDropped?: boolean | undefined;
   /** Override lastRun.read config */
-  lastRunRead?: boolean;
+  lastRunRead?: boolean | undefined;
   /** Override lastRun.write config */
-  lastRunWrite?: boolean;
+  lastRunWrite?: boolean | undefined;
   /** Override timeout config */
-  timeout?: number;
+  timeout?: number | undefined;
 }
 
 /**
