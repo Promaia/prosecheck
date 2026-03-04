@@ -99,10 +99,10 @@ The execution backends that launch agents.
 
 Wire everything together into the main lint pipeline.
 
-- [ ] Implement `src/lib/engine.ts` — Full pipeline: cleanup working dir → run calculators → change detection → filter rules → generate prompts → dispatch to mode → collect results → format → post-run → set exit code
-- [ ] Implement `src/commands/lint.ts` — Parse lint-specific CLI flags, construct RunContext, invoke engine, handle errors with exit code 2
-- [ ] Write unit tests for engine (mock all subsystems, test pipeline ordering, test error handling)
-- [ ] Verify `npm run ci` passes
+- [x] Implement `src/lib/engine.ts` — Full pipeline: cleanup working dir → run calculators → change detection → filter rules → generate prompts → dispatch to mode → collect results → format → post-run → set exit code
+- [x] Implement `src/commands/lint.ts` — Parse lint-specific CLI flags, construct RunContext, invoke engine, handle errors with exit code 2
+- [x] Write unit tests for engine (mock all subsystems, test pipeline ordering, test error handling)
+- [x] Verify `npm run ci` passes
 
 ---
 

@@ -43,9 +43,9 @@ Programmatic entry point. Exports core types and the engine for use as a library
 
 ## Commands
 
-### `src/commands/lint.ts` — Lint Command **[STUB]**
+### `src/commands/lint.ts` — Lint Command [IMPLEMENTED]
 
-Main flow: load config → discover rules → detect changes → filter rules by scope → generate prompts → execute via mode → collect results → format output → post-run tasks.
+Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, timeout), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). Key function: `lint(options: LintOptions)`.
 
 ### `src/commands/init.ts` — Init Command **[STUB]**
 
@@ -85,20 +85,22 @@ Environment is resolved from `--env` flag, `process.env.CI` auto-detection, or `
 
 Key config fields: `baseBranch`, `globalIgnore`, `additionalIgnore`, `lastRun`, `timeout`, `warnAsError`, `retryDropped`, `retryDroppedMaxAttempts`, `claudeCode`, `postRun`, `environments`, `ruleCalculators`.
 
-### `engine.ts` — Orchestrator **[STUB]**
+### `engine.ts` — Orchestrator [IMPLEMENTED]
 
 Central coordinator that drives the lint pipeline:
 
 1. Cleanup `.prosecheck/working/`
-2. Run rule calculators → collect all rules
-3. Run change detection → get changed files
-4. Match changed files to rule scopes → select triggered rules
-5. Generate per-rule prompts
-6. Dispatch to operating mode
-7. Collect results (with dropped detection + optional retry)
-8. Format and report
+2. Run rule calculators → collect all rules (early return if none)
+3. Run change detection → get triggered rules (early return if none)
+4. Generate per-rule prompts
+5. Dispatch to operating mode (`claude-code` or `user-prompt`)
+6. Collect results (with dropped detection)
+7. Apply `warnAsError` promotion
+8. Format output (stylish/json/sarif)
 9. Execute post-run tasks
-10. Set exit code
+10. Persist last-run hash if applicable
+
+Key function: `runEngine(context: RunContext): Promise<EngineResult>`. Returns formatted output string, overall status, and raw results.
 
 ### `change-detection.ts` — Git Diff & File Filtering [IMPLEMENTED]
 
