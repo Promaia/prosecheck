@@ -75,11 +75,11 @@ Collect agent outputs and handle edge cases.
 
 Transform results into human-readable and machine-readable formats.
 
-- [ ] Implement `src/formatters/stylish.ts` — Colored terminal output with rule names, statuses, headlines, per-comment file/line details
-- [ ] Implement `src/formatters/json.ts` — Structured JSON output of all results
-- [ ] Implement `src/formatters/sarif.ts` — SARIF schema output for GitHub Code Scanning inline PR annotations
-- [ ] Write unit tests for all three formatters (snapshot tests recommended)
-- [ ] Verify `npm run ci` passes
+- [x] Implement `src/formatters/stylish.ts` — Colored terminal output with rule names, statuses, headlines, per-comment file/line details
+- [x] Implement `src/formatters/json.ts` — Structured JSON output of all results
+- [x] Implement `src/formatters/sarif.ts` — SARIF schema output for GitHub Code Scanning inline PR annotations
+- [x] Write unit tests for all three formatters (snapshot tests recommended)
+- [x] Verify `npm run ci` passes
 
 ---
 
