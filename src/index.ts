@@ -15,6 +15,10 @@ export type { LoadConfigOptions, LoadConfigResult } from './lib/config.js';
 // Result types
 export type { CollectResultsOutput, RuleResultWithId, DroppedRule } from './lib/results.js';
 
+// Orchestration prompt
+export { buildOrchestrationPrompt } from './lib/orchestration-prompt.js';
+export type { OrchestrationPromptOptions } from './lib/orchestration-prompt.js';
+
 // Formatters
 export { formatStylish } from './formatters/stylish.js';
 export { formatJson } from './formatters/json.js';

@@ -24,6 +24,8 @@ export interface LintOptions {
   lastRunWrite?: boolean | undefined;
   /** Override timeout config */
   timeout?: number | undefined;
+  /** Override agentTeams config */
+  agentTeams?: boolean | undefined;
 }
 
 /**
@@ -59,6 +61,12 @@ export async function lint(options: LintOptions): Promise<void> {
         lastRun['write'] = options.lastRunWrite;
       }
       cliOverrides['lastRun'] = lastRun;
+    }
+    if (options.agentTeams !== undefined) {
+      cliOverrides['claudeCode'] = {
+        ...(cliOverrides['claudeCode'] as Record<string, unknown> | undefined),
+        agentTeams: options.agentTeams,
+      };
     }
 
     // Load config with CLI overrides

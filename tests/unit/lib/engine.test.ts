@@ -9,7 +9,7 @@ const mockGeneratePrompts = vi.fn();
 const mockCollectResults = vi.fn();
 const mockExecutePostRun = vi.fn();
 const mockRunClaudeCode = vi.fn();
-const mockBuildOrchestrationPrompt = vi.fn();
+const mockBuildUserPrompt = vi.fn();
 const mockWatchForOutputs = vi.fn();
 const mockFormatStylish = vi.fn();
 const mockFormatJson = vi.fn();
@@ -34,7 +34,7 @@ vi.mock('../../../src/modes/claude-code.js', () => ({
   runClaudeCode: mockRunClaudeCode,
 }));
 vi.mock('../../../src/modes/user-prompt.js', () => ({
-  buildOrchestrationPrompt: mockBuildOrchestrationPrompt,
+  buildUserPrompt: mockBuildUserPrompt,
   watchForOutputs: mockWatchForOutputs,
 }));
 vi.mock('../../../src/formatters/stylish.js', () => ({
@@ -59,7 +59,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     warnAsError: false,
     retryDropped: false,
     retryDroppedMaxAttempts: 1,
-    claudeCode: { singleInstance: false },
+    claudeCode: { singleInstance: false, agentTeams: false },
     postRun: [],
     environments: {},
     ruleCalculators: [],
@@ -108,7 +108,7 @@ beforeEach(() => {
   mockFormatJson.mockReturnValue('{"status":"pass"}');
   mockFormatSarif.mockReturnValue('{"runs":[]}');
   mockExecutePostRun.mockResolvedValue([]);
-  mockBuildOrchestrationPrompt.mockReturnValue('orchestration prompt');
+  mockBuildUserPrompt.mockReturnValue('orchestration prompt');
   mockWatchForOutputs.mockResolvedValue(new Set(['rule-a']));
 });
 
@@ -159,7 +159,7 @@ describe('runEngine', () => {
     await runEngine(context);
 
     expect(mockRunClaudeCode).toHaveBeenCalledOnce();
-    expect(mockBuildOrchestrationPrompt).not.toHaveBeenCalled();
+    expect(mockBuildUserPrompt).not.toHaveBeenCalled();
   });
 
   it('dispatches to user-prompt mode', async () => {
@@ -167,7 +167,7 @@ describe('runEngine', () => {
     const context = makeContext({ mode: 'user-prompt' });
     await runEngine(context);
 
-    expect(mockBuildOrchestrationPrompt).toHaveBeenCalledOnce();
+    expect(mockBuildUserPrompt).toHaveBeenCalledOnce();
     expect(mockWatchForOutputs).toHaveBeenCalledOnce();
     expect(mockRunClaudeCode).not.toHaveBeenCalled();
     stdoutSpy.mockRestore();

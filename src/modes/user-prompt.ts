@@ -1,6 +1,8 @@
 import { watch } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
+import type { Rule } from '../types/index.js';
+import { buildOrchestrationPrompt } from '../lib/orchestration-prompt.js';
 
 const OUTPUTS_DIR = '.prosecheck/working/outputs';
 
@@ -11,55 +13,27 @@ export interface UserPromptModeOptions {
   promptPaths: Map<string, string>;
   /** Expected rule IDs (used to determine when all outputs are collected) */
   expectedRuleIds: string[];
+  /** Triggered rules (for rule names in the prompt) */
+  rules: Rule[];
+  /** Whether to use agent teams mode */
+  agentTeams: boolean;
 }
 
 /**
- * Build the orchestration prompt that lists all prompt file paths.
+ * Build the prompt that the user pastes into Claude Code (or another LLM).
  *
- * The user pastes this into Claude Code (or another LLM interface).
- * The prompt instructs the agent to read each prompt file and write
- * output to the corresponding output path.
+ * Uses the shared orchestration prompt builder — same code path as
+ * claude-code single-instance mode.
  */
-export function buildOrchestrationPrompt(
+export function buildUserPrompt(
   options: UserPromptModeOptions,
 ): string {
-  const lines: string[] = [
-    '# Prosecheck — Rule Evaluation',
-    '',
-    'You are a code linter. For each rule below, read the prompt file, evaluate the codebase against the rule, and write your JSON result to the specified output path.',
-    '',
-    '## Rules to Evaluate',
-    '',
-  ];
-
-  for (const [ruleId, promptPath] of options.promptPaths) {
-    const outputPath = path.join(
-      options.projectRoot,
-      OUTPUTS_DIR,
-      `${ruleId}.json`,
-    );
-    lines.push(`### ${ruleId}`);
-    lines.push(`- **Prompt:** \`${promptPath}\``);
-    lines.push(`- **Output:** \`${outputPath}\``);
-    lines.push('');
-  }
-
-  lines.push('## Instructions');
-  lines.push('');
-  lines.push(
-    '1. Read each prompt file listed above.',
-  );
-  lines.push(
-    '2. Evaluate the codebase against each rule as described in the prompt.',
-  );
-  lines.push(
-    '3. Write your JSON result for each rule to its output path.',
-  );
-  lines.push(
-    '4. Each output file must conform to the schema described in the prompt.',
-  );
-
-  return lines.join('\n');
+  return buildOrchestrationPrompt({
+    projectRoot: options.projectRoot,
+    promptPaths: options.promptPaths,
+    rules: options.rules,
+    agentTeams: options.agentTeams,
+  });
 }
 
 /**

@@ -148,6 +148,14 @@ Template is configurable via `.prosecheck/prompt-template.md` (falls back to bui
 
 Collects agent output JSON files from `.prosecheck/working/outputs/`. Each file is validated against `RuleResultSchema` (Zod) — malformed agent output produces clear error messages rather than downstream crashes. Detects dropped rules (missing output files). Determines overall run status from worst individual status: fail > dropped > warn > pass. Malformed outputs are treated as fail severity. Key functions: `parseResultFile()`, `collectResults()`, `computeOverallStatus()`.
 
+### `orchestration-prompt.ts` — Shared Orchestration Prompt [IMPLEMENTED]
+
+Generates the orchestration prompt used by both user-prompt and claude-code single-instance modes. Two variants controlled by `agentTeams`:
+- **Agent teams mode** (`agentTeams: true`): Instructs the agent to act as an "orchestrator" and launch agent teams (sub-agents) for each rule. Compact format listing rule name and prompt file path.
+- **Sequential mode** (`agentTeams: false`): Instructs the agent to process all rules itself with detailed instructions including output paths and step-by-step guidance.
+
+Both variants list rules by human-readable name with relative prompt file paths. Key function: `buildOrchestrationPrompt()`.
+
 ### `post-run.ts` — Post-Run Tasks [IMPLEMENTED]
 
 Executes shell commands from `config.postRun` array sequentially after results collection. Injects environment variables: `PROSECHECK_STATUS` (overall status), `PROSECHECK_RESULTS_DIR` (absolute path to outputs directory), `PROSECHECK_RESULTS_JSON` (absolute path to results JSON file, when available). Captures stdout, stderr, and exit codes for each command. Key function: `executePostRun()`.
@@ -178,11 +186,11 @@ Control how agents are launched. Independent of environment (any mode runs in an
 
 ### `user-prompt.ts` — User Prompt Mode [IMPLEMENTED]
 
-Builds a single orchestration prompt listing all prompt file paths and their corresponding output paths. The user pastes this into Claude Code or another LLM interface. Watches `.prosecheck/working/outputs/` via `fs.watch` for result files and resolves when all expected outputs exist. Supports abort signals for early termination with partial results. Key functions: `buildOrchestrationPrompt()`, `watchForOutputs()`.
+Generates an orchestration prompt (via the shared `orchestration-prompt.ts` builder) and prints it for the user to paste into Claude Code or another LLM. Watches `.prosecheck/working/outputs/` via `fs.watch` for result files and resolves when all expected outputs exist. Supports abort signals for early termination with partial results. Key functions: `buildUserPrompt()`, `watchForOutputs()`.
 
 ### `claude-code.ts` — Claude Code Headless Mode [IMPLEMENTED]
 
-Spawns `claude --print` processes (one per rule, in parallel) via `execFile`. Each instance receives its prompt file content via the `-p` flag and writes results to `.prosecheck/working/outputs/`. Config option `claudeCode.singleInstance` switches to a single-instance agent-team strategy that combines all rule prompts into one invocation. Key functions: `runClaudeCode()`, `spawnClaude()`.
+Spawns `claude --print` processes (one per rule, in parallel) via `execFile`. Each instance receives its prompt file content via the `-p` flag and writes results to `.prosecheck/working/outputs/`. In single-instance mode (`claudeCode.singleInstance`), spawns a single process with the shared orchestration prompt (from `orchestration-prompt.ts`). When `claudeCode.agentTeams` is enabled, the single-instance prompt instructs the agent to launch sub-agents and sets `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. Key functions: `runClaudeCode()`, `spawnClaude()`.
 
 ### Claude Agents SDK Mode **[PLANNED]**
 

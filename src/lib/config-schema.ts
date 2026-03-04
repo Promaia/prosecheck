@@ -25,7 +25,13 @@ export const ClaudeCodeSchema = z
       .boolean()
       .default(false)
       .describe(
-        'Launch one Claude Code instance with an agent-team prompt instead of one instance per rule.',
+        'Launch one Claude Code instance with a combined prompt instead of one instance per rule.',
+      ),
+    agentTeams: z
+      .boolean()
+      .default(false)
+      .describe(
+        'Enable agent teams support. When true, the orchestration prompt instructs the agent to launch sub-agents for each rule, and sets CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1.',
       ),
   })
   .describe('Claude Code Headless mode settings');
@@ -59,6 +65,7 @@ export const EnvironmentOverrideSchema = z
     claudeCode: z
       .object({
         singleInstance: z.boolean().optional(),
+        agentTeams: z.boolean().optional(),
       })
       .optional(),
     postRun: z.array(z.string()).optional(),
@@ -111,7 +118,7 @@ export const ConfigSchema = z
       .nonnegative()
       .default(1)
       .describe('Max retry attempts per dropped rule'),
-    claudeCode: ClaudeCodeSchema.default(() => ({ singleInstance: false })),
+    claudeCode: ClaudeCodeSchema.default(() => ({ singleInstance: false, agentTeams: false })),
     postRun: z
       .array(z.string())
       .default([])

@@ -25,6 +25,8 @@ program
   .option('--no-last-run-read', 'Do not read last-run hash')
   .option('--last-run-write', 'Write current HEAD as last-run hash')
   .option('--no-last-run-write', 'Do not write last-run hash')
+  .option('--agent-teams', 'Enable agent teams for parallel rule processing')
+  .option('--no-agent-teams', 'Disable agent teams')
   .action(async (options: {
     env?: string;
     mode?: string;
@@ -35,6 +37,7 @@ program
     retryDropped?: boolean;
     lastRunRead?: boolean;
     lastRunWrite?: boolean;
+    agentTeams?: boolean;
   }) => {
     await lint({
       projectRoot: process.cwd(),
@@ -47,6 +50,7 @@ program
       retryDropped: options.retryDropped,
       lastRunRead: options.lastRunRead,
       lastRunWrite: options.lastRunWrite,
+      agentTeams: options.agentTeams,
     });
   });
 
