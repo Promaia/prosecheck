@@ -4,7 +4,9 @@ import { render } from 'ink-testing-library';
 import { LintProgress } from '../../../src/ui/components/LintProgress.js';
 import type { RuleProgressEntry } from '../../../src/ui/components/LintProgress.js';
 
-function makeEntry(overrides: Partial<RuleProgressEntry> & { ruleId: string }): RuleProgressEntry {
+function makeEntry(
+  overrides: Partial<RuleProgressEntry> & { ruleId: string },
+): RuleProgressEntry {
   return {
     name: 'Test Rule',
     runStatus: 'waiting',
@@ -119,8 +121,17 @@ describe('LintProgress', () => {
 
   it('renders multiple rules in order', () => {
     const rules: RuleProgressEntry[] = [
-      makeEntry({ ruleId: 'rule-a', name: 'First Rule', runStatus: 'done', result: { status: 'pass', rule: 'First Rule', source: 'RULES.md' } }),
-      makeEntry({ ruleId: 'rule-b', name: 'Second Rule', runStatus: 'running' }),
+      makeEntry({
+        ruleId: 'rule-a',
+        name: 'First Rule',
+        runStatus: 'done',
+        result: { status: 'pass', rule: 'First Rule', source: 'RULES.md' },
+      }),
+      makeEntry({
+        ruleId: 'rule-b',
+        name: 'Second Rule',
+        runStatus: 'running',
+      }),
       makeEntry({ ruleId: 'rule-c', name: 'Third Rule', runStatus: 'waiting' }),
     ];
 
@@ -141,7 +152,12 @@ describe('LintProgress', () => {
         ruleId: 'rule-a',
         name: 'Rule A',
         runStatus: 'done',
-        result: { status: 'pass', rule: 'Rule A', source: 'RULES.md', comment: 'All good!' },
+        result: {
+          status: 'pass',
+          rule: 'Rule A',
+          source: 'RULES.md',
+          comment: 'All good!',
+        },
       }),
     ];
 

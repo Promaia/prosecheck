@@ -50,7 +50,9 @@ export async function init(options: InitOptions): Promise<void> {
   // Check if already initialized
   const configPath = path.join(prosecheckDir, 'config.json');
   if (await fileExists(configPath)) {
-    process.stdout.write('prosecheck is already initialized in this project.\n');
+    process.stdout.write(
+      'prosecheck is already initialized in this project.\n',
+    );
     return;
   }
 

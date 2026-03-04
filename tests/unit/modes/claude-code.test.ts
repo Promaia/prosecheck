@@ -23,32 +23,51 @@ vi.mock('../../../src/modes/claude-code.js', async () => {
       const lines: string[] = [];
       for (const [ruleId, promptPath] of options.promptPaths) {
         const content = await readFile(promptPath, 'utf-8');
-        const outputPath = nodePath.join(options.projectRoot, OUTPUTS_DIR, `${ruleId}.json`);
-        lines.push(`## Rule: ${ruleId}\nOutput to: ${outputPath}\n\n${content}\n\n---\n`);
+        const outputPath = nodePath.join(
+          options.projectRoot,
+          OUTPUTS_DIR,
+          `${ruleId}.json`,
+        );
+        lines.push(
+          `## Rule: ${ruleId}\nOutput to: ${outputPath}\n\n${content}\n\n---\n`,
+        );
       }
-      const result = await mockSpawnClaude(lines.join('\n'), options.projectRoot) as {
+      const result = (await mockSpawnClaude(
+        lines.join('\n'),
+        options.projectRoot,
+      )) as {
         exitCode: number | null;
         stdout: string;
         stderr: string;
       };
-      return [{
-        ruleId: '__single_instance__',
-        exitCode: result.exitCode,
-        stdout: result.stdout,
-        stderr: result.stderr,
-      }];
+      return [
+        {
+          ruleId: '__single_instance__',
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        },
+      ];
     }
 
     const promises = [];
     for (const [ruleId, promptPath] of options.promptPaths) {
       promises.push(
         readFile(promptPath, 'utf-8').then(async (content) => {
-          const result = await mockSpawnClaude(content, options.projectRoot) as {
+          const result = (await mockSpawnClaude(
+            content,
+            options.projectRoot,
+          )) as {
             exitCode: number | null;
             stdout: string;
             stderr: string;
           };
-          return { ruleId, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
+          return {
+            ruleId,
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+          };
         }),
       );
     }

@@ -35,10 +35,7 @@ function statusLabel(runStatus: RuleRunStatus, result?: RuleResult): string {
   }
 }
 
-function statusColor(
-  runStatus: RuleRunStatus,
-  result?: RuleResult,
-): string {
+function statusColor(runStatus: RuleRunStatus, result?: RuleResult): string {
   if (runStatus === 'waiting') return 'gray';
   if (runStatus === 'running') return 'blue';
   if (!result) return 'magenta';
@@ -68,11 +65,14 @@ export function LintProgress({ rules }: LintProgressProps): React.ReactElement {
       {rules.map((entry) => {
         const label = statusLabel(entry.runStatus, entry.result);
         const color = statusColor(entry.runStatus, entry.result);
-        const detail = entry.runStatus === 'done' ? resultDetail(entry.result) : '';
+        const detail =
+          entry.runStatus === 'done' ? resultDetail(entry.result) : '';
 
         return (
           <Box key={entry.ruleId} gap={1}>
-            <Text color={color} bold>{label}</Text>
+            <Text color={color} bold>
+              {label}
+            </Text>
             <Text>{entry.name}</Text>
             {detail ? <Text dimColor>{detail}</Text> : null}
           </Box>

@@ -88,7 +88,9 @@ describe('buildPromptVariables', () => {
 
     const vars = buildPromptVariables(rule, 'abc123', ['src/foo.ts'], tmpDir);
 
-    expect(vars.ruleText).toBe('# No console.log\n\nRemove all console.log statements');
+    expect(vars.ruleText).toBe(
+      '# No console.log\n\nRemove all console.log statements',
+    );
     expect(vars.comparisonRef).toBe('abc123');
     expect(vars.changedFiles).toEqual(['src/foo.ts']);
     expect(vars.scope).toEqual(['src/']);
@@ -98,7 +100,12 @@ describe('buildPromptVariables', () => {
   });
 
   it('uses "(all files)" when inclusions are empty', () => {
-    const rule = createRule('Global rule', 'Applies everywhere', [], 'RULES.md');
+    const rule = createRule(
+      'Global rule',
+      'Applies everywhere',
+      [],
+      'RULES.md',
+    );
 
     const vars = buildPromptVariables(rule, 'abc123', [], tmpDir);
 
@@ -115,7 +122,8 @@ describe('interpolateTemplate', () => {
   );
 
   it('replaces all template variables', () => {
-    const template = '{{ruleName}} | {{ruleText}} | {{comparisonRef}} | {{changedFilesList}} | {{scopeList}} | {{outputPath}} | {{ruleId}} | {{ruleSource}}';
+    const template =
+      '{{ruleName}} | {{ruleText}} | {{comparisonRef}} | {{changedFilesList}} | {{scopeList}} | {{outputPath}} | {{ruleId}} | {{ruleSource}}';
     const vars = buildPromptVariables(rule, 'abc123', ['src/foo.ts'], tmpDir);
 
     const result = interpolateTemplate(template, vars, rule);
@@ -219,8 +227,18 @@ describe('generatePrompt', () => {
 
 describe('generatePrompts', () => {
   it('generates prompt files for all rules', async () => {
-    const ruleA = createRule('Rule A', 'Description A', ['src/'], 'src/RULES.md');
-    const ruleB = createRule('Rule B', 'Description B', ['docs/'], 'docs/RULES.md');
+    const ruleA = createRule(
+      'Rule A',
+      'Description A',
+      ['src/'],
+      'src/RULES.md',
+    );
+    const ruleB = createRule(
+      'Rule B',
+      'Description B',
+      ['docs/'],
+      'docs/RULES.md',
+    );
     const rules = [ruleA, ruleB];
 
     const changedFilesByRule = new Map<string, string[]>();
@@ -256,7 +274,12 @@ describe('generatePrompts', () => {
       'GLOBAL SYSTEM PROMPT',
     );
 
-    const ruleA = createRule('Rule A', 'Description A', ['src/'], 'src/RULES.md');
+    const ruleA = createRule(
+      'Rule A',
+      'Description A',
+      ['src/'],
+      'src/RULES.md',
+    );
     const rules = [ruleA];
     const changedFilesByRule = new Map<string, string[]>();
     changedFilesByRule.set(ruleA.id, ['src/foo.ts']);
@@ -277,7 +300,12 @@ describe('generatePrompts', () => {
   });
 
   it('handles rules with no changed files gracefully', async () => {
-    const ruleA = createRule('Rule A', 'Description A', ['src/'], 'src/RULES.md');
+    const ruleA = createRule(
+      'Rule A',
+      'Description A',
+      ['src/'],
+      'src/RULES.md',
+    );
     const rules = [ruleA];
     const changedFilesByRule = new Map<string, string[]>();
     // Rule A not in the map — should get empty changed files

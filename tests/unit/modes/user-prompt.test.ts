@@ -43,15 +43,33 @@ function makeOptions(
 describe('buildUserPrompt', () => {
   it('builds sequential prompt listing all prompt files', () => {
     const promptPaths = new Map<string, string>();
-    promptPaths.set('rule-a', path.join(tmpDir, '.prosecheck/working/prompts/rule-a.md'));
-    promptPaths.set('rule-b', path.join(tmpDir, '.prosecheck/working/prompts/rule-b.md'));
+    promptPaths.set(
+      'rule-a',
+      path.join(tmpDir, '.prosecheck/working/prompts/rule-a.md'),
+    );
+    promptPaths.set(
+      'rule-b',
+      path.join(tmpDir, '.prosecheck/working/prompts/rule-b.md'),
+    );
 
     const options = makeOptions({
       promptPaths,
       expectedRuleIds: ['rule-a', 'rule-b'],
       rules: [
-        { id: 'rule-a', name: 'Rule A', description: 'D', inclusions: [], source: 'RULES.md' },
-        { id: 'rule-b', name: 'Rule B', description: 'D', inclusions: [], source: 'RULES.md' },
+        {
+          id: 'rule-a',
+          name: 'Rule A',
+          description: 'D',
+          inclusions: [],
+          source: 'RULES.md',
+        },
+        {
+          id: 'rule-b',
+          name: 'Rule B',
+          description: 'D',
+          inclusions: [],
+          source: 'RULES.md',
+        },
       ],
     });
 
@@ -67,13 +85,22 @@ describe('buildUserPrompt', () => {
 
   it('builds agent teams prompt when agentTeams is true', () => {
     const promptPaths = new Map<string, string>();
-    promptPaths.set('rule-a', path.join(tmpDir, '.prosecheck/working/prompts/rule-a.md'));
+    promptPaths.set(
+      'rule-a',
+      path.join(tmpDir, '.prosecheck/working/prompts/rule-a.md'),
+    );
 
     const options = makeOptions({
       promptPaths,
       expectedRuleIds: ['rule-a'],
       rules: [
-        { id: 'rule-a', name: 'Rule A', description: 'D', inclusions: [], source: 'RULES.md' },
+        {
+          id: 'rule-a',
+          name: 'Rule A',
+          description: 'D',
+          inclusions: [],
+          source: 'RULES.md',
+        },
       ],
       agentTeams: true,
     });

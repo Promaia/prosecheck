@@ -54,7 +54,10 @@ export async function lint(options: LintOptions): Promise<void> {
     if (options.timeout !== undefined) {
       cliOverrides['timeout'] = options.timeout;
     }
-    if (options.lastRunRead !== undefined || options.lastRunWrite !== undefined) {
+    if (
+      options.lastRunRead !== undefined ||
+      options.lastRunWrite !== undefined
+    ) {
       const lastRun: Record<string, unknown> = {};
       if (options.lastRunRead !== undefined) {
         lastRun['read'] = options.lastRunRead;
@@ -82,7 +85,8 @@ export async function lint(options: LintOptions): Promise<void> {
       : await loadConfig({ projectRoot, env: environment });
 
     // Determine mode and format
-    const mode = options.mode ?? (environment === 'ci' ? 'claude-code' : 'user-prompt');
+    const mode =
+      options.mode ?? (environment === 'ci' ? 'claude-code' : 'user-prompt');
     const format = options.format ?? 'stylish';
 
     // Start interactive UI if applicable (lazy import to avoid loading Ink for non-interactive paths)

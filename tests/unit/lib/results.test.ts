@@ -60,7 +60,9 @@ describe('parseResultFile', () => {
       rule: 'No console.log',
       source: 'src/RULES.md',
       headline: 'Found console.log usage',
-      comments: [{ message: 'Line 42 has console.log', file: 'src/foo.ts', line: 42 }],
+      comments: [
+        { message: 'Line 42 has console.log', file: 'src/foo.ts', line: 42 },
+      ],
     });
 
     const result = parseResultFile(json, 'test-rule');
@@ -77,7 +79,9 @@ describe('parseResultFile', () => {
       rule: 'No console.log',
       source: 'src/RULES.md',
       headline: 'console.log must be removed',
-      comments: [{ message: 'Found console.log', file: 'src/foo.ts', line: 10 }],
+      comments: [
+        { message: 'Found console.log', file: 'src/foo.ts', line: 10 },
+      ],
     });
 
     const result = parseResultFile(json, 'test-rule');
@@ -229,7 +233,10 @@ describe('collectResults', () => {
   });
 
   it('handles missing outputs directory gracefully', async () => {
-    await rm(path.join(tmpDir, '.prosecheck'), { recursive: true, force: true });
+    await rm(path.join(tmpDir, '.prosecheck'), {
+      recursive: true,
+      force: true,
+    });
     const rule = createRule('Rule A', 'Desc', ['src/'], 'src/RULES.md');
 
     const output = await collectResults({

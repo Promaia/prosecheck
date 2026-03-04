@@ -46,7 +46,12 @@ export function watchOutputs(options: WatchOutputsOptions): () => void {
       seen.add(ruleId);
 
       const filePath = path.join(outputsDir, filename);
-      void readAndNotify(filePath, ruleId, ruleNames.get(ruleId) ?? ruleId, onResult);
+      void readAndNotify(
+        filePath,
+        ruleId,
+        ruleNames.get(ruleId) ?? ruleId,
+        onResult,
+      );
     });
   } catch {
     // Directory may not exist yet — that's fine, outputs will be caught by collectResults

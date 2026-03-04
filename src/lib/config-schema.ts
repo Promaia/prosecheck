@@ -118,7 +118,10 @@ export const ConfigSchema = z
       .nonnegative()
       .default(1)
       .describe('Max retry attempts per dropped rule'),
-    claudeCode: ClaudeCodeSchema.default(() => ({ singleInstance: false, agentTeams: true })),
+    claudeCode: ClaudeCodeSchema.default(() => ({
+      singleInstance: false,
+      agentTeams: true,
+    })),
     postRun: z
       .array(z.string())
       .default([])

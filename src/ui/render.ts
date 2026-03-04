@@ -35,9 +35,7 @@ export function shouldUseInteractiveUI(format: string): boolean {
 export function startInteractiveUI(): InteractiveUI {
   const progressRef: ProgressRef = { current: undefined };
 
-  const inkInstance = render(
-    React.createElement(LintApp, { progressRef }),
-  );
+  const inkInstance = render(React.createElement(LintApp, { progressRef }));
 
   // Ink renders synchronously on first render, so the handler
   // is available in progressRef.current immediately after render().

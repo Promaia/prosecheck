@@ -4,15 +4,26 @@ import path from 'node:path';
 
 const CLI_SOURCE = path.resolve('src/cli.ts');
 
-function runCli(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
+function runCli(
+  args: string[],
+): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
   return new Promise((resolve) => {
-    execFile('npx', ['tsx', CLI_SOURCE, ...args], { timeout: 15000 }, (error, stdout, stderr) => {
-      resolve({
-        stdout: typeof stdout === 'string' ? stdout : '',
-        stderr: typeof stderr === 'string' ? stderr : '',
-        exitCode: error ? (typeof error.code === 'number' ? error.code : 1) : 0,
-      });
-    });
+    execFile(
+      'npx',
+      ['tsx', CLI_SOURCE, ...args],
+      { timeout: 15000 },
+      (error, stdout, stderr) => {
+        resolve({
+          stdout: typeof stdout === 'string' ? stdout : '',
+          stderr: typeof stderr === 'string' ? stderr : '',
+          exitCode: error
+            ? typeof error.code === 'number'
+              ? error.code
+              : 1
+            : 0,
+        });
+      },
+    );
   });
 }
 

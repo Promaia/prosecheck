@@ -101,7 +101,9 @@ describe('calculateAdr', () => {
 
     const ruleNames = rules.map((r) => r.name);
     // 001 and 003 have no ## Rules
-    expect(ruleNames).not.toContain('1. Use Zod for all external data validation');
+    expect(ruleNames).not.toContain(
+      '1. Use Zod for all external data validation',
+    );
     expect(ruleNames).not.toContain('3. API versioning strategy');
   });
 

@@ -37,7 +37,11 @@ describe('sarif formatter', () => {
             source: 'src/RULES.md',
             headline: 'Violations found',
             comments: [
-              { message: 'console.log on line 42', file: 'src/foo.ts', line: 42 },
+              {
+                message: 'console.log on line 42',
+                file: 'src/foo.ts',
+                line: 42,
+              },
               { message: 'another issue', file: 'src/bar.ts' },
             ],
           },
@@ -129,7 +133,10 @@ describe('sarif formatter', () => {
     });
 
     const parsed = JSON.parse(formatSarif(output)) as {
-      runs: Array<{ results: unknown[]; tool: { driver: { rules: unknown[] } } }>;
+      runs: Array<{
+        results: unknown[];
+        tool: { driver: { rules: unknown[] } };
+      }>;
     };
 
     const run = parsed.runs[0];
@@ -148,7 +155,11 @@ describe('sarif formatter', () => {
 
     const parsed = JSON.parse(formatSarif(output)) as {
       runs: Array<{
-        results: Array<{ ruleId: string; level: string; message: { text: string } }>;
+        results: Array<{
+          ruleId: string;
+          level: string;
+          message: { text: string };
+        }>;
       }>;
     };
 

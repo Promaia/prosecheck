@@ -12,9 +12,15 @@ export interface SummaryProps {
  * Shows pass/warn/fail/dropped counts and overall status.
  */
 export function Summary({ results }: SummaryProps): React.ReactElement {
-  const passed = results.results.filter((r) => r.result.status === 'pass').length;
-  const warned = results.results.filter((r) => r.result.status === 'warn').length;
-  const failed = results.results.filter((r) => r.result.status === 'fail').length;
+  const passed = results.results.filter(
+    (r) => r.result.status === 'pass',
+  ).length;
+  const warned = results.results.filter(
+    (r) => r.result.status === 'warn',
+  ).length;
+  const failed = results.results.filter(
+    (r) => r.result.status === 'fail',
+  ).length;
   const droppedCount = results.dropped.length;
   const errorCount = results.errors.length;
   const total = results.results.length + droppedCount + errorCount;
@@ -24,11 +30,21 @@ export function Summary({ results }: SummaryProps): React.ReactElement {
       <Box gap={1}>
         <Text bold>{total} rules</Text>
         <Text dimColor>|</Text>
-        {passed > 0 && <StatusCount count={passed} label="passed" color="green" />}
-        {warned > 0 && <StatusCount count={warned} label="warned" color="yellow" />}
-        {failed > 0 && <StatusCount count={failed} label="failed" color="red" />}
-        {droppedCount > 0 && <StatusCount count={droppedCount} label="dropped" color="magenta" />}
-        {errorCount > 0 && <StatusCount count={errorCount} label="errors" color="red" />}
+        {passed > 0 && (
+          <StatusCount count={passed} label="passed" color="green" />
+        )}
+        {warned > 0 && (
+          <StatusCount count={warned} label="warned" color="yellow" />
+        )}
+        {failed > 0 && (
+          <StatusCount count={failed} label="failed" color="red" />
+        )}
+        {droppedCount > 0 && (
+          <StatusCount count={droppedCount} label="dropped" color="magenta" />
+        )}
+        {errorCount > 0 && (
+          <StatusCount count={errorCount} label="errors" color="red" />
+        )}
       </Box>
       <Box marginTop={1}>
         <Text bold>Status: </Text>
@@ -38,10 +54,20 @@ export function Summary({ results }: SummaryProps): React.ReactElement {
   );
 }
 
-function StatusCount({ count, label, color }: { count: number; label: string; color: string }): React.ReactElement {
+function StatusCount({
+  count,
+  label,
+  color,
+}: {
+  count: number;
+  label: string;
+  color: string;
+}): React.ReactElement {
   return (
     <>
-      <Text color={color}>{count} {label}</Text>
+      <Text color={color}>
+        {count} {label}
+      </Text>
       <Text dimColor>|</Text>
     </>
   );

@@ -2,12 +2,20 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { loadConfig, deepMerge, resolveEnvironment, ConfigError } from '../../../src/lib/config.js';
+import {
+  loadConfig,
+  deepMerge,
+  resolveEnvironment,
+  ConfigError,
+} from '../../../src/lib/config.js';
 
 let tmpDir: string;
 
 beforeEach(async () => {
-  tmpDir = path.join(os.tmpdir(), `prosecheck-test-${String(Date.now())}-${Math.random().toString(36).slice(2)}`);
+  tmpDir = path.join(
+    os.tmpdir(),
+    `prosecheck-test-${String(Date.now())}-${Math.random().toString(36).slice(2)}`,
+  );
   await mkdir(tmpDir, { recursive: true });
 });
 
@@ -16,16 +24,25 @@ afterEach(async () => {
   vi.unstubAllEnvs();
 });
 
-async function writeConfig(projectRoot: string, config: Record<string, unknown>): Promise<void> {
+async function writeConfig(
+  projectRoot: string,
+  config: Record<string, unknown>,
+): Promise<void> {
   const configDir = path.join(projectRoot, '.prosecheck');
   await mkdir(configDir, { recursive: true });
   await writeFile(path.join(configDir, 'config.json'), JSON.stringify(config));
 }
 
-async function writeLocalConfig(projectRoot: string, config: Record<string, unknown>): Promise<void> {
+async function writeLocalConfig(
+  projectRoot: string,
+  config: Record<string, unknown>,
+): Promise<void> {
   const configDir = path.join(projectRoot, '.prosecheck');
   await mkdir(configDir, { recursive: true });
-  await writeFile(path.join(configDir, 'config.local.json'), JSON.stringify(config));
+  await writeFile(
+    path.join(configDir, 'config.local.json'),
+    JSON.stringify(config),
+  );
 }
 
 describe('loadConfig', () => {
@@ -119,14 +136,16 @@ describe('loadConfig', () => {
     });
 
     expect(config.baseBranch).toBe('develop'); // from local
-    expect(config.warnAsError).toBe(true);     // from env override
-    expect(config.timeout).toBe(60);           // from CLI
+    expect(config.warnAsError).toBe(true); // from env override
+    expect(config.timeout).toBe(60); // from CLI
   });
 
   it('throws ConfigError for invalid config', async () => {
     await writeConfig(tmpDir, { timeout: 'not a number' });
 
-    await expect(loadConfig({ projectRoot: tmpDir })).rejects.toThrow(ConfigError);
+    await expect(loadConfig({ projectRoot: tmpDir })).rejects.toThrow(
+      ConfigError,
+    );
   });
 
   it('throws ConfigError with issue details', async () => {
@@ -162,8 +181,8 @@ describe('loadConfig', () => {
     });
 
     const { config } = await loadConfig({ projectRoot: tmpDir });
-    expect(config.lastRun.read).toBe(true);   // overridden by local
-    expect(config.lastRun.write).toBe(true);   // preserved from base
+    expect(config.lastRun.read).toBe(true); // overridden by local
+    expect(config.lastRun.write).toBe(true); // preserved from base
   });
 });
 
