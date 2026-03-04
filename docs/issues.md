@@ -47,3 +47,11 @@ When environment overrides are deep-merged at `config.ts:126`, the `EnvironmentO
 ### `cli.test.ts`: Integration tests use `npx tsx` instead of built artifact
 
 CLI integration tests spawn `npx tsx src/cli.ts` rather than the built `dist/cli.js`. This means they don't exercise the actual bundled artifact. Acceptable since the build step is separately verified by CI, but a future e2e test against `dist/cli.js` would provide more confidence in the shipped binary.
+
+### `pipeline.test.ts`: E2E tests don't exercise `additionalIgnore` file loading
+
+The e2e tests set `additionalIgnore: []` in the config, skipping the `.gitignore` loading path in `buildIgnoreFilter`. This code path is covered by unit tests, but not exercised end-to-end.
+
+### `pipeline.test.ts`: E2E tests don't cover post-run tasks
+
+Post-run task execution (`config.postRun` → `executePostRun`) is unit-tested but not included in the e2e pipeline tests. A future test could verify that post-run commands receive the correct environment variables after a full pipeline run.
