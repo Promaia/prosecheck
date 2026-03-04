@@ -28,13 +28,13 @@ Foundation types and config loading — everything else depends on these.
 
 Rule calculators that find and parse rules from project files.
 
-- [ ] Implement `src/lib/calculators/index.ts` — Calculator registry, dispatch by name, respect `enabled` flag
-- [ ] Implement `src/lib/calculators/rules-md.ts` — Discover `RULES.md` files recursively, parse `#` headings as rule names, extract descriptions, set directory as inclusion scope
-- [ ] Implement `src/lib/calculators/adr.ts` — Read ADR files from configured path, skip ADRs without a `## Rules` heading (documentation-only), extract rule description from `## Rules` section content, use ADR title as rule name, set project-wide inclusions
-- [ ] Write unit tests for rules-md calculator using `tests/fixtures/project-simple/` and `tests/fixtures/project-nested/`
-- [ ] Write unit tests for adr calculator using `tests/fixtures/project-adr/` — test ADRs with `## Rules` heading produce rules, ADRs without it are skipped, mixed directories work correctly
-- [ ] Write unit tests for calculator registry (dispatch, disabled calculators, unknown names)
-- [ ] Verify `npm run ci` passes
+- [x] Implement `src/lib/calculators/index.ts` — Calculator registry with built-in `rules-md` and `adr` calculators, dispatch by name, respect `enabled` flag, default to `rules-md` when no calculators configured
+- [x] Implement `src/lib/calculators/rules-md.ts` — Recursive RULES.md discovery via `glob`, parse `#` headings as rule names, content between headings as descriptions (subheadings included), directory as inclusion scope
+- [x] Implement `src/lib/calculators/adr.ts` — Read ADR markdown files from configured path, skip ADRs without `## Rules` heading, extract rule description from `## Rules` section, ADR title as rule name, project-wide inclusions
+- [x] Write unit tests for rules-md calculator (11 tests: parsing, multi-rule files, subheadings, preamble, inclusions, fixtures)
+- [x] Write unit tests for adr calculator (11 tests: `## Rules` extraction, skip without heading, multi-line content, missing directory, fixtures)
+- [x] Write unit tests for calculator registry (5 tests: default dispatch, named dispatch, disabled calculators, combined results, unknown names)
+- [x] Verify `npm run ci` passes
 
 ---
 

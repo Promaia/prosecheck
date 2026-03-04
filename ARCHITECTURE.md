@@ -146,17 +146,17 @@ Executes shell commands from `config.postRun` array after results collection. In
 
 Pluggable modules that discover rules from different sources. Declared in `config.ruleCalculators` array. Interface: `(options) → Rule[]`.
 
-### `index.ts` — Calculator Registry **[STUB]**
+### `index.ts` — Calculator Registry [IMPLEMENTED]
 
-Dispatches to named calculators based on config. Supports `enabled: false` to disable individual calculators.
+Dispatches to named calculators based on config. Supports `enabled: false` to disable individual calculators. Defaults to running `rules-md` when no calculators are configured. Throws for unknown calculator names.
 
-### `rules-md.ts` — RULES.md Calculator **[STUB]**
+### `rules-md.ts` — RULES.md Calculator [IMPLEMENTED]
 
-Discovers `RULES.md` files throughout the project tree. Parses top-level `#` headings as rule names; content between headings is the rule description. Subheadings (`##`, `###`) are part of the description. The file's directory becomes the rule's inclusion scope.
+Discovers `RULES.md` files throughout the project tree using `glob`. Parses top-level `#` headings as rule names; content between headings is the rule description. Subheadings (`##`, `###`) are part of the description. Text before the first heading is ignored. The file's directory becomes the rule's inclusion scope (empty for root-level files).
 
-### `adr.ts` — ADR Calculator **[STUB]**
+### `adr.ts` — ADR Calculator [IMPLEMENTED]
 
-Reads Architecture Decision Records from a configured path (default `docs/adr/`). Only ADRs containing an explicit `## Rules` heading produce prosecheck rules — ADRs without this heading are documentation-only and skipped. The content under `## Rules` becomes the rule description; the ADR title (`# ...`) becomes the rule name. ADR-derived rules apply project-wide (inclusions: root).
+Reads Architecture Decision Records from a configured path (default `docs/adr/`). Only ADRs containing an explicit `## Rules` heading produce prosecheck rules — ADRs without this heading are documentation-only and skipped. The content under `## Rules` becomes the rule description; the ADR title (`# ...`) becomes the rule name. ADR-derived rules apply project-wide (empty inclusions). Gracefully handles missing ADR directory.
 
 ---
 
