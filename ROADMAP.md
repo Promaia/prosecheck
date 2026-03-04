@@ -179,7 +179,66 @@ Non-interactive `prosecheck config` command for viewing and modifying configurat
 
 ---
 
-## Milestone 15: npm Publishing
+## Milestone 15: Cross-Platform & Git Integration Tests
+
+Real git repos in temp directories to catch platform-specific behavior (path separators, shallow clones, merge-base edge cases) without mocking.
+
+- [ ] Add `tests/git/change-detection.test.ts` — Real git repo fixture helper: `createTestRepo()` that inits a repo, commits files, creates branches, returns `{ dir, cleanup }`
+- [ ] Test `detectChanges()` against real repo — create branch with changes, verify correct changed files returned, verify merge-base computation
+- [ ] Test incremental run tracking with real repo — write last-run hash, make more commits, verify only new changes detected
+- [ ] Test shallow clone behavior — `git clone --depth=1` fixture, verify graceful fallback when merge-base unavailable
+- [ ] Test global ignore filtering with real repo — add ignored files to git, verify they are excluded from results
+- [ ] Test file-to-rule scope matching with real directory structure — nested RULES.md files, verify correct inclusion matching
+- [ ] Ensure all tests use cross-platform path handling (forward slashes in assertions, `path.join` for filesystem ops)
+- [ ] Verify `npm run ci` passes on both Linux and Windows
+
+---
+
+## Milestone 16: Claude CLI Shim & Pipeline Integration Tests
+
+Fake Claude binary that simulates agent behavior, enabling full pipeline tests without API calls.
+
+- [ ] Create `tests/fixtures/fake-claude.mjs` — Node script that parses `-p` prompt arg, extracts output path from prompt, writes canned JSON result to that path. Support `--print` flag. Exit 0 on success
+- [ ] Add configurable behaviors to fake-claude — env var or flag to control: pass/warn/fail status, malformed JSON output, timeout (hang), partial output, multiple output files (for single-instance mode)
+- [ ] Write integration test: full pipeline with fake-claude in multi-instance mode — real git repo, real RULES.md, fake claude binary, verify formatted output and exit code
+- [ ] Write integration test: full pipeline with fake-claude in single-instance mode — verify orchestration prompt generation, agent-teams env var, result collection
+- [ ] Write integration test: dropped rule retry — fake-claude fails to write output on first call, succeeds on retry, verify retry loop works end-to-end
+- [ ] Write integration test: post-run tasks receive correct env vars after pipeline completes with fake-claude
+- [ ] Verify `npm run ci` passes
+
+---
+
+## Milestone 17: Result Parser Robustness & Contract Tests
+
+Harden result parsing against common LLM output quirks and validate against golden files from real Claude outputs.
+
+- [ ] Fuzz `collectResults()` with malformed inputs — trailing commas, BOM characters, markdown-wrapped JSON (`` ```json ... ``` ``), extra fields, truncated JSON, empty files, non-JSON text
+- [ ] Fuzz with LLM-typical mistakes — comments in JSON, single-quoted strings, unquoted keys, trailing text after valid JSON, multiple JSON objects concatenated
+- [ ] Test Zod validation error messages — verify actionable error details for each malformed variant (users need to debug agent output)
+- [ ] Add `tests/fixtures/golden-outputs/` directory — curated set of real Claude outputs (pass, warn, fail, edge cases) as golden files
+- [ ] Write golden file contract tests — parse each golden file against `RuleResultSchema`, assert expected status and structure
+- [ ] Add prompt template regression test — when prompt template changes, verify golden outputs still parse correctly (catch prompt/schema drift)
+- [ ] Document golden file update process — instructions for re-recording golden files when prompt templates change
+- [ ] Verify `npm run ci` passes
+
+---
+
+## Milestone 18: Slow E2E Tests with Real Claude (Optional, CI-Gated)
+
+Real Claude CLI integration for prompt template regression testing. Gated behind `PROSECHECK_SLOW_TESTS=1` env var.
+
+- [ ] Add `tests/slow/` directory with vitest config that only runs when `PROSECHECK_SLOW_TESTS=1` is set
+- [ ] Write test: single simple rule (e.g., "no TODO comments") against a fixture project with known violations — verify output file exists, parses against schema, status is `fail`
+- [ ] Write test: single passing rule against clean fixture — verify `pass` status
+- [ ] Write test: multiple rules in multi-instance mode — verify all output files written and valid
+- [ ] Write test: single-instance mode with agent-teams — verify orchestration works end-to-end
+- [ ] Add npm script `npm run test:slow` for manual invocation
+- [ ] Document slow test setup (required: `claude` CLI installed and authenticated)
+- [ ] Verify slow tests pass locally before merging prompt template changes
+
+---
+
+## Milestone 19: npm Publishing
 
 Prepare and publish prosecheck to the npm registry.
 
@@ -193,7 +252,7 @@ Prepare and publish prosecheck to the npm registry.
 
 ---
 
-## Milestone 16: Integration Setup via `init`
+## Milestone 20: Integration Setup via `init`
 
 Make `prosecheck init` re-runnable with flags to set up CI and local hooks. Running `init` again in an already-initialized project applies the requested integrations without overwriting existing config.
 
@@ -208,7 +267,7 @@ Make `prosecheck init` re-runnable with flags to set up CI and local hooks. Runn
 
 ---
 
-## Milestone 17: GitHub Actions Action
+## Milestone 21: GitHub Actions Action
 
 A published GitHub Action (`Promaia/prosecheck-action`) for running prosecheck in CI with minimal config.
 
@@ -223,7 +282,7 @@ A published GitHub Action (`Promaia/prosecheck-action`) for running prosecheck i
 
 ---
 
-## Milestone 18: Binary Distribution
+## Milestone 22: Binary Distribution
 
 Build standalone binaries so users can run prosecheck without Node.js installed.
 
