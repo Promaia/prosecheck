@@ -198,13 +198,13 @@ Real git repos in temp directories to catch platform-specific behavior (path sep
 
 Fake Claude binary that simulates agent behavior, enabling full pipeline tests without API calls.
 
-- [ ] Create `tests/fixtures/fake-claude.mjs` — Node script that parses `-p` prompt arg, extracts output path from prompt, writes canned JSON result to that path. Support `--print` flag. Exit 0 on success
-- [ ] Add configurable behaviors to fake-claude — env var or flag to control: pass/warn/fail status, malformed JSON output, timeout (hang), partial output, multiple output files (for single-instance mode)
-- [ ] Write integration test: full pipeline with fake-claude in multi-instance mode — real git repo, real RULES.md, fake claude binary, verify formatted output and exit code
-- [ ] Write integration test: full pipeline with fake-claude in single-instance mode — verify orchestration prompt generation, agent-teams env var, result collection
-- [ ] Write integration test: dropped rule retry — fake-claude fails to write output on first call, succeeds on retry, verify retry loop works end-to-end
-- [ ] Write integration test: post-run tasks receive correct env vars after pipeline completes with fake-claude
-- [ ] Verify `npm run ci` passes
+- [x] Create `tests/fixtures/fake-claude.mjs` — Node script that parses `-p` prompt arg, extracts output path from prompt, writes canned JSON result to that path. Support `--print` flag. Exit 0 on success
+- [x] Add configurable behaviors to fake-claude — env var or flag to control: pass/warn/fail status, malformed JSON output, timeout (hang), partial output, multiple output files (for single-instance mode)
+- [x] Write integration test: full pipeline with fake-claude in multi-instance mode — real git repo, real RULES.md, fake claude binary, verify formatted output and exit code
+- [x] Write integration test: full pipeline with fake-claude in single-instance mode — verify orchestration prompt generation, agent-teams env var, result collection
+- [x] Write integration test: dropped rule retry — fake-claude fails to write output on first call, succeeds on retry, verify retry loop works end-to-end
+- [x] Write integration test: post-run tasks receive correct env vars after pipeline completes with fake-claude
+- [x] Verify `npm run ci` passes
 
 ---
 
