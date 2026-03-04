@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { execFile } from 'node:child_process';
+import { execa } from 'execa';
 import type { Rule } from '../types/index.js';
 import { buildOrchestrationPrompt } from '../lib/orchestration-prompt.js';
 
@@ -112,34 +112,24 @@ interface SpawnResult {
  * Spawn a `claude --print` process with the given prompt.
  * The prompt is passed via the `-p` flag.
  */
-export function spawnClaude(
+export async function spawnClaude(
   prompt: string,
   cwd: string,
   env?: NodeJS.ProcessEnv,
 ): Promise<SpawnResult> {
-  return new Promise((resolve) => {
-    const child = execFile(
-      'claude',
-      ['--print', '-p', prompt],
-      { cwd, maxBuffer: 10 * 1024 * 1024, env },
-      (error, stdout, stderr) => {
-        resolve({
-          exitCode: error
-            ? (typeof error.code === 'number' ? error.code : 1)
-            : 0,
-          stdout: typeof stdout === 'string' ? stdout : '',
-          stderr: typeof stderr === 'string' ? stderr : '',
-        });
-      },
-    );
-
-    // If the process fails to spawn (e.g., claude not installed)
-    child.on('error', () => {
-      resolve({
-        exitCode: 1,
-        stdout: '',
-        stderr: 'Failed to spawn claude CLI process',
-      });
+  try {
+    const result = await execa('claude', ['--print', '-p', prompt], {
+      cwd,
+      ...(env ? { env } : {}),
+      maxBuffer: 10 * 1024 * 1024,
     });
-  });
+    return { exitCode: 0, stdout: result.stdout, stderr: result.stderr };
+  } catch (error: unknown) {
+    const e = error as { exitCode?: number; stdout?: string; stderr?: string };
+    return {
+      exitCode: e.exitCode ?? 1,
+      stdout: e.stdout ?? '',
+      stderr: e.stderr ?? 'Failed to spawn claude CLI process',
+    };
+  }
 }
