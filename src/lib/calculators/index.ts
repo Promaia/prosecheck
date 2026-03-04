@@ -9,7 +9,14 @@ export type CalculatorFn = (
   options: Record<string, unknown>,
 ) => Promise<Rule[]>;
 
-/** Built-in calculator registry. */
+/**
+ * Built-in calculator registry.
+ *
+ * Each calculator accepts a specific options interface (RulesMdOptions, AdrOptions)
+ * but is stored as CalculatorFn (Record<string, unknown> options) for uniform dispatch.
+ * The `satisfies` check ensures each function's signature is compatible at the call
+ * level, while the cast adapts the parameter type for the registry.
+ */
 const CALCULATORS: Record<string, CalculatorFn> = {
   'rules-md': calculateRulesMd as CalculatorFn,
   adr: calculateAdr as CalculatorFn,
@@ -28,7 +35,9 @@ export async function runCalculators(
 
   // Default: run rules-md if no calculators configured
   if (calculators.length === 0) {
-    return calculateRulesMd(projectRoot);
+    const rules = await calculateRulesMd(projectRoot);
+    assertNoDuplicateIds(rules);
+    return rules;
   }
 
   const rules: Rule[] = [];
@@ -49,5 +58,27 @@ export async function runCalculators(
     rules.push(...result);
   }
 
+  assertNoDuplicateIds(rules);
+
   return rules;
+}
+
+/**
+ * Fail early if two rules produce the same ID. This can happen when rule names
+ * differ only in non-alphanumeric characters (e.g. "No console.log" vs
+ * "No console log") since the slugifier collapses them identically.
+ */
+function assertNoDuplicateIds(rules: Rule[]): void {
+  const seen = new Map<string, Rule>();
+  for (const rule of rules) {
+    const existing = seen.get(rule.id);
+    if (existing) {
+      throw new Error(
+        `Rule ID collision: "${rule.id}" is produced by both ` +
+          `"${existing.name}" (${existing.source}) and "${rule.name}" (${rule.source}). ` +
+          `Rename one of the rules to resolve the conflict.`,
+      );
+    }
+    seen.set(rule.id, rule);
+  }
 }

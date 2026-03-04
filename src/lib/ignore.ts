@@ -44,11 +44,11 @@ export async function buildIgnoreFilter(
 }
 
 /**
- * Build an inclusion filter from a rule's gitignore-format inclusion patterns.
+ * Build an inclusion filter from a rule's inclusion patterns.
  * Returns a predicate that checks if a file path is within the rule's scope.
  *
- * Inclusion patterns work like gitignore: a directory pattern like "src/api/"
- * matches all files under that directory.
+ * Uses the `ignore` package (gitignore semantics) so directory patterns like
+ * "src/api/" match all files under that directory.
  */
 export function buildInclusionFilter(inclusions: string[]): (filePath: string) => boolean {
   if (inclusions.length === 0) {

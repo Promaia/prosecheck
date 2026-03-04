@@ -173,7 +173,7 @@ export class ConfigError extends Error {
   ): ConfigError {
     return new ConfigError(
       message,
-      zodIssues.map((i) => ({ path: [...i.path], message: i.message })),
+      zodIssues.map((i) => ({ path: i.path, message: i.message })),
     );
   }
 }
