@@ -31,7 +31,7 @@ All source files are TypeScript (strict mode, ESM-only, Node >= 20). The project
 
 ### `src/cli.ts` — CLI Binary [IMPLEMENTED]
 
-Commander-based argument parsing. Registers `lint` and `init` subcommands with full flag support. Resolves environment (`--env`) and operating mode (`--mode`) as orthogonal concerns. Sets `process.exitCode` (never `process.exit()`) for graceful cleanup. Supports boolean flag pairs (e.g., `--warn-as-error` / `--no-warn-as-error`).
+Commander-based argument parsing. Registers `lint`, `init`, and `config` subcommands with full flag support. Resolves environment (`--env`) and operating mode (`--mode`) as orthogonal concerns. Sets `process.exitCode` (never `process.exit()`) for graceful cleanup. Supports boolean flag pairs (e.g., `--warn-as-error` / `--no-warn-as-error`).
 
 **Exit codes:** 0 = all passed, 1 = rule failures, 2 = tool/config error.
 
@@ -51,9 +51,14 @@ Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDroppe
 
 Scaffolds `.prosecheck/` directory with default `config.json` (baseBranch, globalIgnore, ruleCalculators defaults), creates `working/` subdirectory, adds entries to `.gitignore` (working/, config.local.json, last-user-run) with a `# prosecheck` header, and optionally creates a starter `RULES.md` with example rules. Idempotent — detects existing initialization and skips. Key function: `init(options: InitOptions)`.
 
-### `src/commands/config.ts` — Config Editor Command **[PLANNED]**
+### `src/commands/config.ts` — Config List & Set Command [IMPLEMENTED]
 
-Interactive terminal UI for viewing and editing `.prosecheck/config.json`. Walks the Zod `ConfigSchema` at runtime to discover all fields — their names, types, descriptions (from `.describe()`), defaults (from `.default()`), and constraints. Renders an interactive editor using Ink components where users can browse fields, see current values vs defaults, and modify settings. Writes validated JSON back to `config.json`. No hardcoded field list — the editor is entirely schema-driven, so new config fields added to the Zod schema automatically appear in the editor.
+Non-interactive CLI for viewing and modifying `.prosecheck/config.json`. Two subcommands:
+
+- **`config list`** — Loads current config via `loadConfig()`, extracts all fields by walking the Zod `ConfigSchema` shape (recursing into nested objects like `lastRun` and `claudeCode`), and displays each field's dot-path, current value, default/modified marker, and description (from `.describe()`). Schema-driven — new config fields automatically appear.
+- **`config set <key>=<value> [...]`** — Parses dot-path keys, coerces string values to correct types (boolean, number, string, string[], JSON objects) based on schema introspection, validates against `ConfigSchema`, and writes minimal diff to `config.json` (only non-default values are persisted). Cleans up empty parent objects.
+
+Key exported functions: `config()`, `extractFields()`, `resolveSchemaType()`, `coerceValue()`.
 
 ---
 

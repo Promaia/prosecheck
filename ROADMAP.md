@@ -166,25 +166,28 @@ Wire the LintProgress and Summary components into the lint pipeline for real-tim
 
 ---
 
-## Milestone 14: Configuration Editor
+## Milestone 14: Config List & Set
 
-Interactive `prosecheck config` command — schema-driven, no hardcoded field list.
+Non-interactive `prosecheck config` command for viewing and modifying configuration via CLI flags.
 
-- [ ] Add `src/commands/config.ts` — Implement config command entry point, load current config from `.prosecheck/config.json`
-- [ ] Implement Zod schema walker — Recursively traverse `ConfigSchema` to extract field paths, types, descriptions (`.describe()`), defaults (`.default()`), and constraints (min/max, enums, array item types) into a flat field metadata list
-- [ ] Implement config editor UI components (Ink/React) — Browsable field list with current value vs default, grouped by section (top-level keys). Support editing strings, numbers, booleans, string arrays, and nested objects. Validate input against the Zod schema in real-time
-- [ ] Implement config writer — Serialize modified config back to `.prosecheck/config.json` with clean formatting, only writing fields that differ from defaults (minimal config)
-- [ ] Register `config` command in CLI (`src/cli.ts`)
-- [ ] Write unit tests for schema walker (field discovery, description extraction, default extraction, nested field paths)
-- [ ] Write unit tests for config editor (ink-testing-library — field navigation, value editing, validation feedback)
-- [ ] Write integration test — Run `prosecheck config`, modify a field, verify written JSON is valid
-- [ ] Verify `npm run ci` passes
+- [x] Add `src/commands/config.ts` — Implement config command with `list` and `set` subcommands
+- [x] Implement `config list` — Load current config, display all fields with current values vs defaults, grouped by section. Mark non-default values. Show field descriptions from Zod `.describe()`
+- [x] Implement `config set key=value` — Parse dot-path keys (e.g., `lastRun.read`), coerce string values to correct types (boolean, number, string, string[]), validate against `ConfigSchema`, write minimal diff to `.prosecheck/config.json`
+- [x] Register `config` command in CLI (`src/cli.ts`)
+- [x] Write unit tests for config list and config set (value coercion, dot-path resolution, validation errors, minimal write)
+- [x] Verify `npm run ci` passes
 
 ---
 
 ## Future Milestones (Post-MVP)
 
 These are designed in the plan but not targeted for the initial implementation.
+
+### Interactive Configuration Editor
+- [ ] Implement Zod schema walker — Recursively traverse `ConfigSchema` to extract field paths, types, descriptions (`.describe()`), defaults (`.default()`), and constraints (min/max, enums, array item types) into a flat field metadata list
+- [ ] Implement config editor UI components (Ink/React) — Browsable field list with current value vs default, grouped by section (top-level keys). Support editing strings, numbers, booleans, string arrays, and nested objects. Validate input against the Zod schema in real-time
+- [ ] Write unit tests for schema walker and config editor (ink-testing-library)
+- [ ] Write integration test — Run interactive editor, modify a field, verify written JSON is valid
 
 ### Claude Agents SDK Mode
 - [ ] Add `src/modes/claude-agents.ts` — In-process agent execution via `@anthropic-ai/claude-code-sdk`
