@@ -103,10 +103,11 @@ Central coordinator that drives the lint pipeline:
 7. Dispatch to operating mode (`claude-code` or `user-prompt`)
 8. Stop output watcher
 9. Collect results (with dropped detection)
-10. Apply `warnAsError` promotion
-11. Format output (stylish/json/sarif)
-12. Execute post-run tasks
-13. Persist last-run hash if applicable
+10. Retry dropped rules if `retryDropped` enabled — re-generate prompts, re-dispatch, re-collect, up to `retryDroppedMaxAttempts` rounds. Stops early when all dropped rules resolve.
+11. Apply `warnAsError` promotion
+12. Format output (stylish/json/sarif)
+13. Execute post-run tasks
+14. Persist last-run hash if applicable
 
 Key function: `runEngine(context: RunContext): Promise<EngineResult>`. Returns formatted output string, overall status, and raw results. Accepts optional `onProgress` callback on `RunContext` for real-time progress tracking.
 

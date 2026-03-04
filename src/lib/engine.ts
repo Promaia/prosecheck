@@ -1,11 +1,12 @@
 import { rm, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import type { Rule, Config, RunContext } from '../types/index.js';
+import type { Rule, Config, RunContext, OnProgress } from '../types/index.js';
 import type { CollectResultsOutput } from './results.js';
+import type { ChangeDetectionResult } from './change-detection.js';
 import { runCalculators } from './calculators/index.js';
 import { detectChanges } from './change-detection.js';
 import { generatePrompts } from './prompt.js';
-import { collectResults } from './results.js';
+import { collectResults, computeOverallStatus } from './results.js';
 import { executePostRun } from './post-run.js';
 import { buildUserPrompt, watchForOutputs } from '../modes/user-prompt.js';
 import { runClaudeCode } from '../modes/claude-code.js';
@@ -133,6 +134,18 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     expectedRules: changeResult.triggeredRules,
   });
 
+  // 6b. Retry dropped rules if configured
+  if (config.retryDropped && collected.dropped.length > 0) {
+    await retryDroppedRules({
+      collected,
+      config,
+      projectRoot,
+      mode,
+      changeResult,
+      onProgress,
+    });
+  }
+
   // Apply warnAsError: promote overall status
   let overallStatus = collected.overallStatus;
   if (config.warnAsError && overallStatus === 'warn') {
@@ -213,4 +226,92 @@ function formatOutput(results: CollectResultsOutput, format: string): string {
     default:
       return formatStylish(results);
   }
+}
+
+interface RetryDroppedOptions {
+  collected: CollectResultsOutput;
+  config: Config;
+  projectRoot: string;
+  mode: string;
+  changeResult: ChangeDetectionResult;
+  onProgress: OnProgress | undefined;
+}
+
+/**
+ * Retry rules that produced no output file. Re-generates prompts for just
+ * the dropped rules, re-dispatches to the operating mode, and merges any
+ * new results back into the collected output.
+ *
+ * Runs up to `config.retryDroppedMaxAttempts` retry rounds. Each round
+ * only retries rules that are still dropped.
+ */
+async function retryDroppedRules(options: RetryDroppedOptions): Promise<void> {
+  const { collected, config, projectRoot, mode, changeResult, onProgress } = options;
+  const maxAttempts = config.retryDroppedMaxAttempts;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (collected.dropped.length === 0) break;
+
+    const droppedRules = collected.dropped.map((d) => d.rule);
+
+    // Fire progress events for retried rules
+    if (onProgress) {
+      for (const rule of droppedRules) {
+        onProgress({ phase: 'running', ruleId: rule.id, ruleName: rule.name });
+      }
+    }
+
+    // Re-generate prompts for dropped rules
+    const { promptPaths } = await generatePrompts({
+      projectRoot,
+      rules: droppedRules,
+      comparisonRef: changeResult.comparisonRef,
+      changedFilesByRule: changeResult.changedFilesByRule,
+    });
+
+    // Re-dispatch
+    await dispatchMode(mode, projectRoot, promptPaths, droppedRules, config);
+
+    // Collect results for retried rules only
+    const retryCollected = await collectResults({
+      projectRoot,
+      expectedRules: droppedRules,
+    });
+
+    // Merge retry results into the main collected output:
+    // - Successful results replace dropped entries
+    // - Still-dropped rules remain but with bumped attempt count
+    const newlyResolved = new Set(retryCollected.results.map((r) => r.ruleId));
+
+    // Add newly successful results
+    for (const result of retryCollected.results) {
+      collected.results.push(result);
+    }
+
+    // Add any new errors
+    for (const error of retryCollected.errors) {
+      const errorRuleId = error.ruleId;
+      newlyResolved.add(errorRuleId);
+      collected.errors.push(error);
+    }
+
+    // Update dropped list: keep only rules that are still dropped, bump attempt
+    collected.dropped = retryCollected.dropped.map((d) => ({
+      rule: d.rule,
+      attempt: attempt + 1,
+    }));
+
+    // Fire progress events for resolved rules
+    if (onProgress) {
+      for (const result of retryCollected.results) {
+        const rule = droppedRules.find((r) => r.id === result.ruleId);
+        if (rule) {
+          onProgress({ phase: 'result', ruleId: rule.id, ruleName: rule.name, result: result.result });
+        }
+      }
+    }
+  }
+
+  // Recompute overall status after retries
+  collected.overallStatus = computeOverallStatus(collected.results, collected.dropped, collected.errors);
 }
