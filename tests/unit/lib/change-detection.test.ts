@@ -218,7 +218,6 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: baseConfig,
-
       rules,
     });
 
@@ -239,7 +238,6 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: baseConfig,
-
       rules,
     });
 
@@ -259,7 +257,6 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: baseConfig,
-
       rules: makeRules(),
     });
 
@@ -282,7 +279,6 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: baseConfig,
-
       rules: makeRules(),
       comparisonRef: 'explicit-ref',
     });
@@ -316,7 +312,6 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: ciConfig,
-
       rules: makeRules(),
     });
 
@@ -351,7 +346,6 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: ciConfig,
-
       rules: makeRules(),
     });
 
@@ -377,7 +371,6 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config,
-
       rules: [],
     });
 
@@ -418,7 +411,6 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config,
-
       rules: [],
     });
 
@@ -438,7 +430,6 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: baseConfig,
-
       rules,
     });
 
@@ -481,7 +472,6 @@ describe('detectChanges', () => {
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
       config: baseConfig,
-
       rules: makeRules(),
     });
 
