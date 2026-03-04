@@ -116,6 +116,7 @@ prosecheck/
 | `execa` | Process spawning | Launches and manages Claude Code CLI child processes in headless mode |
 | `picocolors` | Terminal colors | 7KB, 2x faster than chalk, zero deps, NO_COLOR/FORCE_COLOR support |
 | `yocto-spinner` | Spinners | 5KB, zero deps, by ora's author — Astro migrated from ora to this |
+| `zod` | Schema validation & type inference | Defines config schema once — infers TS types, validates at runtime, carries `.describe()`/`.default()` for config editor introspection. 25M+ weekly downloads, de-facto standard for TS schema validation |
 | `ignore` | Gitignore-pattern matching | De-facto standard for parsing gitignore patterns in Node.js |
 
 ---

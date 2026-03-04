@@ -10,11 +10,13 @@ Items are grouped by milestone. Within each milestone, items are roughly ordered
 
 Foundation types and config loading — everything else depends on these.
 
-- [ ] Define shared types in `src/types/index.ts` — Rule, RuleResult, RuleStatus, Config, CalculatorConfig, PromptVariables, RunContext
+- [ ] Define Zod config schema in `src/lib/config-schema.ts` — `ConfigSchema` with `.describe()` on every field and `.default()` for all defaults. Break into sub-schemas: `LastRunSchema`, `ClaudeCodeSchema`, `CalculatorConfigSchema`, `EnvironmentOverrideSchema`. Export `Config` type via `z.infer<typeof ConfigSchema>`. Define `PartialConfigSchema` via `.deepPartial()` for overlay layers. Define `RuleResultSchema` for agent output validation
+- [ ] Define remaining shared types in `src/types/index.ts` — Rule, RuleStatus, PromptVariables, RunContext (Config type comes from Zod schema, not manually defined here)
 - [ ] Implement `src/lib/rule.ts` — Rule type helpers, stable ID slug generation from rule name + source path
-- [ ] Implement `src/lib/config.ts` — Load `config.json`, deep-merge `config.local.json`, apply environment overrides, apply CLI flag overrides, validate config shape
+- [ ] Implement `src/lib/config.ts` — Load `config.json`, validate with `ConfigSchema.safeParse()`, deep-merge `config.local.json` (validated with `PartialConfigSchema`), apply environment overrides (validated with `PartialConfigSchema`), apply CLI flag overrides. Invalid config produces exit code 2 with Zod error paths
 - [ ] Implement `src/lib/ignore.ts` — Combine `globalIgnore` inline patterns with patterns from `additionalIgnore` files, expose a file-matching predicate using the `ignore` package
-- [ ] Write unit tests for config loading (layering, deep merge, missing files, invalid JSON)
+- [ ] Write unit tests for Zod schema (defaults applied on empty input, validation errors for bad types, partial schema accepts subsets, `.describe()` present on all fields)
+- [ ] Write unit tests for config loading (layering, deep merge, missing files, invalid JSON, Zod validation errors)
 - [ ] Write unit tests for ignore pattern matching (globalIgnore, additionalIgnore, edge cases)
 
 ---
@@ -55,7 +57,7 @@ Build the per-rule prompt files that agents consume.
 
 Collect agent outputs and handle edge cases.
 
-- [ ] Implement `src/lib/results.ts` — Read output JSON files from `.prosecheck/working/outputs/`, validate against expected schema, detect dropped rules (missing output files), orchestrate retries when `retryDropped` enabled, compute overall run status from worst individual status
+- [ ] Implement `src/lib/results.ts` — Read output JSON files from `.prosecheck/working/outputs/`, validate each against `RuleResultSchema` (Zod) with actionable error messages for malformed agent output, detect dropped rules (missing output files), orchestrate retries when `retryDropped` enabled, compute overall run status from worst individual status
 - [ ] Implement `src/lib/post-run.ts` — Execute shell commands from `config.postRun`, inject `PROSECHECK_STATUS`, `PROSECHECK_RESULTS_DIR`, `PROSECHECK_RESULTS_JSON` environment variables
 - [ ] Write unit tests for result collection (all statuses, dropped detection, retry logic, overall status computation)
 - [ ] Write unit tests for post-run task execution
@@ -133,6 +135,21 @@ Full integration testing against real scenarios.
 - [ ] End-to-end test: incremental run tracking across multiple invocations
 - [ ] End-to-end test: SARIF output validates against SARIF schema
 - [ ] Verify CI pipeline passes (`npm run ci`) — typecheck, lint, format, test, build
+
+---
+
+## Milestone 13: Configuration Editor
+
+Interactive `prosecheck config` command — schema-driven, no hardcoded field list.
+
+- [ ] Add `src/commands/config.ts` — Implement config command entry point, load current config from `.prosecheck/config.json`
+- [ ] Implement Zod schema walker — Recursively traverse `ConfigSchema` to extract field paths, types, descriptions (`.describe()`), defaults (`.default()`), and constraints (min/max, enums, array item types) into a flat field metadata list
+- [ ] Implement config editor UI components (Ink/React) — Browsable field list with current value vs default, grouped by section (top-level keys). Support editing strings, numbers, booleans, string arrays, and nested objects. Validate input against the Zod schema in real-time
+- [ ] Implement config writer — Serialize modified config back to `.prosecheck/config.json` with clean formatting, only writing fields that differ from defaults (minimal config)
+- [ ] Register `config` command in CLI (`src/cli.ts`)
+- [ ] Write unit tests for schema walker (field discovery, description extraction, default extraction, nested field paths)
+- [ ] Write unit tests for config editor (ink-testing-library — field navigation, value editing, validation feedback)
+- [ ] Write integration test — Run `prosecheck config`, modify a field, verify written JSON is valid
 
 ---
 

@@ -162,6 +162,17 @@ A git hash stored at `.prosecheck/last-user-run` provides an additional scope na
 
 This means interactive runs always check against the full branch diff (safe default for developers) but record their position so CI can skip already-checked work. Each behavior is independently configurable. Custom environments inherit base defaults unless they define their own overrides.
 
+### Zod-Defined Config Schema
+
+The entire configuration shape is defined as a Zod schema in `src/lib/config-schema.ts`. This single declaration serves as:
+
+1. **TypeScript types** — `z.infer<typeof ConfigSchema>` produces the `Config` type used throughout the codebase. No separate type definition to maintain.
+2. **Runtime validation** — `ConfigSchema.safeParse(data)` validates loaded JSON with structured error paths (e.g., `environments.ci.lastRun.read: expected boolean, received string`). Invalid config produces exit code 2.
+3. **Default values** — `.default()` on each field. `ConfigSchema.parse({})` produces a fully-populated config.
+4. **Schema introspection** — `.describe()` on each field carries human-readable descriptions. The `prosecheck config` editor command walks the schema at runtime to discover field names, types, descriptions, defaults, and constraints — no hardcoded field registry.
+
+The schema is composed from sub-schemas for readability: `LastRunSchema`, `ClaudeCodeSchema`, `CalculatorConfigSchema`, `EnvironmentOverrideSchema`. A `PartialConfigSchema` (via `.deepPartial()`) is used for `config.local.json` and environment override blocks, since these are partial overlays. Agent output JSON is also validated via `RuleResultSchema`.
+
 ### Configuration Layering
 
 Config uses a base + environment override model:
@@ -540,3 +551,6 @@ The overall run status is determined by the worst status across all rules:
 | Configurable base branch | `.prosecheck/config.json` controls diff base and calculator options |
 | All modes share output contract | Every operating mode writes results to `.prosecheck/working/outputs/` as structured JSON |
 | Claude Code Headless single-instance option | Config toggle to use one instance with agent-team prompt vs. one-per-rule (default) |
+| Zod-defined config schema | Single Zod declaration for types, runtime validation, defaults, and editor introspection |
+| Schema-driven config editor | `prosecheck config` command walks Zod schema at runtime — no hardcoded field list |
+| Agent output validation | `RuleResultSchema` (Zod) validates agent output JSON with structured errors |

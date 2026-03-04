@@ -51,9 +51,24 @@ Main flow: load config → discover rules → detect changes → filter rules by
 
 Scaffolds `.prosecheck/` directory with default `config.json`, adds entries to `.gitignore`, and optionally creates a starter `RULES.md`.
 
+### `src/commands/config.ts` — Config Editor Command **[PLANNED]**
+
+Interactive terminal UI for viewing and editing `.prosecheck/config.json`. Walks the Zod `ConfigSchema` at runtime to discover all fields — their names, types, descriptions (from `.describe()`), defaults (from `.default()`), and constraints. Renders an interactive editor using Ink components where users can browse fields, see current values vs defaults, and modify settings. Writes validated JSON back to `config.json`. No hardcoded field list — the editor is entirely schema-driven, so new config fields added to the Zod schema automatically appear in the editor.
+
 ---
 
 ## Core Library (`src/lib/`)
+
+### `config-schema.ts` — Zod Config Schema **[STUB]**
+
+Single source of truth for configuration shape, types, defaults, and documentation. Defines:
+
+- **`ConfigSchema`** — full Zod schema with `.describe()` on every field and `.default()` for all defaults. Sub-schemas (`LastRunSchema`, `ClaudeCodeSchema`, `CalculatorConfigSchema`) compose into the top-level schema.
+- **`PartialConfigSchema`** — via `.deepPartial()`, used for `config.local.json` and environment override blocks (partial overlays).
+- **`Config` type** — `z.infer<typeof ConfigSchema>`, the TypeScript type used throughout the codebase. No separate type definition.
+- **`RuleResultSchema`** — Zod schema for agent output JSON, used when reading files from `.prosecheck/working/outputs/`.
+
+The schema serves four roles: TypeScript type inference, runtime validation with actionable error messages, default value declaration, and runtime introspection for the config editor command.
 
 ### `config.ts` — Configuration Loading **[STUB]**
 
@@ -64,7 +79,9 @@ Loads and layers configuration with four-level precedence:
 3. Environment overrides — named block from `config.environments[env]`
 4. CLI flags — highest priority
 
-Deep merge at each layer. Environment is resolved from `--env` flag, `process.env.CI` auto-detection, or `interactive` default.
+Deep merge at each layer. Each layer is validated against `PartialConfigSchema` (for overlays) or `ConfigSchema` (for the final merged result). Invalid config produces exit code 2 with Zod's structured error paths (e.g., `environments.ci.lastRun.read: expected boolean, received string`).
+
+Environment is resolved from `--env` flag, `process.env.CI` auto-detection, or `interactive` default.
 
 Key config fields: `baseBranch`, `globalIgnore`, `additionalIgnore`, `lastRun`, `timeout`, `warnAsError`, `retryDropped`, `retryDroppedMaxAttempts`, `claudeCode`, `postRun`, `environments`, `ruleCalculators`.
 
@@ -117,7 +134,7 @@ Template is configurable via `.prosecheck/prompt-template.md`. Global system pro
 
 ### `results.ts` — Result Collection **[STUB]**
 
-Collects agent output JSON files. Detects dropped rules (no output). Orchestrates retries when `retryDropped` is enabled. Determines overall run status from worst individual status: fail > dropped > warn > pass.
+Collects agent output JSON files. Each file is validated against `RuleResultSchema` (Zod) — malformed agent output produces clear errors rather than downstream crashes. Detects dropped rules (no output). Orchestrates retries when `retryDropped` is enabled. Determines overall run status from worst individual status: fail > dropped > warn > pass.
 
 ### `post-run.ts` — Post-Run Tasks **[STUB]**
 
@@ -270,6 +287,7 @@ See `docs/adr/` for full records:
 7. **RULES.md heading-based format** — headings as rule names
 8. **TypeScript/ESM strict stack** — strict TS, ESM-only, modern tooling
 9. **Configuration model and runtime defaults** — layered config, ESLint-style exit codes
+10. **Zod-defined config schema** — single declaration for types, validation, defaults, and editor introspection
 
 ---
 
@@ -283,6 +301,7 @@ See `docs/adr/` for full records:
 | Test | vitest + msw + ink-testing-library |
 | CLI | commander + @commander-js/extra-typings |
 | Terminal UI | ink + react + picocolors + yocto-spinner |
+| Schema & validation | zod (config types, validation, introspection) |
 | Pattern matching | ignore (gitignore format) |
 | Process management | execa |
 | Lint | eslint (strictTypeChecked) + prettier |
