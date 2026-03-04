@@ -196,17 +196,17 @@ Direct Anthropic API calls with a custom agent loop. Most flexible, most code to
 
 Transform collected results into output. Selected via `--format` flag.
 
-### `stylish.ts` — Human-Readable Output **[STUB]**
+### `stylish.ts` — Human-Readable Output [IMPLEMENTED]
 
-Default formatter. Terminal output with colors (via picocolors). Shows rule name, status, headline, and per-comment file/line details.
+Default formatter. Terminal output with colors (via picocolors). Shows rule name, status (PASS/WARN/FAIL/DROP/ERR), headline, and per-comment file/line details. Includes a summary line with counts per status category. Key function: `formatStylish()`.
 
-### `json.ts` — JSON Output **[STUB]**
+### `json.ts` — JSON Output [IMPLEMENTED]
 
-Structured JSON for scripting and machine consumption.
+Structured JSON for scripting and machine consumption. Includes overall status, results array, dropped rules, and errors. Key function: `formatJson()`.
 
-### `sarif.ts` — SARIF Output **[STUB]**
+### `sarif.ts` — SARIF Output [IMPLEMENTED]
 
-SARIF schema for GitHub Code Scanning. Enables inline PR annotations on rule violations.
+SARIF 2.1.0 schema for GitHub Code Scanning. Maps warn/fail results to SARIF results with physical locations (file + line). Pass results are omitted. Dropped rules are included as error-level findings. Key function: `formatSarif()`.
 
 ---
 
