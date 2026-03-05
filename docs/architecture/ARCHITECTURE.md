@@ -2,6 +2,10 @@
 
 This document describes the architecture of prosecheck, an LLM-powered code linter with natural-language rules. Sections marked **[PLANNED]** are designed but not yet implemented. Sections marked **[STUB]** have file structure in place but no implementation code.
 
+## About `docs/architecture/`
+
+The `docs/architecture/` folder holds architecture documentation for each system. This file (`ARCHITECTURE.md`) is the high-level overview of the whole project. A smaller project may only need this single file; as systems grow more complex, they can be broken out into dedicated files in this directory (e.g., `execution-pipeline.md`, `config-system.md`).
+
 ---
 
 ## High-Level Overview

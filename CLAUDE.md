@@ -18,11 +18,11 @@ Prosecheck is an LLM-powered code linter with natural-language rules. See `docs/
 
 After making changes to the codebase, you MUST:
 
-1. **Update ARCHITECTURE.md** — When you implement a stub, add a new module, change the data flow, or modify the component structure, update `ARCHITECTURE.md` to reflect the current state. Change `[STUB]` to `[IMPLEMENTED]` when a module has real code. Change `[PLANNED]` to `[STUB]` when a file is created. Remove status markers entirely when a section is fully implemented and tested.
+1. **Update architecture docs** — When you implement a stub, add a new module, change the data flow, or modify the component structure, identify the correct doc in `docs/architecture/` and update it. `docs/architecture/ARCHITECTURE.md` is the high-level overview of the whole project; complex systems may have their own files. Change `[STUB]` to `[IMPLEMENTED]` when a module has real code. Change `[PLANNED]` to `[STUB]` when a file is created. Remove status markers entirely when a section is fully implemented and tested. After updating a subsystem doc, check if the high-level `ARCHITECTURE.md` also needs updating.
 
-2. **Update ROADMAP.md** — When you complete a task, check the box (`- [x]`). When you discover new tasks during implementation, add them to the appropriate milestone. If a milestone is fully complete, note it at the top of the milestone section.
+2. **Update roadmap** — When you complete a task, check the box (`- [x]`) in the appropriate file under `docs/roadmap/`. When you discover new tasks during implementation, add them to the appropriate roadmap file. When all tasks in a file are complete, move it to `docs/roadmap/archive/` with a date prefix.
 
-3. **Check ROADMAP.md before starting work** — Before implementing anything, read `ROADMAP.md` to understand current implementation status, what has been completed, and what the next priorities are. Follow the milestone ordering — earlier milestones should be completed before later ones.
+3. **Check roadmap before starting work** — Before implementing anything, read the active files in `docs/roadmap/` to understand current priorities and what has been completed. See `docs/roadmap/README.md` for the structure.
 
 ## Verification
 
