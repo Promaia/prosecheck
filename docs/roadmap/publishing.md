@@ -24,7 +24,8 @@ Make `prosecheck init` re-runnable with flags to set up CI and local hooks. Runn
 
 - [ ] Make `init` re-runnable — skip config/directory creation if already initialized, but still process integration flags
 - [ ] Add `.prosecheck/working` to `.gitignore` during init if `.gitignore` exists but the entry is missing (idempotent — safe to run multiple times)
-- [ ] `prosecheck init --github-actions` — Generate `.github/workflows/prosecheck.yml` with configurable options (format, environment, rules path) and optional SARIF upload step
+- [ ] `prosecheck init --github-actions` — Generate a full-check workflow (runs on every push with `--last-run-read 0`). Simple setup for projects that don't need incremental optimization
+- [ ] `prosecheck init --github-actions-incremental` — Generate an incremental CI setup: workflow on PR push with `--last-run-read 1`, workflow on merge queue with `--last-run-read 0`, and config with `lastRun.write=true` for the interactive environment (so local runs persist the hash). Requires GitHub merge queue for the full-check guarantee before merge
 - [ ] `prosecheck init --git-pre-push` — Install a `.git/hooks/pre-push` script (or append to existing) that runs `prosecheck lint`
 - [ ] `prosecheck init --claude-stop-hook` — Add a `Stop` hook entry to `.claude/settings.json` that runs `prosecheck lint` after Claude finishes responding
 - [ ] Support combining flags: `prosecheck init --github-actions --git-pre-push` applies both in a single invocation

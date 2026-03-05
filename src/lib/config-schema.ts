@@ -8,13 +8,13 @@ export const LastRunSchema = z
       .boolean()
       .default(false)
       .describe(
-        'Read the last-run hash to skip already-checked commits. Default: off for interactive, on for CI.',
+        'Read the last-run hash to skip already-checked commits. Off by default; enable via environment overrides or CLI flags.',
       ),
     write: z
       .boolean()
-      .default(true)
+      .default(false)
       .describe(
-        'Write the current hash after a run for future incremental checks. Default: on for interactive, off for CI.',
+        'Write the current hash after a run for future incremental checks. Off by default; enable via environment overrides or CLI flags.',
       ),
   })
   .describe('Incremental run tracking via .prosecheck/last-user-run');
@@ -169,7 +169,7 @@ export const ConfigSchema = z
       .describe(
         'External ignore files whose patterns are merged into the global ignore set.',
       ),
-    lastRun: LastRunSchema.default(() => ({ read: false, write: true })),
+    lastRun: LastRunSchema.default(() => ({ read: false, write: false })),
     timeout: z
       .number()
       .positive()
@@ -205,12 +205,9 @@ export const ConfigSchema = z
       .record(z.string(), EnvironmentOverrideSchema)
       .default(() => ({
         ci: {
-          lastRun: { read: true, write: false },
           warnAsError: true,
         },
-        interactive: {
-          lastRun: { read: false, write: true },
-        },
+        interactive: {},
       }))
       .describe('Named environment overrides selected via --env'),
     ruleCalculators: z

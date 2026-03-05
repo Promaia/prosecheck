@@ -26,7 +26,7 @@ describe('ConfigSchema', () => {
   it('applies nested defaults for lastRun', () => {
     const result = ConfigSchema.parse({});
     expect(result.lastRun.read).toBe(false);
-    expect(result.lastRun.write).toBe(true);
+    expect(result.lastRun.write).toBe(false);
   });
 
   it('applies nested defaults for claudeCode', () => {
@@ -44,8 +44,6 @@ describe('ConfigSchema', () => {
   it('provides default environments', () => {
     const result = ConfigSchema.parse({});
     expect(result.environments['ci']).toBeDefined();
-    expect(result.environments['ci']?.lastRun?.read).toBe(true);
-    expect(result.environments['ci']?.lastRun?.write).toBe(false);
     expect(result.environments['ci']?.warnAsError).toBe(true);
     expect(result.environments['interactive']).toBeDefined();
   });
