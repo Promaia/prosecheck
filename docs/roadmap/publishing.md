@@ -22,16 +22,16 @@ Prepare and publish prosecheck to the npm registry.
 
 Make `prosecheck init` re-runnable with flags to set up CI and local hooks. Running `init` again in an already-initialized project applies the requested integrations without overwriting existing config.
 
-- [ ] Make `init` re-runnable — skip config/directory creation if already initialized, but still process integration flags
-- [ ] Add `.prosecheck/working` to `.gitignore` during init if `.gitignore` exists but the entry is missing (idempotent — safe to run multiple times)
-- [ ] `prosecheck init --github-actions` — Generate a full-check workflow (runs on every push with `--last-run-read 0`). Simple setup for projects that don't need incremental optimization
-- [ ] `prosecheck init --github-actions-incremental` — Generate an incremental CI setup: workflow on PR push with `--last-run-read 1`, workflow on merge queue with `--last-run-read 0`, and config with `lastRun.write=true` for the interactive environment (so local runs persist the hash). Requires GitHub merge queue for the full-check guarantee before merge
-- [ ] `prosecheck init --github-actions-hash-check` — Generate a lightweight CI workflow that verifies `.prosecheck/last-user-run` matches the current commit hash. Zero token cost — relies on developers running prosecheck locally (with `--last-run-write 1`) and committing the hash file. CI just confirms someone actually ran it. Useful for teams that want CI enforcement without paying for LLM calls in CI
-- [ ] `prosecheck init --git-pre-push` — Install a `.git/hooks/pre-push` script (or append to existing) that runs `prosecheck lint`
-- [ ] `prosecheck init --claude-stop-hook` — Add a `Stop` hook entry to `.claude/settings.json` that runs `prosecheck lint` after Claude finishes responding
-- [ ] Support combining flags: `prosecheck init --github-actions --git-pre-push` applies both in a single invocation
-- [ ] Write tests for each integration flag (verify generated files, idempotency, no clobbering)
-- [ ] Verify `npm run ci` passes
+- [x] Make `init` re-runnable — skip config/directory creation if already initialized, but still process integration flags
+- [x] Add `.prosecheck/working` to `.gitignore` during init if `.gitignore` exists but the entry is missing (idempotent — safe to run multiple times)
+- [x] `prosecheck init --github-actions` — Generate a full-check workflow (runs on every push with `--last-run-read 0`). Simple setup for projects that don't need incremental optimization
+- [x] `prosecheck init --github-actions-incremental` — Generate an incremental CI setup: workflow on PR push with `--last-run-read 1`, workflow on merge queue with `--last-run-read 0`, and config with `lastRun.write=true` for the interactive environment (so local runs persist the hash). Requires GitHub merge queue for the full-check guarantee before merge
+- [x] `prosecheck init --github-actions-hash-check` — Generate a lightweight CI workflow that verifies `.prosecheck/last-user-run` matches the current commit hash. Zero token cost — relies on developers running prosecheck locally (with `--last-run-write 1`) and committing the hash file. CI just confirms someone actually ran it. Useful for teams that want CI enforcement without paying for LLM calls in CI
+- [x] `prosecheck init --git-pre-push` — Install a `.git/hooks/pre-push` script (or append to existing) that runs `prosecheck lint`
+- [x] `prosecheck init --claude-stop-hook` — Add a `Stop` hook entry to `.claude/settings.json` that runs `prosecheck lint` after Claude finishes responding
+- [x] Support combining flags: `prosecheck init --github-actions --git-pre-push` applies both in a single invocation
+- [x] Write tests for each integration flag (verify generated files, idempotency, no clobbering)
+- [x] Verify `npm run ci` passes
 
 ---
 
