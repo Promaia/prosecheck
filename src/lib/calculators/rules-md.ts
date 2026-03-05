@@ -3,6 +3,10 @@ import path from 'node:path';
 import { glob } from 'glob';
 import { createRule } from '../rule.js';
 import type { Rule } from '../../types/index.js';
+import {
+  parseFrontmatter,
+  extractGroupFromFrontmatter,
+} from '../frontmatter.js';
 
 export interface RulesMdOptions {
   // Glob pattern for RULES.md files. Defaults to all RULES.md files recursively.
@@ -34,12 +38,23 @@ export async function calculateRulesMd(
 
   for (const file of files) {
     const absolutePath = path.join(projectRoot, file);
-    const content = await readFile(absolutePath, 'utf-8');
-    const parsed = parseRulesMd(content, file);
+    const rawContent = await readFile(absolutePath, 'utf-8');
+    const { data: frontmatterData, body } = parseFrontmatter(rawContent);
+    const { group: fileGroup, rest: fileRest } =
+      extractGroupFromFrontmatter(frontmatterData);
+    const parsed = parseRulesMd(body, file, {
+      group: fileGroup,
+      frontmatter: fileRest,
+    });
     rules.push(...parsed);
   }
 
   return rules;
+}
+
+interface FileMetadata {
+  group?: string | undefined;
+  frontmatter?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -48,8 +63,15 @@ export async function calculateRulesMd(
  * Rules are delimited by top-level `# ` headings. Content before the first
  * heading is ignored. Subheadings (`##`, `###`, etc.) are part of the
  * description.
+ *
+ * File-level frontmatter metadata (group, extra fields) is applied to all
+ * rules in the file.
  */
-export function parseRulesMd(content: string, source: string): Rule[] {
+export function parseRulesMd(
+  content: string,
+  source: string,
+  metadata?: FileMetadata,
+): Rule[] {
   const lines = content.split('\n');
   const rules: Rule[] = [];
 
@@ -58,6 +80,11 @@ export function parseRulesMd(content: string, source: string): Rule[] {
   const dir = path.dirname(source);
   // Use the directory as inclusion scope — root means everything
   const inclusions = dir === '.' ? [] : [`${dir}/`];
+
+  const ruleOptions = {
+    group: metadata?.group,
+    frontmatter: metadata?.frontmatter,
+  };
 
   for (const line of lines) {
     // Match top-level heading only (# Title), not ## or deeper
@@ -73,6 +100,7 @@ export function parseRulesMd(content: string, source: string): Rule[] {
             descriptionLines.join('\n').trim(),
             inclusions,
             source,
+            ruleOptions,
           ),
         );
       }
@@ -93,6 +121,7 @@ export function parseRulesMd(content: string, source: string): Rule[] {
         descriptionLines.join('\n').trim(),
         inclusions,
         source,
+        ruleOptions,
       ),
     );
   }

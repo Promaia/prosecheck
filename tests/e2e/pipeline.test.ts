@@ -49,8 +49,8 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     retryDropped: false,
     retryDroppedMaxAttempts: 1,
     claudeCode: {
-      singleInstance: false,
-      agentTeams: false,
+      claudeToRuleShape: 'one-to-one',
+      maxConcurrentAgents: 0,
       maxTurns: 30,
       allowedTools: [],
       tools: [],

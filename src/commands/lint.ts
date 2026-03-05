@@ -25,8 +25,10 @@ export interface LintOptions {
   lastRunWrite?: boolean | undefined;
   /** Override timeout config */
   timeout?: number | undefined;
-  /** Override agentTeams config */
-  agentTeams?: boolean | undefined;
+  /** Override claudeToRuleShape config */
+  claudeToRuleShape?: string | undefined;
+  /** Override maxConcurrentAgents config */
+  maxConcurrentAgents?: number | undefined;
   /** Override maxTurns config */
   maxTurns?: number | undefined;
   /** Override allowedTools config (comma-separated string from CLI) */
@@ -71,10 +73,16 @@ export async function lint(options: LintOptions): Promise<void> {
       }
       cliOverrides['lastRun'] = lastRun;
     }
-    if (options.agentTeams !== undefined) {
+    if (options.claudeToRuleShape !== undefined) {
       cliOverrides['claudeCode'] = {
         ...(cliOverrides['claudeCode'] as Record<string, unknown> | undefined),
-        agentTeams: options.agentTeams,
+        claudeToRuleShape: options.claudeToRuleShape,
+      };
+    }
+    if (options.maxConcurrentAgents !== undefined) {
+      cliOverrides['claudeCode'] = {
+        ...(cliOverrides['claudeCode'] as Record<string, unknown> | undefined),
+        maxConcurrentAgents: options.maxConcurrentAgents,
       };
     }
     if (options.maxTurns !== undefined) {
@@ -101,8 +109,7 @@ export async function lint(options: LintOptions): Promise<void> {
       : await loadConfig({ projectRoot, env: environment });
 
     // Determine mode and format
-    const mode =
-      options.mode ?? 'claude-code';
+    const mode = options.mode ?? 'claude-code';
     const format = options.format ?? 'stylish';
 
     // Start interactive UI if applicable (lazy import to avoid loading Ink for non-interactive paths)

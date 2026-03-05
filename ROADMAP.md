@@ -248,11 +248,11 @@ This milestone also introduces frontmatter parsing for both RULES.md and ADR mar
 
 ### Frontmatter parsing
 
-- [ ] Add YAML frontmatter parser (`src/lib/frontmatter.ts`) — extract frontmatter from markdown files, return typed metadata object (with `group` as the only actively-used field) + remaining body. Preserve unknown fields as passthrough for future use. Handle files with and without frontmatter gracefully
-- [ ] Extend `rules-md` calculator to parse frontmatter — consume `group` field. File-level frontmatter applies to all rules in that file. Unknown fields are stored on the `Rule` object for future consumers
-- [ ] Extend `adr` calculator to parse frontmatter — consume `group` field. Unknown fields stored on `Rule` for future use
-- [ ] Add `ruleGroup` field to `Rule` type — optional string identifying which group a rule belongs to
-- [ ] Add optional `frontmatter` bag to `Rule` type — `Record<string, unknown>` for preserving unrecognized frontmatter fields
+- [x] Add YAML frontmatter parser (`src/lib/frontmatter.ts`) — extract frontmatter from markdown files, return typed metadata object (with `group` as the only actively-used field) + remaining body. Preserve unknown fields as passthrough for future use. Handle files with and without frontmatter gracefully
+- [x] Extend `rules-md` calculator to parse frontmatter — consume `group` field. File-level frontmatter applies to all rules in that file. Unknown fields are stored on the `Rule` object for future consumers
+- [x] Extend `adr` calculator to parse frontmatter — consume `group` field. Unknown fields stored on `Rule` for future use
+- [x] Add `ruleGroup` field to `Rule` type — optional string identifying which group a rule belongs to
+- [x] Add optional `frontmatter` bag to `Rule` type — `Record<string, unknown>` for preserving unrecognized frontmatter fields
 
 ### Unified execution pipeline
 
@@ -295,26 +295,26 @@ Controls the number of concurrent agents (processes or sub-agents depending on i
 
 #### Implementation
 
-- [ ] Define execution plan types — `Invocation` (type + rules), `ExecutionPlan` (sequence of parallel batches of invocations)
-- [ ] Add `buildExecutionPlan()` — takes rules, `claudeToRuleShape`, `maxConcurrentAgents`, and rule groups; returns an `ExecutionPlan`
-- [ ] Refactor `runClaudeCode()` to execute an `ExecutionPlan` — iterate batches sequentially, run invocations within each batch in parallel, collect results
-- [ ] Reuse `buildSequentialPrompt` for `one-to-many-single` invocations and group invocations
-- [ ] Reuse `buildAgentTeamsPrompt` for `one-to-many-teams` invocations
+- [x] Define execution plan types — `Invocation` (type + rules), `ExecutionPlan` (sequence of parallel batches of invocations)
+- [x] Add `buildExecutionPlan()` — takes rules, `claudeToRuleShape`, `maxConcurrentAgents`, and rule groups; returns an `ExecutionPlan`
+- [x] Refactor `runClaudeCode()` to execute an `ExecutionPlan` — iterate batches sequentially, run invocations within each batch in parallel, collect results
+- [x] Reuse `buildSequentialPrompt` for `one-to-many-single` invocations and group invocations
+- [x] Reuse `buildAgentTeamsPrompt` for `one-to-many-teams` invocations
 
 ### Config & CLI
 
-- [ ] Add `claudeToRuleShape` to `ConfigSchema` — `"one-to-one"` | `"one-to-many-teams"` | `"one-to-many-single"`, replaces current `singleInstance` + `agentTeams` booleans
-- [ ] Add `maxConcurrentAgents` to `ConfigSchema` — integer (0 = unlimited), controls concurrent agents per the rules above
-- [ ] Add `--claude-to-rule-shape` and `--max-concurrent-agents` CLI flags
-- [ ] Migration: map old `singleInstance`/`agentTeams` config to new `claudeToRuleShape` for backwards compatibility
+- [x] Add `claudeToRuleShape` to `ConfigSchema` — `"one-to-one"` | `"one-to-many-teams"` | `"one-to-many-single"`, replaces current `singleInstance` + `agentTeams` booleans
+- [x] Add `maxConcurrentAgents` to `ConfigSchema` — integer (0 = unlimited), controls concurrent agents per the rules above
+- [x] Add `--claude-to-rule-shape` and `--max-concurrent-agents` CLI flags
+- ~~Migration: map old `singleInstance`/`agentTeams` config to new `claudeToRuleShape` — dropped, no external users yet~~
 
 ### Tests
 
-- [ ] Write unit tests for frontmatter parsing (with/without frontmatter, unknown fields preserved, invalid YAML, `group` extraction)
-- [ ] Write unit tests for `buildExecutionPlan()` — all mode combinations produce correct hierarchy shapes
-- [ ] Write unit tests for unified pipeline execution (batch splitting, sequential ordering, result collection across groups)
-- [ ] Write integration test with fake-claude — grouped rules produce correct combined prompts and multiple outputs
-- [ ] Verify `npm run ci` passes
+- [x] Write unit tests for frontmatter parsing (with/without frontmatter, unknown fields preserved, invalid YAML, `group` extraction)
+- [x] Write unit tests for `buildExecutionPlan()` — all mode combinations produce correct hierarchy shapes
+- [x] Write unit tests for unified pipeline execution (batch splitting, sequential ordering, result collection across groups)
+- [x] Write integration test with fake-claude — grouped rules produce correct combined prompts and multiple outputs
+- [x] Verify `npm run ci` passes
 
 ---
 

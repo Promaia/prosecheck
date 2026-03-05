@@ -82,8 +82,8 @@ describe.skipIf(!process.env['PROSECHECK_SLOW_TESTS'])(
         config: makeConfig({
           claudeCode: {
             ...SCHEMA_DEFAULTS.claudeCode,
-            singleInstance: false,
-            agentTeams: false,
+            claudeToRuleShape: 'one-to-one',
+            maxConcurrentAgents: 0,
           },
         }),
       });
@@ -106,8 +106,8 @@ describe.skipIf(!process.env['PROSECHECK_SLOW_TESTS'])(
         config: makeConfig({
           claudeCode: {
             ...SCHEMA_DEFAULTS.claudeCode,
-            singleInstance: false,
-            agentTeams: false,
+            claudeToRuleShape: 'one-to-one',
+            maxConcurrentAgents: 0,
           },
         }),
       });
@@ -129,8 +129,8 @@ describe.skipIf(!process.env['PROSECHECK_SLOW_TESTS'])(
         config: makeConfig({
           claudeCode: {
             ...SCHEMA_DEFAULTS.claudeCode,
-            singleInstance: false,
-            agentTeams: false,
+            claudeToRuleShape: 'one-to-one',
+            maxConcurrentAgents: 0,
           },
         }),
       });
@@ -159,8 +159,8 @@ describe.skipIf(!process.env['PROSECHECK_SLOW_TESTS'])(
         config: makeConfig({
           claudeCode: {
             ...SCHEMA_DEFAULTS.claudeCode,
-            singleInstance: true,
-            agentTeams: true,
+            claudeToRuleShape: 'one-to-many-teams',
+            maxConcurrentAgents: 0,
           },
         }),
       });
