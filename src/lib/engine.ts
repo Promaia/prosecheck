@@ -150,14 +150,26 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     });
   }
 
-  await dispatchMode(
-    mode,
-    projectRoot,
-    promptPaths,
-    changeResult.triggeredRules,
-    config,
-    globalPrompt,
-  );
+  const timeoutMs = config.timeout * 1000;
+  const signal = AbortSignal.timeout(timeoutMs);
+
+  try {
+    await dispatchMode(
+      mode,
+      projectRoot,
+      promptPaths,
+      changeResult.triggeredRules,
+      config,
+      globalPrompt,
+      signal,
+    );
+  } catch (error: unknown) {
+    if (isTimeoutError(error)) {
+      // Timeout — fall through to collect partial results
+    } else {
+      throw error;
+    }
+  }
 
   stopWatcher?.();
 
@@ -177,6 +189,7 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
       changeResult,
       onProgress,
       globalPrompt,
+      signal,
     });
   }
 
@@ -214,6 +227,7 @@ async function dispatchMode(
   triggeredRules: Rule[],
   config: Config,
   globalPrompt: string | undefined,
+  signal?: AbortSignal,
 ): Promise<void> {
   const expectedRuleIds = triggeredRules.map((r) => r.id);
 
@@ -223,13 +237,16 @@ async function dispatchMode(
   switch (mode) {
     case 'user-prompt': {
       // Prompt was already printed before the UI started rendering
-      await watchForOutputs({
-        projectRoot,
-        promptPaths,
-        expectedRuleIds,
-        rules: triggeredRules,
-        agentTeams,
-      });
+      await watchForOutputs(
+        {
+          projectRoot,
+          promptPaths,
+          expectedRuleIds,
+          rules: triggeredRules,
+          agentTeams,
+        },
+        signal,
+      );
       break;
     }
     case 'claude-code': {
@@ -244,12 +261,23 @@ async function dispatchMode(
         additionalArgs: config.claudeCode.additionalArgs,
         systemPrompt: globalPrompt,
         rules: triggeredRules,
+        signal,
       });
       break;
     }
     default:
       throw new Error(`Unknown operating mode: "${mode}"`);
   }
+}
+
+function isTimeoutError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'TimeoutError') {
+    return true;
+  }
+  if (error instanceof Error && error.name === 'AbortError') {
+    return true;
+  }
+  return false;
 }
 
 function formatOutput(results: CollectResultsOutput, format: string): string {
@@ -273,6 +301,7 @@ interface RetryDroppedOptions {
   changeResult: ChangeDetectionResult;
   onProgress: OnProgress | undefined;
   globalPrompt: string | undefined;
+  signal?: AbortSignal | undefined;
 }
 
 /**
@@ -292,6 +321,7 @@ async function retryDroppedRules(options: RetryDroppedOptions): Promise<void> {
     changeResult,
     onProgress,
     globalPrompt,
+    signal,
   } = options;
   const maxAttempts = config.retryDroppedMaxAttempts;
 
@@ -323,6 +353,7 @@ async function retryDroppedRules(options: RetryDroppedOptions): Promise<void> {
       droppedRules,
       config,
       globalPrompt,
+      signal,
     );
 
     // Collect results for retried rules only

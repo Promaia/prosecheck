@@ -33,6 +33,8 @@ export interface ClaudeCodeModeOptions {
   systemPrompt?: string | undefined;
   /** Triggered rules (needed for orchestration prompt rule names) */
   rules: Rule[];
+  /** Abort signal for timeout enforcement */
+  signal?: AbortSignal | undefined;
 }
 
 export interface ClaudeCodeResult {
@@ -49,6 +51,7 @@ export interface SpawnClaudeOptions {
   tools?: string[] | undefined;
   additionalArgs?: string[] | undefined;
   systemPrompt?: string | undefined;
+  signal?: AbortSignal | undefined;
 }
 
 /**
@@ -119,6 +122,7 @@ async function executeInvocation(
     tools,
     additionalArgs,
     systemPrompt,
+    signal,
   } = options;
 
   switch (invocation.type) {
@@ -152,6 +156,7 @@ async function executeInvocation(
         tools,
         additionalArgs,
         systemPrompt,
+        signal,
       });
 
       return [
@@ -187,6 +192,7 @@ async function executeInvocation(
         tools,
         additionalArgs,
         systemPrompt,
+        signal,
       });
 
       return invocation.rules.map((r) => ({
@@ -217,6 +223,7 @@ async function executeInvocation(
         tools,
         additionalArgs,
         systemPrompt,
+        signal,
       });
 
       return invocation.rules.map((r) => ({
@@ -329,6 +336,7 @@ export async function spawnClaude(
       input: prompt,
       ...(options.env ? { env: options.env } : {}),
       ...(stdio ? { stdout: stdio[1], stderr: stdio[2] } : {}),
+      ...(options.signal ? { cancelSignal: options.signal } : {}),
       maxBuffer: 10 * 1024 * 1024,
     });
 
