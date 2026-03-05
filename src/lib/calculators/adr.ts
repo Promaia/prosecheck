@@ -49,7 +49,7 @@ export async function calculateAdr(
     const relativePath = path.posix.join(adrDir, file);
     const parsed = parseAdr(body, relativePath, { group, frontmatter: rest });
     if (parsed) {
-      rules.push(parsed);
+      rules.push(...parsed);
     }
   }
 
@@ -62,17 +62,20 @@ interface AdrMetadata {
 }
 
 /**
- * Parse an ADR file. Returns a Rule if the ADR has a `## Rules` heading,
+ * Parse an ADR file. Returns Rule(s) if the ADR has a `## Rules` heading,
  * otherwise returns undefined (documentation-only ADR).
  *
- * The ADR title (`# ...`) becomes the rule name. The content under `## Rules`
- * becomes the rule description. ADR-derived rules apply project-wide.
+ * If the `## Rules` section contains `### Subrule` headings, each becomes
+ * a separate rule (like RULES.md but with ### instead of #). If there are
+ * no ### headings, the entire section is one rule named after the ADR title.
+ *
+ * ADR-derived rules apply project-wide (empty inclusions).
  */
 export function parseAdr(
   content: string,
   source: string,
   metadata?: AdrMetadata,
-): Rule | undefined {
+): Rule[] | undefined {
   const lines = content.split('\n');
 
   // Extract title from the first `# ` heading
@@ -90,25 +93,83 @@ export function parseAdr(
     return undefined;
   }
 
-  // Find the `## Rules` section
-  const rulesContent = extractSection(lines, 'Rules');
-  if (rulesContent === undefined) {
+  // Find the `## Rules` section lines
+  const rulesSectionLines = extractSectionLines(lines, 'Rules');
+  if (rulesSectionLines === undefined) {
     return undefined;
   }
 
-  // ADR rules apply project-wide (empty inclusions = all files)
-  return createRule(title, rulesContent, [], source, {
+  // Check if section has ### sub-headings
+  const hasSubHeadings = rulesSectionLines.some((line) =>
+    /^### .+$/.test(line),
+  );
+
+  const ruleOptions = {
     group: metadata?.group,
     frontmatter: metadata?.frontmatter,
-  });
+  };
+
+  if (!hasSubHeadings) {
+    // Single rule: entire section as description, ADR title as name
+    const description = rulesSectionLines.join('\n').trim();
+    return [createRule(title, description, [], source, ruleOptions)];
+  }
+
+  // Multiple sub-rules: each ### heading is a rule
+  const rules: Rule[] = [];
+  let currentName: string | undefined;
+  let descriptionLines: string[] = [];
+
+  for (const line of rulesSectionLines) {
+    const subMatch = /^### (.+)$/.exec(line);
+    const subText = subMatch?.[1];
+
+    if (subText !== undefined) {
+      // Flush previous sub-rule
+      if (currentName !== undefined) {
+        rules.push(
+          createRule(
+            currentName,
+            descriptionLines.join('\n').trim(),
+            [],
+            source,
+            ruleOptions,
+          ),
+        );
+      }
+      currentName = subText.trim();
+      descriptionLines = [];
+    } else if (currentName !== undefined) {
+      descriptionLines.push(line);
+    }
+    // Lines before the first ### heading are ignored (preamble)
+  }
+
+  // Flush final sub-rule
+  if (currentName !== undefined) {
+    rules.push(
+      createRule(
+        currentName,
+        descriptionLines.join('\n').trim(),
+        [],
+        source,
+        ruleOptions,
+      ),
+    );
+  }
+
+  return rules.length > 0 ? rules : undefined;
 }
 
 /**
- * Extract the content of a `## <heading>` section from lines.
- * Returns the text between the heading and the next `## ` heading (or EOF).
+ * Extract the lines of a `## <heading>` section.
+ * Returns the lines between the heading and the next `## ` heading (or EOF).
  * Returns undefined if the heading is not found.
  */
-function extractSection(lines: string[], heading: string): string | undefined {
+function extractSectionLines(
+  lines: string[],
+  heading: string,
+): string[] | undefined {
   let inSection = false;
   const sectionLines: string[] = [];
 
@@ -128,7 +189,7 @@ function extractSection(lines: string[], heading: string): string | undefined {
     return undefined;
   }
 
-  return sectionLines.join('\n').trim();
+  return sectionLines;
 }
 
 function isEnoent(error: unknown): boolean {
