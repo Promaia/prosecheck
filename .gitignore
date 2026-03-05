@@ -3,6 +3,5 @@ dist/
 *.tsbuildinfo
 .prosecheck/working/
 .prosecheck/config.local.json
-.prosecheck/last-user-run
 coverage/
 .claude/settings.local.json
