@@ -1,7 +1,13 @@
-import { Command } from 'commander';
+import { Command, InvalidArgumentError } from 'commander';
 import { lint } from './commands/lint.js';
 import { init } from './commands/init.js';
 import { config } from './commands/config.js';
+
+function parseBool(value: string): boolean {
+  if (value === '1' || value === 'true') return true;
+  if (value === '0' || value === 'false') return false;
+  throw new InvalidArgumentError('Expected 0, 1, true, or false.');
+}
 
 const program = new Command();
 
@@ -18,16 +24,11 @@ program
   .option('--format <format>', 'Output format (stylish, json, sarif)')
   .option('--ref <ref>', 'Git comparison ref override')
   .option('--timeout <seconds>', 'Timeout in seconds', parseFloat)
-  .option('--warn-as-error', 'Treat warnings as errors')
-  .option('--no-warn-as-error', 'Do not treat warnings as errors')
-  .option('--retry-dropped', 'Retry rules that produce no output')
-  .option('--no-retry-dropped', 'Do not retry dropped rules')
-  .option('--last-run-read', 'Read last-run hash for incremental narrowing')
-  .option('--no-last-run-read', 'Do not read last-run hash')
-  .option('--last-run-write', 'Write current HEAD as last-run hash')
-  .option('--no-last-run-write', 'Do not write last-run hash')
-  .option('--agent-teams', 'Enable agent teams for parallel rule processing')
-  .option('--no-agent-teams', 'Disable agent teams')
+  .option('--warn-as-error <bool>', 'Treat warnings as errors (0 or 1)', parseBool)
+  .option('--retry-dropped <bool>', 'Retry rules that produce no output (0 or 1)', parseBool)
+  .option('--last-run-read <bool>', 'Read last-run hash for incremental narrowing (0 or 1)', parseBool)
+  .option('--last-run-write <bool>', 'Write current HEAD as last-run hash (0 or 1)', parseBool)
+  .option('--agent-teams <bool>', 'Enable agent teams for parallel rule processing (0 or 1)', parseBool)
   .option(
     '--max-turns <turns>',
     'Maximum agentic turns per Claude invocation',
