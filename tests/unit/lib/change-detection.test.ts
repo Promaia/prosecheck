@@ -49,7 +49,7 @@ const mockedBuildIgnoreFilter = vi.mocked(buildIgnoreFilter);
 const PROJECT_ROOT = '/fake/project';
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 describe('getMergeBase', () => {
@@ -195,7 +195,6 @@ describe('detectChanges', () => {
   }) {
     const mergeBase = opts.mergeBase ?? 'merge-base-hash';
     const changedFiles = opts.changedFiles ?? [];
-    const head = opts.head ?? 'current-head-hash';
 
     // getMergeBase
     mockedExeca.mockResolvedValueOnce({ stdout: mergeBase } as never);
@@ -203,8 +202,10 @@ describe('detectChanges', () => {
     mockedExeca.mockResolvedValueOnce({
       stdout: changedFiles.join('\n'),
     } as never);
-    // getCurrentHead (for lastRun.write)
-    mockedExeca.mockResolvedValueOnce({ stdout: head } as never);
+    // getCurrentHead — only mocked when head is explicitly provided (for lastRun.write tests)
+    if (opts.head !== undefined) {
+      mockedExeca.mockResolvedValueOnce({ stdout: opts.head } as never);
+    }
   }
 
   it('triggers rules whose scope contains changed files', async () => {

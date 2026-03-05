@@ -128,12 +128,7 @@ Detects changed files via `git diff --name-only` and determines which rules to t
 
 Returns `ChangeDetectionResult` with: `comparisonRef` (for agents), `triggeredRules`, `changedFiles`, and `changedFilesByRule` map.
 
-Default last-run behavior by environment:
-
-| | Interactive | CI |
-|---|---|---|
-| Read last-run | No | Yes |
-| Write last-run | Yes | No |
+Default last-run behavior: both `read` and `write` are off. Users enable incremental tracking via environment overrides or CLI flags (e.g., `--last-run-write 1` for local development, `--last-run-read 1` in CI).
 
 ### `ignore.ts` — Pattern Matching [IMPLEMENTED]
 

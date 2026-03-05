@@ -60,7 +60,7 @@ describe('loadConfig', () => {
     expect(config.baseBranch).toBe('main');
     expect(config.timeout).toBe(300);
     expect(config.lastRun.read).toBe(false);
-    expect(config.lastRun.write).toBe(true);
+    expect(config.lastRun.write).toBe(false);
   });
 
   it('applies defaults when config.json does not exist', async () => {
