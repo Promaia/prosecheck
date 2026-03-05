@@ -31,7 +31,9 @@ This rule applies to files matching:
 
 ## Instructions
 
-These files changed, but they may interact with related code in important ways. Look at the changes since the listed git ref and evaluate the full codebase within the rule's scope. Output your pass/warn/fail status to the specified output file. Do not prompt the user for any questions. Output only to the JSON file without user interaction.
+These files changed, but they may interact with related code in important ways. Look at the changes since the listed git ref and evaluate relevant code within the rule's scope. Output your pass/warn/fail status to the specified output file. Do not prompt the user for any questions. Output only to the JSON file without user interaction. Exit when you've output the json file.
+
+Never use compound commands (&&, ||, |, ;, etc.) in shell commands — these are always denied in your current environment. Use separate commands instead.
 
 ## Output
 
