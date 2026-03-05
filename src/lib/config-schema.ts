@@ -62,7 +62,7 @@ export const ClaudeCodeSchema = z
   .object({
     singleInstance: z
       .boolean()
-      .default(false)
+      .default(true)
       .describe(
         'Launch one Claude Code instance with a combined prompt instead of one instance per rule.',
       ),
@@ -185,7 +185,7 @@ export const ConfigSchema = z
       .default(1)
       .describe('Max retry attempts per dropped rule'),
     claudeCode: ClaudeCodeSchema.default(() => ({
-      singleInstance: false,
+      singleInstance: true,
       agentTeams: true,
       maxTurns: 30,
       allowedTools: DEFAULT_ALLOWED_TOOLS,

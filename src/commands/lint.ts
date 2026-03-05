@@ -102,7 +102,7 @@ export async function lint(options: LintOptions): Promise<void> {
 
     // Determine mode and format
     const mode =
-      options.mode ?? (environment === 'ci' ? 'claude-code' : 'user-prompt');
+      options.mode ?? 'claude-code';
     const format = options.format ?? 'stylish';
 
     // Start interactive UI if applicable (lazy import to avoid loading Ink for non-interactive paths)
