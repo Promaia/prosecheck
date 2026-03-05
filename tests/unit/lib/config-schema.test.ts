@@ -31,7 +31,7 @@ describe('ConfigSchema', () => {
 
   it('applies nested defaults for claudeCode', () => {
     const result = ConfigSchema.parse({});
-    expect(result.claudeCode.singleInstance).toBe(false);
+    expect(result.claudeCode.singleInstance).toBe(true);
     expect(result.claudeCode.maxTurns).toBe(30);
     expect(result.claudeCode.allowedTools).toBeInstanceOf(Array);
     expect(result.claudeCode.allowedTools.length).toBeGreaterThan(0);
