@@ -122,8 +122,8 @@ describe('claude-code mode', () => {
     });
     const results = await runClaudeCode(options);
 
-    expect(results).toHaveLength(1);
-    expect(results[0]?.ruleId).toBe('__single__');
+    expect(results).toHaveLength(2);
+    expect(results.map((r) => r.ruleId).sort()).toEqual(['rule-a', 'rule-b']);
     expect(mockExeca).toHaveBeenCalledTimes(1);
   });
 

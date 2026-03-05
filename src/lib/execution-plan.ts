@@ -2,15 +2,13 @@ import type { Rule } from '../types/index.js';
 
 // --- Types ---
 
-export type InvocationType =
-  | 'one-to-one'
-  | 'one-to-many-teams'
-  | 'one-to-many-single';
-
 export type ClaudeToRuleShape =
   | 'one-to-one'
   | 'one-to-many-teams'
   | 'one-to-many-single';
+
+/** Runtime invocation type — same values as ClaudeToRuleShape. */
+export type InvocationType = ClaudeToRuleShape;
 
 export interface Invocation {
   /** How this invocation processes its rules */
