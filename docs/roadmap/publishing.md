@@ -8,11 +8,11 @@ Active work toward making prosecheck available as a public tool.
 
 Prepare and publish prosecheck to the npm registry.
 
-- [ ] Add LICENSE file (choose license)
-- [ ] Polish README with usage examples, badges, and screenshots
-- [ ] Add `prepublishOnly` script that runs `npm run ci`
-- [ ] Configure `files` field in `package.json` to publish only `dist/`, `README.md`, `LICENSE`
-- [ ] Set up semantic versioning and initial `0.1.0` release
+- [x] Add LICENSE file (choose license)
+- [x] Polish README with usage examples, badges, and screenshots
+- [x] Add `prepublishOnly` script that runs `npm run ci`
+- [x] Configure `files` field in `package.json` to publish only `dist/`, `README.md`, `LICENSE`
+- [x] Set up semantic versioning and initial `1.0.0` release
 - [ ] Publish to npm (`npm publish`)
 - [ ] Verify `npx prosecheck init` and `npx prosecheck lint` work from a clean install
 
