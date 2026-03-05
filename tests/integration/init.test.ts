@@ -141,6 +141,24 @@ describe('--github-actions', () => {
     expect(content).toContain('prosecheck lint');
     expect(content).toContain('--last-run-read 0');
     expect(content).toContain('ANTHROPIC_API_KEY');
+    expect(content).toContain('--format sarif');
+    expect(content).toContain('upload-sarif');
+  });
+
+  it('omits SARIF when --sarif 0', async () => {
+    await init({
+      projectRoot: tmpDir,
+      ...DEFAULT_OPTS,
+      githubActions: true,
+      sarif: false,
+    });
+
+    const workflowPath = path.join(tmpDir, '.github/workflows/prosecheck.yml');
+    const content = await readFile(workflowPath, 'utf-8');
+
+    expect(content).toContain('prosecheck lint');
+    expect(content).not.toContain('--format sarif');
+    expect(content).not.toContain('upload-sarif');
   });
 
   it('does not overwrite existing workflow', async () => {

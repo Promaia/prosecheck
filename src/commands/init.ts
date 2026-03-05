@@ -1,5 +1,11 @@
 import { mkdir, writeFile, readFile, access, chmod } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  buildFullWorkflow,
+  buildIncrementalPrWorkflow,
+  buildMergeQueueWorkflow,
+  WORKFLOW_HASH_CHECK,
+} from '../templates/workflows.js';
 
 export interface InitOptions {
   /** Project root directory */
@@ -16,6 +22,8 @@ export interface InitOptions {
   gitPrePush?: boolean;
   /** Add a Claude Code Stop hook */
   claudeStopHook?: boolean;
+  /** Include SARIF upload in generated workflows (default: true) */
+  sarif?: boolean | undefined;
 }
 
 const DEFAULT_CONFIG = {
@@ -40,86 +48,6 @@ const GITIGNORE_ENTRIES = [
   '.prosecheck/config.local.json',
 ];
 
-// --- Workflow templates ---
-
-const WORKFLOW_FULL = `name: Prosecheck
-on: [push, pull_request]
-
-jobs:
-  prosecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm ci
-      - run: npm install -g @anthropic-ai/claude-code
-      - run: npx prosecheck lint --last-run-read 0
-        env:
-          ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
-`;
-
-const WORKFLOW_INCREMENTAL_PR = `name: Prosecheck (incremental)
-on: [pull_request]
-
-jobs:
-  prosecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm ci
-      - run: npm install -g @anthropic-ai/claude-code
-      - run: npx prosecheck lint --last-run-read 1
-        env:
-          ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
-`;
-
-const WORKFLOW_INCREMENTAL_MERGE_QUEUE = `name: Prosecheck (merge queue)
-on:
-  merge_group:
-
-jobs:
-  prosecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm ci
-      - run: npm install -g @anthropic-ai/claude-code
-      - run: npx prosecheck lint --last-run-read 0
-        env:
-          ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
-`;
-
-const WORKFLOW_HASH_CHECK = `name: Prosecheck (hash check)
-on: [push, pull_request]
-
-jobs:
-  check-hash:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Verify prosecheck was run
-        run: |
-          if [ ! -f .prosecheck/last-user-run ]; then
-            echo "::error::No .prosecheck/last-user-run file found. Run 'prosecheck lint --last-run-write 1' locally before pushing."
-            exit 1
-          fi
-          EXPECTED=\$(git rev-parse HEAD)
-          ACTUAL=\$(cat .prosecheck/last-user-run | tr -d '\\n')
-          if [ "\$ACTUAL" != "\$EXPECTED" ]; then
-            echo "::error::last-user-run hash (\$ACTUAL) does not match HEAD (\$EXPECTED). Run 'prosecheck lint --last-run-write 1' on the latest commit."
-            exit 1
-          fi
-          echo "Prosecheck hash verified."
-`;
-
 const PRE_PUSH_HOOK = `#!/bin/sh
 # prosecheck pre-push hook
 npx prosecheck lint
@@ -133,6 +61,7 @@ npx prosecheck lint
  */
 export async function init(options: InitOptions): Promise<void> {
   const { projectRoot } = options;
+  const sarif = options.sarif ?? true;
   const prosecheckDir = path.join(projectRoot, '.prosecheck');
   const configPath = path.join(prosecheckDir, 'config.json');
   const alreadyInitialized = await fileExists(configPath);
@@ -173,19 +102,23 @@ export async function init(options: InitOptions): Promise<void> {
   }
 
   if (options.githubActions) {
-    await writeWorkflow(projectRoot, 'prosecheck.yml', WORKFLOW_FULL);
+    await writeWorkflow(
+      projectRoot,
+      'prosecheck.yml',
+      buildFullWorkflow(sarif),
+    );
   }
 
   if (options.githubActionsIncremental) {
     await writeWorkflow(
       projectRoot,
       'prosecheck-incremental.yml',
-      WORKFLOW_INCREMENTAL_PR,
+      buildIncrementalPrWorkflow(sarif),
     );
     await writeWorkflow(
       projectRoot,
       'prosecheck-merge-queue.yml',
-      WORKFLOW_INCREMENTAL_MERGE_QUEUE,
+      buildMergeQueueWorkflow(sarif),
     );
     await setInteractiveLastRunWrite(projectRoot);
   }

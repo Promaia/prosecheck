@@ -115,6 +115,11 @@ program
     '--claude-stop-hook',
     'Add a Claude Code Stop hook that runs prosecheck after responses',
   )
+  .option(
+    '--sarif <bool>',
+    'Include SARIF upload in generated workflows (default: true)',
+    parseBool,
+  )
   .action(
     async (options: {
       rules?: boolean;
@@ -123,6 +128,7 @@ program
       githubActionsHashCheck?: boolean;
       gitPrePush?: boolean;
       claudeStopHook?: boolean;
+      sarif?: boolean;
     }) => {
       await init({
         projectRoot: process.cwd(),
@@ -132,6 +138,7 @@ program
         githubActionsHashCheck: options.githubActionsHashCheck ?? false,
         gitPrePush: options.gitPrePush ?? false,
         claudeStopHook: options.claudeStopHook ?? false,
+        sarif: options.sarif,
       });
     },
   );
