@@ -8,8 +8,7 @@ export interface SummaryProps {
 }
 
 /**
- * Final results summary after all rules have been evaluated.
- * Shows pass/warn/fail/dropped counts and overall status.
+ * Final results summary — single line with category counts.
  */
 export function Summary({ results }: SummaryProps): React.ReactElement {
   const passed = results.results.filter(
@@ -23,67 +22,28 @@ export function Summary({ results }: SummaryProps): React.ReactElement {
   ).length;
   const droppedCount = results.dropped.length;
   const errorCount = results.errors.length;
-  const total = results.results.length + droppedCount + errorCount;
+
+  const parts: { count: number; label: string; color: string }[] = [];
+  if (failed > 0) parts.push({ count: failed, label: 'failed', color: 'red' });
+  if (passed > 0)
+    parts.push({ count: passed, label: 'passed', color: 'green' });
+  if (warned > 0)
+    parts.push({ count: warned, label: 'warned', color: 'yellow' });
+  if (droppedCount > 0)
+    parts.push({ count: droppedCount, label: 'dropped', color: 'magenta' });
+  if (errorCount > 0)
+    parts.push({ count: errorCount, label: 'errors', color: 'red' });
 
   return (
-    <Box flexDirection="column" marginTop={1}>
-      <Box gap={1}>
-        <Text bold>{total} rules</Text>
-        <Text dimColor>|</Text>
-        {passed > 0 && (
-          <StatusCount count={passed} label="passed" color="green" />
-        )}
-        {warned > 0 && (
-          <StatusCount count={warned} label="warned" color="yellow" />
-        )}
-        {failed > 0 && (
-          <StatusCount count={failed} label="failed" color="red" />
-        )}
-        {droppedCount > 0 && (
-          <StatusCount count={droppedCount} label="dropped" color="magenta" />
-        )}
-        {errorCount > 0 && (
-          <StatusCount count={errorCount} label="errors" color="red" />
-        )}
-      </Box>
-      <Box marginTop={1}>
-        <Text bold>Status: </Text>
-        <OverallStatusText status={results.overallStatus} />
-      </Box>
+    <Box marginTop={1}>
+      {parts.map((part, i) => (
+        <React.Fragment key={part.label}>
+          {i > 0 ? <Text dimColor> | </Text> : null}
+          <Text color={part.color}>
+            {part.count} {part.label}
+          </Text>
+        </React.Fragment>
+      ))}
     </Box>
   );
-}
-
-function StatusCount({
-  count,
-  label,
-  color,
-}: {
-  count: number;
-  label: string;
-  color: string;
-}): React.ReactElement {
-  return (
-    <>
-      <Text color={color}>
-        {count} {label}
-      </Text>
-      <Text dimColor>|</Text>
-    </>
-  );
-}
-
-function OverallStatusText({ status }: { status: string }): React.ReactElement {
-  switch (status) {
-    case 'pass':
-      return <Text color="green">PASS</Text>;
-    case 'warn':
-      return <Text color="yellow">WARN</Text>;
-    case 'fail':
-      return <Text color="red">FAIL</Text>;
-    case 'dropped':
-      return <Text color="magenta">DROPPED</Text>;
-    default:
-      return <Text>{status.toUpperCase()}</Text>;
-  }
 }

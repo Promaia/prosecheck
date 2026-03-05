@@ -68,6 +68,7 @@ function useLintAppState(progressRef: ProgressRef): {
             name: event.ruleName,
             runStatus: 'running',
             result: existing?.result,
+            startedAt: existing?.startedAt ?? Date.now(),
           });
           break;
         case 'result':

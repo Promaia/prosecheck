@@ -23,25 +23,6 @@ function getFrame(instance: ReturnType<typeof render>): string {
 }
 
 describe('Summary', () => {
-  it('renders total rule count', () => {
-    const results = makeResults({
-      results: [
-        {
-          ruleId: 'a',
-          result: { status: 'pass', rule: 'A', source: 'RULES.md' },
-        },
-        {
-          ruleId: 'b',
-          result: { status: 'pass', rule: 'B', source: 'RULES.md' },
-        },
-      ],
-    });
-
-    const frame = getFrame(render(<Summary results={results} />));
-
-    expect(frame).toContain('2 rules');
-  });
-
   it('renders pass count', () => {
     const results = makeResults({
       results: [
@@ -134,16 +115,30 @@ describe('Summary', () => {
     );
   });
 
-  it('renders overall PASS status', () => {
-    const results = makeResults({ overallStatus: 'pass' });
+  it('uses pipe separators between categories', () => {
+    const results = makeResults({
+      results: [
+        {
+          ruleId: 'a',
+          result: { status: 'pass', rule: 'A', source: 'RULES.md' },
+        },
+        {
+          ruleId: 'b',
+          result: {
+            status: 'fail',
+            rule: 'B',
+            source: 'RULES.md',
+            headline: 'h',
+            comments: [{ message: 'm' }],
+          },
+        },
+      ],
+      overallStatus: 'fail',
+    });
 
-    expect(getFrame(render(<Summary results={results} />))).toContain('PASS');
-  });
+    const frame = getFrame(render(<Summary results={results} />));
 
-  it('renders overall FAIL status', () => {
-    const results = makeResults({ overallStatus: 'fail' });
-
-    expect(getFrame(render(<Summary results={results} />))).toContain('FAIL');
+    expect(frame).toContain('|');
   });
 
   it('renders mixed results summary', () => {
@@ -181,10 +176,27 @@ describe('Summary', () => {
 
     const frame = getFrame(render(<Summary results={results} />));
 
-    expect(frame).toContain('3 rules');
     expect(frame).toContain('1 passed');
     expect(frame).toContain('1 failed');
     expect(frame).toContain('1 dropped');
-    expect(frame).toContain('FAIL');
+  });
+
+  it('omits categories with zero count', () => {
+    const results = makeResults({
+      results: [
+        {
+          ruleId: 'a',
+          result: { status: 'pass', rule: 'A', source: 'RULES.md' },
+        },
+      ],
+    });
+
+    const frame = getFrame(render(<Summary results={results} />));
+
+    expect(frame).toContain('1 passed');
+    expect(frame).not.toContain('failed');
+    expect(frame).not.toContain('warned');
+    expect(frame).not.toContain('dropped');
+    expect(frame).not.toContain('errors');
   });
 });
