@@ -4,80 +4,18 @@ import path from 'node:path';
 import os from 'node:os';
 import type { ClaudeCodeModeOptions } from '../../../src/modes/claude-code.js';
 
-// Mock spawnClaude at module level to avoid needing the actual claude CLI
-const mockSpawnClaude = vi.fn().mockResolvedValue({
+// Mock execa so we intercept `claude` calls and can inspect args
+const mockExeca = vi.fn().mockResolvedValue({
   exitCode: 0,
   stdout: 'ok',
   stderr: '',
+  pid: 123,
 });
+vi.mock('execa', () => ({
+  execa: (...args: unknown[]) => mockExeca(...args) as unknown,
+}));
 
-vi.mock('../../../src/modes/claude-code.js', async () => {
-  const { readFile } = await import('node:fs/promises');
-  const nodePath = await import('node:path');
-
-  const OUTPUTS_DIR = '.prosecheck/working/outputs';
-
-  // Re-implement runClaudeCode using the mock spawnClaude
-  async function runClaudeCode(options: ClaudeCodeModeOptions) {
-    if (options.singleInstance) {
-      const lines: string[] = [];
-      for (const [ruleId, promptPath] of options.promptPaths) {
-        const content = await readFile(promptPath, 'utf-8');
-        const outputPath = nodePath.join(
-          options.projectRoot,
-          OUTPUTS_DIR,
-          `${ruleId}.json`,
-        );
-        lines.push(
-          `## Rule: ${ruleId}\nOutput to: ${outputPath}\n\n${content}\n\n---\n`,
-        );
-      }
-      const result = (await mockSpawnClaude(
-        lines.join('\n'),
-        options.projectRoot,
-      )) as {
-        exitCode: number | null;
-        stdout: string;
-        stderr: string;
-      };
-      return [
-        {
-          ruleId: '__single_instance__',
-          exitCode: result.exitCode,
-          stdout: result.stdout,
-          stderr: result.stderr,
-        },
-      ];
-    }
-
-    const promises = [];
-    for (const [ruleId, promptPath] of options.promptPaths) {
-      promises.push(
-        readFile(promptPath, 'utf-8').then(async (content) => {
-          const result = (await mockSpawnClaude(
-            content,
-            options.projectRoot,
-          )) as {
-            exitCode: number | null;
-            stdout: string;
-            stderr: string;
-          };
-          return {
-            ruleId,
-            exitCode: result.exitCode,
-            stdout: result.stdout,
-            stderr: result.stderr,
-          };
-        }),
-      );
-    }
-    return Promise.all(promises);
-  }
-
-  return { runClaudeCode, spawnClaude: mockSpawnClaude };
-});
-
-// Import after mock setup
+// Import after mock setup — uses real runClaudeCode/spawnClaude with mocked execa
 const { runClaudeCode } = await import('../../../src/modes/claude-code.js');
 
 let tmpDir: string;
@@ -90,7 +28,7 @@ beforeEach(async () => {
   await mkdir(path.join(tmpDir, '.prosecheck/working/prompts'), {
     recursive: true,
   });
-  mockSpawnClaude.mockClear();
+  mockExeca.mockClear();
 });
 
 afterEach(async () => {
@@ -115,9 +53,27 @@ function makeOptions(
     promptPaths: new Map(),
     singleInstance: false,
     agentTeams: false,
+    maxTurns: 30,
+    allowedTools: ['Read', 'Grep', 'Glob'],
+    tools: [],
+    additionalArgs: [],
     rules: [],
     ...overrides,
   };
+}
+
+/** Extract the args array from a specific mockExeca call */
+function getClaudeArgs(callIndex: number): string[] {
+  const call = mockExeca.mock.calls[callIndex] as unknown[];
+  return call[1] as string[];
+}
+
+/** Extract the --allowedTools value from a claude call's args */
+function getAllowedToolsArg(callIndex: number): string | undefined {
+  const args = getClaudeArgs(callIndex);
+  const idx = args.indexOf('--allowedTools');
+  if (idx === -1) return undefined;
+  return args[idx + 1];
 }
 
 describe('claude-code mode', () => {
@@ -133,7 +89,7 @@ describe('claude-code mode', () => {
     const results = await runClaudeCode(options);
 
     expect(results).toHaveLength(2);
-    expect(mockSpawnClaude).toHaveBeenCalledTimes(2);
+    expect(mockExeca).toHaveBeenCalledTimes(2);
     const ruleIds = results.map((r) => r.ruleId).sort();
     expect(ruleIds).toEqual(['rule-a', 'rule-b']);
   });
@@ -151,7 +107,7 @@ describe('claude-code mode', () => {
 
     expect(results).toHaveLength(1);
     expect(results[0]?.ruleId).toBe('__single_instance__');
-    expect(mockSpawnClaude).toHaveBeenCalledTimes(1);
+    expect(mockExeca).toHaveBeenCalledTimes(1);
   });
 
   it('returns exit codes from processes', async () => {
@@ -171,5 +127,150 @@ describe('claude-code mode', () => {
     const results = await runClaudeCode(options);
 
     expect(results).toHaveLength(0);
+  });
+
+  it('passes config allowedTools to claude CLI', async () => {
+    const promptPath = await writePrompt('rule-a', 'Prompt A');
+    const promptPaths = new Map<string, string>();
+    promptPaths.set('rule-a', promptPath);
+
+    const options = makeOptions({
+      promptPaths,
+      allowedTools: ['Read', 'Grep', 'Glob'],
+    });
+    await runClaudeCode(options);
+
+    const toolsArg = getAllowedToolsArg(0);
+    expect(toolsArg).toBeDefined();
+    // Config tools should be present
+    expect(toolsArg).toContain('Read');
+    expect(toolsArg).toContain('Grep');
+    expect(toolsArg).toContain('Glob');
+  });
+
+  it('appends per-rule Write permission in multi-instance mode', async () => {
+    const promptPathA = await writePrompt('rule-a', 'Prompt A');
+    const promptPathB = await writePrompt('rule-b', 'Prompt B');
+
+    const promptPaths = new Map<string, string>();
+    promptPaths.set('rule-a', promptPathA);
+    promptPaths.set('rule-b', promptPathB);
+
+    const options = makeOptions({
+      promptPaths,
+      allowedTools: ['Read'],
+    });
+    await runClaudeCode(options);
+
+    expect(mockExeca).toHaveBeenCalledTimes(2);
+
+    // Collect the allowedTools from both calls
+    const toolsArgs = [0, 1].map((i) => getAllowedToolsArg(i));
+
+    // Each call should have Write scoped to its specific output file (absolute path)
+    const expectedA = `.prosecheck/working/outputs/rule-a.json)`;
+    const expectedB = `.prosecheck/working/outputs/rule-b.json)`;
+    expect(toolsArgs).toContainEqual(expect.stringContaining(expectedA));
+    expect(toolsArgs).toContainEqual(expect.stringContaining(expectedB));
+    // Paths should be absolute (contain the tmpDir prefix)
+    for (const toolsArg of toolsArgs) {
+      const writeEntry = (toolsArg as string)
+        .split(',')
+        .find((t) => t.startsWith('Write('));
+      expect(writeEntry).toContain(tmpDir.replaceAll('\\', '/'));
+    }
+
+    // Neither call should have the other rule's Write permission
+    for (const toolsArg of toolsArgs) {
+      expect(toolsArg).toBeDefined();
+      const writeEntries = (toolsArg as string)
+        .split(',')
+        .filter((t) => t.startsWith('Write('));
+      expect(writeEntries).toHaveLength(1);
+    }
+  });
+
+  it('appends wildcard Write permission in single-instance mode', async () => {
+    const promptPathA = await writePrompt('rule-a', 'Prompt A');
+    const promptPathB = await writePrompt('rule-b', 'Prompt B');
+
+    const promptPaths = new Map<string, string>();
+    promptPaths.set('rule-a', promptPathA);
+    promptPaths.set('rule-b', promptPathB);
+
+    const options = makeOptions({
+      promptPaths,
+      singleInstance: true,
+      allowedTools: ['Read'],
+    });
+    await runClaudeCode(options);
+
+    expect(mockExeca).toHaveBeenCalledTimes(1);
+
+    const toolsArg = getAllowedToolsArg(0);
+    expect(toolsArg).toBeDefined();
+    expect(toolsArg).toContain('Read');
+    // Write permission should use absolute path
+    const expectedPrefix = tmpDir.replaceAll('\\', '/');
+    expect(toolsArg).toContain(
+      `Write(${expectedPrefix}/.prosecheck/working/outputs/*)`,
+    );
+  });
+
+  it('passes --max-turns flag', async () => {
+    const promptPath = await writePrompt('rule-a', 'Prompt A');
+    const promptPaths = new Map<string, string>();
+    promptPaths.set('rule-a', promptPath);
+
+    const options = makeOptions({ promptPaths, maxTurns: 50 });
+    await runClaudeCode(options);
+
+    const args = getClaudeArgs(0);
+    const idx = args.indexOf('--max-turns');
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe('50');
+  });
+
+  it('passes --output-format json flag', async () => {
+    const promptPath = await writePrompt('rule-a', 'Prompt A');
+    const promptPaths = new Map<string, string>();
+    promptPaths.set('rule-a', promptPath);
+
+    const options = makeOptions({ promptPaths });
+    await runClaudeCode(options);
+
+    const args = getClaudeArgs(0);
+    const idx = args.indexOf('--output-format');
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe('json');
+  });
+
+  it('passes --system-prompt when provided', async () => {
+    const promptPath = await writePrompt('rule-a', 'Prompt A');
+    const promptPaths = new Map<string, string>();
+    promptPaths.set('rule-a', promptPath);
+
+    const options = makeOptions({
+      promptPaths,
+      systemPrompt: 'You are a linter.',
+    });
+    await runClaudeCode(options);
+
+    const args = getClaudeArgs(0);
+    const idx = args.indexOf('--system-prompt');
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe('You are a linter.');
+  });
+
+  it('omits --system-prompt when not provided', async () => {
+    const promptPath = await writePrompt('rule-a', 'Prompt A');
+    const promptPaths = new Map<string, string>();
+    promptPaths.set('rule-a', promptPath);
+
+    const options = makeOptions({ promptPaths });
+    await runClaudeCode(options);
+
+    const args = getClaudeArgs(0);
+    expect(args).not.toContain('--system-prompt');
   });
 });

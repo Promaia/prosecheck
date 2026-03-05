@@ -28,6 +28,15 @@ program
   .option('--no-last-run-write', 'Do not write last-run hash')
   .option('--agent-teams', 'Enable agent teams for parallel rule processing')
   .option('--no-agent-teams', 'Disable agent teams')
+  .option(
+    '--max-turns <turns>',
+    'Maximum agentic turns per Claude invocation',
+    parseInt,
+  )
+  .option(
+    '--allowed-tools <tools>',
+    'Comma-separated list of allowed tools for Claude',
+  )
   .action(
     async (options: {
       env?: string;
@@ -40,6 +49,8 @@ program
       lastRunRead?: boolean;
       lastRunWrite?: boolean;
       agentTeams?: boolean;
+      maxTurns?: number;
+      allowedTools?: string;
     }) => {
       await lint({
         projectRoot: process.cwd(),
@@ -53,6 +64,8 @@ program
         lastRunRead: options.lastRunRead,
         lastRunWrite: options.lastRunWrite,
         agentTeams: options.agentTeams,
+        maxTurns: options.maxTurns,
+        allowedTools: options.allowedTools,
       });
     },
   );

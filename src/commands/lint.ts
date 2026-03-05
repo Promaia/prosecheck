@@ -27,6 +27,10 @@ export interface LintOptions {
   timeout?: number | undefined;
   /** Override agentTeams config */
   agentTeams?: boolean | undefined;
+  /** Override maxTurns config */
+  maxTurns?: number | undefined;
+  /** Override allowedTools config (comma-separated string from CLI) */
+  allowedTools?: string | undefined;
 }
 
 /**
@@ -71,6 +75,18 @@ export async function lint(options: LintOptions): Promise<void> {
       cliOverrides['claudeCode'] = {
         ...(cliOverrides['claudeCode'] as Record<string, unknown> | undefined),
         agentTeams: options.agentTeams,
+      };
+    }
+    if (options.maxTurns !== undefined) {
+      cliOverrides['claudeCode'] = {
+        ...(cliOverrides['claudeCode'] as Record<string, unknown> | undefined),
+        maxTurns: options.maxTurns,
+      };
+    }
+    if (options.allowedTools !== undefined) {
+      cliOverrides['claudeCode'] = {
+        ...(cliOverrides['claudeCode'] as Record<string, unknown> | undefined),
+        allowedTools: options.allowedTools.split(',').map((t) => t.trim()),
       };
     }
 

@@ -19,6 +19,45 @@ export const LastRunSchema = z
   })
   .describe('Incremental run tracking via .prosecheck/last-user-run');
 
+const DEFAULT_ALLOWED_TOOLS = [
+  'Read',
+  'Grep',
+  'Glob',
+  'Bash(git diff *)',
+  'Bash(git log *)',
+  'Bash(git show *)',
+  'Bash(cat *)',
+  'Bash(find *)',
+  'Bash(head *)',
+  'Bash(tail *)',
+  'Bash(wc *)',
+  'Bash(ls *)',
+  'WebFetch',
+  'WebSearch',
+  'Task',
+  'TaskOutput',
+  'TaskStop',
+  'TeamCreate',
+  'TeamDelete',
+  'SendMessage',
+];
+
+const DEFAULT_TOOLS = [
+  'Read',
+  'Grep',
+  'Glob',
+  'Bash',
+  'Write',
+  'WebFetch',
+  'WebSearch',
+  'Task',
+  'TaskOutput',
+  'TaskStop',
+  'TeamCreate',
+  'TeamDelete',
+  'SendMessage',
+];
+
 export const ClaudeCodeSchema = z
   .object({
     singleInstance: z
@@ -32,6 +71,30 @@ export const ClaudeCodeSchema = z
       .default(true)
       .describe(
         'Enable agent teams support. When true, the orchestration prompt instructs the agent to launch sub-agents for each rule, and sets CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1.',
+      ),
+    maxTurns: z
+      .number()
+      .int()
+      .positive()
+      .default(30)
+      .describe('Maximum number of agentic turns per Claude CLI invocation.'),
+    allowedTools: z
+      .array(z.string())
+      .default(DEFAULT_ALLOWED_TOOLS)
+      .describe(
+        'Tools the Claude CLI agent is allowed to use. Passed as --allowedTools.',
+      ),
+    tools: z
+      .array(z.string())
+      .default(DEFAULT_TOOLS)
+      .describe(
+        'Tools available to the Claude CLI agent. Passed as --tools. Controls which tools the agent can see and invoke.',
+      ),
+    additionalArgs: z
+      .array(z.string())
+      .default([])
+      .describe(
+        'Additional CLI arguments passed to each claude invocation.',
       ),
   })
   .describe('Claude Code Headless mode settings');
@@ -66,6 +129,9 @@ export const EnvironmentOverrideSchema = z
       .object({
         singleInstance: z.boolean().optional(),
         agentTeams: z.boolean().optional(),
+        maxTurns: z.number().int().positive().optional(),
+        allowedTools: z.array(z.string()).optional(),
+        additionalArgs: z.array(z.string()).optional(),
       })
       .optional(),
     postRun: z.array(z.string()).optional(),
@@ -121,6 +187,10 @@ export const ConfigSchema = z
     claudeCode: ClaudeCodeSchema.default(() => ({
       singleInstance: false,
       agentTeams: true,
+      maxTurns: 30,
+      allowedTools: DEFAULT_ALLOWED_TOOLS,
+      tools: DEFAULT_TOOLS,
+      additionalArgs: [],
     })),
     postRun: z
       .array(z.string())

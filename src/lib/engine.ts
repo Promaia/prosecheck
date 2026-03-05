@@ -5,7 +5,7 @@ import type { CollectResultsOutput } from './results.js';
 import type { ChangeDetectionResult } from './change-detection.js';
 import { runCalculators } from './calculators/index.js';
 import { detectChanges } from './change-detection.js';
-import { generatePrompts } from './prompt.js';
+import { generatePrompts, loadGlobalPrompt } from './prompt.js';
 import { collectResults, computeOverallStatus } from './results.js';
 import { executePostRun } from './post-run.js';
 import { buildUserPrompt, watchForOutputs } from '../modes/user-prompt.js';
@@ -44,7 +44,7 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
   // 1. Clean working directory
   const workingDir = path.join(projectRoot, WORKING_DIR);
   await rm(workingDir, { recursive: true, force: true });
-  await mkdir(workingDir, { recursive: true });
+  await mkdir(path.join(workingDir, 'outputs'), { recursive: true });
 
   // 2. Discover rules via calculators
   const rules = await runCalculators(projectRoot, config);
@@ -88,14 +88,6 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     };
   }
 
-  // Fire 'discovered' progress events
-  const onProgress = context.onProgress;
-  if (onProgress) {
-    for (const rule of changeResult.triggeredRules) {
-      onProgress({ phase: 'discovered', ruleId: rule.id, ruleName: rule.name });
-    }
-  }
-
   // 4. Generate prompts for triggered rules
   const { promptPaths } = await generatePrompts({
     projectRoot,
@@ -104,12 +96,44 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     changedFilesByRule: changeResult.changedFilesByRule,
   });
 
+  // 4b. In user-prompt mode, print the prompt before the UI starts rendering
+  if (mode === 'user-prompt') {
+    const orchestrationPrompt = buildUserPrompt({
+      projectRoot,
+      promptPaths,
+      expectedRuleIds: changeResult.triggeredRules.map((r) => r.id),
+      rules: changeResult.triggeredRules,
+      agentTeams: config.claudeCode.agentTeams,
+    });
+    process.stdout.write(
+      [
+        'USER-PROMPT MODE',
+        'Copy-and-paste the following into your Claude Code session to have it generate outputs.',
+        '---',
+        orchestrationPrompt,
+        '---',
+        '',
+      ].join('\n'),
+    );
+  }
+
+  // Fire 'discovered' progress events
+  const onProgress = context.onProgress;
+  if (onProgress) {
+    for (const rule of changeResult.triggeredRules) {
+      onProgress({ phase: 'discovered', ruleId: rule.id, ruleName: rule.name });
+    }
+  }
+
   // Fire 'running' progress events
   if (onProgress) {
     for (const rule of changeResult.triggeredRules) {
       onProgress({ phase: 'running', ruleId: rule.id, ruleName: rule.name });
     }
   }
+
+  // 4b. Load global system prompt for claude-code mode
+  const globalPrompt = await loadGlobalPrompt(projectRoot);
 
   // 5. Dispatch to operating mode (with live output watching if progress callback)
   let stopWatcher: (() => void) | undefined;
@@ -130,6 +154,7 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     promptPaths,
     changeResult.triggeredRules,
     config,
+    globalPrompt,
   );
 
   stopWatcher?.();
@@ -149,6 +174,7 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
       mode,
       changeResult,
       onProgress,
+      globalPrompt,
     });
   }
 
@@ -185,6 +211,7 @@ async function dispatchMode(
   promptPaths: Map<string, string>,
   triggeredRules: Rule[],
   config: Config,
+  globalPrompt: string | undefined,
 ): Promise<void> {
   const expectedRuleIds = triggeredRules.map((r) => r.id);
 
@@ -192,18 +219,14 @@ async function dispatchMode(
 
   switch (mode) {
     case 'user-prompt': {
-      const userPromptOptions = {
+      // Prompt was already printed before the UI started rendering
+      await watchForOutputs({
         projectRoot,
         promptPaths,
         expectedRuleIds,
         rules: triggeredRules,
         agentTeams,
-      };
-      const orchestrationPrompt = buildUserPrompt(userPromptOptions);
-      // Print prompt for user to copy
-      process.stdout.write(orchestrationPrompt + '\n');
-      // Watch for outputs
-      await watchForOutputs(userPromptOptions);
+      });
       break;
     }
     case 'claude-code': {
@@ -212,6 +235,11 @@ async function dispatchMode(
         promptPaths,
         singleInstance: config.claudeCode.singleInstance,
         agentTeams,
+        maxTurns: config.claudeCode.maxTurns,
+        allowedTools: config.claudeCode.allowedTools,
+        tools: config.claudeCode.tools,
+        additionalArgs: config.claudeCode.additionalArgs,
+        systemPrompt: globalPrompt,
         rules: triggeredRules,
       });
       break;
@@ -241,6 +269,7 @@ interface RetryDroppedOptions {
   mode: string;
   changeResult: ChangeDetectionResult;
   onProgress: OnProgress | undefined;
+  globalPrompt: string | undefined;
 }
 
 /**
@@ -252,8 +281,15 @@ interface RetryDroppedOptions {
  * only retries rules that are still dropped.
  */
 async function retryDroppedRules(options: RetryDroppedOptions): Promise<void> {
-  const { collected, config, projectRoot, mode, changeResult, onProgress } =
-    options;
+  const {
+    collected,
+    config,
+    projectRoot,
+    mode,
+    changeResult,
+    onProgress,
+    globalPrompt,
+  } = options;
   const maxAttempts = config.retryDroppedMaxAttempts;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -277,7 +313,14 @@ async function retryDroppedRules(options: RetryDroppedOptions): Promise<void> {
     });
 
     // Re-dispatch
-    await dispatchMode(mode, projectRoot, promptPaths, droppedRules, config);
+    await dispatchMode(
+      mode,
+      projectRoot,
+      promptPaths,
+      droppedRules,
+      config,
+      globalPrompt,
+    );
 
     // Collect results for retried rules only
     const retryCollected = await collectResults({

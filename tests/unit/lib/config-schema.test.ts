@@ -32,6 +32,12 @@ describe('ConfigSchema', () => {
   it('applies nested defaults for claudeCode', () => {
     const result = ConfigSchema.parse({});
     expect(result.claudeCode.singleInstance).toBe(false);
+    expect(result.claudeCode.maxTurns).toBe(30);
+    expect(result.claudeCode.allowedTools).toBeInstanceOf(Array);
+    expect(result.claudeCode.allowedTools.length).toBeGreaterThan(0);
+    expect(result.claudeCode.allowedTools).toContain('Read');
+    expect(result.claudeCode.allowedTools).toContain('Grep');
+    expect(result.claudeCode.allowedTools).toContain('Glob');
   });
 
   it('provides default environments', () => {
