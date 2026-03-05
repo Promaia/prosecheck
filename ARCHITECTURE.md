@@ -15,7 +15,7 @@ This document describes the architecture of prosecheck, an LLM-powered code lint
 │  lint.ts (main flow)              init.ts (scaffolding)         │
 ├─────────────────────────────────────────────────────────────────┤
 │                     Engine (engine.ts)                          │
-│  Orchestrator: rules → prompts → dispatch → collect → report   │
+│  Orchestrator: rules → prompts → dispatch → collect → report    │
 ├──────────┬──────────┬──────────┬──────────┬─────────────────────┤
 │  Config  │  Rules   │ Prompts  │  Modes   │  Results            │
 │ Loading  │ Discovery│ Generate │ Execute  │  Collection         │
@@ -193,7 +193,7 @@ Discovers `RULES.md` files throughout the project tree using `glob`. Parses YAML
 
 ### `adr.ts` — ADR Calculator [IMPLEMENTED]
 
-Reads Architecture Decision Records from a configured path (default `docs/adr/`). Parses YAML frontmatter (if present) to extract `group` and preserve unknown fields. Only ADRs containing an explicit `## Rules` heading produce prosecheck rules — ADRs without this heading are documentation-only and skipped. The content under `## Rules` becomes the rule description; the ADR title (`# ...`) becomes the rule name. ADR-derived rules apply project-wide (empty inclusions). Gracefully handles missing ADR directory.
+Reads Architecture Decision Records from a configured path (default `docs/adr/`). Parses YAML frontmatter (if present) to extract `group` and preserve unknown fields. Only ADRs containing an explicit `## Rules` heading produce prosecheck rules — ADRs without this heading are documentation-only and skipped. If the `## Rules` section contains `### Sub-rule` headings, each becomes a separate rule (like RULES.md but with `###` instead of `#`); text before the first `###` is ignored as preamble. If there are no `###` headings, the entire section is one rule named after the ADR title. ADR-derived rules apply project-wide (empty inclusions). Gracefully handles missing ADR directory.
 
 ---
 
