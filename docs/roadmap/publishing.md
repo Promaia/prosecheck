@@ -13,8 +13,8 @@ Prepare and publish prosecheck to the npm registry.
 - [x] Add `prepublishOnly` script that runs `npm run ci`
 - [x] Configure `files` field in `package.json` to publish only `dist/`, `README.md`, `LICENSE`
 - [x] Set up semantic versioning and initial `1.0.0` release
-- [ ] Publish to npm (`npm publish`)
-- [ ] Verify `npx prosecheck init` and `npx prosecheck lint` work from a clean install
+- [x] Publish to npm (`npm publish`)
+- [x] Verify `npx prosecheck init` and `npx prosecheck lint` work from a clean install
 
 ---
 
