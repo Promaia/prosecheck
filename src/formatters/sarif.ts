@@ -86,7 +86,7 @@ export function formatSarif(output: CollectResultsOutput): string {
         tool: {
           driver: {
             name: 'prosecheck',
-            informationUri: 'https://github.com/anthropics/prosecheck',
+            informationUri: 'https://github.com/Promaia/prosecheck',
             rules,
           },
         },
