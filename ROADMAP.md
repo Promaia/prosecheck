@@ -227,13 +227,13 @@ Harden result parsing against common LLM output quirks and validate against gold
 
 Real Claude CLI integration for prompt template regression testing. Gated behind `PROSECHECK_SLOW_TESTS=1` env var.
 
-- [ ] Add `tests/slow/` directory with vitest config that only runs when `PROSECHECK_SLOW_TESTS=1` is set
-- [ ] Write test: single simple rule (e.g., "no TODO comments") against a fixture project with known violations — verify output file exists, parses against schema, status is `fail`
-- [ ] Write test: single passing rule against clean fixture — verify `pass` status
-- [ ] Write test: multiple rules in multi-instance mode — verify all output files written and valid
-- [ ] Write test: single-instance mode with agent-teams — verify orchestration works end-to-end
-- [ ] Add npm script `npm run test:slow` for manual invocation
-- [ ] Document slow test setup (required: `claude` CLI installed and authenticated)
+- [x] Add `tests/slow/` directory with vitest config that only runs when `PROSECHECK_SLOW_TESTS=1` is set
+- [x] Write test: single simple rule (e.g., "no TODO comments") against a fixture project with known violations — verify output file exists, parses against schema, status is `fail`
+- [x] Write test: single passing rule against clean fixture — verify `pass` status
+- [x] Write test: multiple rules in multi-instance mode — verify all output files written and valid
+- [x] Write test: single-instance mode with agent-teams — verify orchestration works end-to-end
+- [x] Add npm script `npm run test:slow` for manual invocation
+- [x] Document slow test setup (required: `claude` CLI installed and authenticated)
 - [ ] Verify slow tests pass locally before merging prompt template changes
 
 ---
