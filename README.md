@@ -41,18 +41,14 @@ LLM-powered code linting with natural-language rules. Write rules in plain Engli
 ### From npm
 
 ```bash
-npm install -D @promaia/prosecheck
+npm install -D prosecheck
 ```
 
 Or run directly:
 
 ```bash
-npx @promaia/prosecheck lint
+npx prosecheck lint
 ```
-
-### From GitHub Releases
-
-Download the binary for your platform from the [releases page](https://github.com/Promaia/prosecheck/releases) and add it to your `PATH`.
 
 ## Quick Setup
 
