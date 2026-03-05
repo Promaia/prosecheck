@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
-import {
-  calculateAdr,
-  parseAdr,
-} from '../../../../src/lib/calculators/adr.js';
+import { calculateAdr, parseAdr } from '../../../../src/lib/calculators/adr.js';
 
 const fixturesDir = path.resolve(import.meta.dirname, '../../../fixtures');
 
@@ -84,9 +81,7 @@ describe('parseAdr', () => {
       'Never use console.log directly.',
     );
     expect(rules?.[0]?.description).toContain('Always use the Logger class.');
-    expect(rules?.[0]?.description).toContain(
-      'Include structured metadata.',
-    );
+    expect(rules?.[0]?.description).toContain('Include structured metadata.');
   });
 
   it('ADR rules apply project-wide (empty inclusions)', () => {

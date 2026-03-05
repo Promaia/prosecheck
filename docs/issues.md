@@ -14,7 +14,7 @@
 
 ## MEDIUM
 
-### 5. `calculators/adr.ts`: `extractSection` requires exact `## Rules` heading
+### 5. `calculators/adr.ts`: `extractSectionLines` requires exact `## Rules` heading
 
 The check `line.trim() === '## Rules'` is exact-match only. Variants like `## Rules:` or `## Rules (v2)` would be silently skipped. This is by-design per the ADR format, but could surprise users.
 
@@ -50,4 +50,14 @@ Post-run task execution (`config.postRun` → `executePostRun`) is unit-tested b
 
 ### `claude-code.test.ts`: No test for `env` var propagation in `spawnClaude`
 
-The claude-code tests mock `execFile` but don't verify that `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is passed through in the `env` option when `agentTeams` is true. The env var injection logic in `runSingleInstance` is untested at the unit level.
+The claude-code tests mock `execa` but don't verify that `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is passed through in the `env` option when `claudeToRuleShape` is `one-to-many-teams`. The env var injection logic in `executeInvocation` is untested at the unit level.
+
+### `cli.ts`: `--claude-to-rule-shape` is not validated at the CLI layer
+
+The `--claude-to-rule-shape <shape>` flag accepts any string. Invalid values like `--claude-to-rule-shape foo` are only caught by Zod's final `safeParse()`, which produces a generic "Invalid configuration after merging all layers" error instead of a clear CLI error.
+
+**Potential fix:** Add a Commander `parseArg` validator that checks against the three valid enum values and throws `InvalidArgumentError`.
+
+### `engine.ts`: Retry dispatch uses the same `claudeToRuleShape` for dropped rules
+
+When `claudeToRuleShape` is `one-to-many-teams` and a sub-agent's rule is dropped, the retry re-dispatches all dropped rules as a new team invocation rather than retrying individually. This may cause repeated failures if the team setup itself was the issue.

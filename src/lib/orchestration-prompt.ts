@@ -33,9 +33,12 @@ export function buildOrchestrationPrompt(
     ruleNames.set(rule.id, rule.name);
   }
 
-  // Build the rule list entries
+  // Build the rule list entries — sort by rule ID for deterministic output
+  const sortedEntries = [...promptPaths.entries()].sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
   const ruleEntries: string[] = [];
-  for (const [ruleId, promptPath] of promptPaths) {
+  for (const [ruleId, promptPath] of sortedEntries) {
     const name = ruleNames.get(ruleId) ?? ruleId;
     const relativePath = path
       .relative(projectRoot, promptPath)
@@ -65,9 +68,10 @@ function buildSequentialPrompt(
   promptPaths: Map<string, string>,
   ruleNames: Map<string, string>,
 ): string {
-  // Build output path list for instructions
+  // Build output path list for instructions — same sort as rule list
   const outputEntries: string[] = [];
-  for (const [ruleId] of promptPaths) {
+  const sortedIds = [...promptPaths.keys()].sort();
+  for (const ruleId of sortedIds) {
     const name = ruleNames.get(ruleId) ?? ruleId;
     const outputPath = path
       .join(projectRoot, OUTPUTS_DIR, `${ruleId}.json`)

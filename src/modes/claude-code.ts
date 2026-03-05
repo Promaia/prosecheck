@@ -189,14 +189,12 @@ async function executeInvocation(
         systemPrompt,
       });
 
-      return [
-        {
-          ruleId: '__teams__',
-          exitCode: result.exitCode,
-          stdout: result.stdout,
-          stderr: result.stderr,
-        },
-      ];
+      return invocation.rules.map((r) => ({
+        ruleId: r.id,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      }));
     }
 
     case 'one-to-many-single': {
@@ -221,14 +219,12 @@ async function executeInvocation(
         systemPrompt,
       });
 
-      return [
-        {
-          ruleId: '__single__',
-          exitCode: result.exitCode,
-          stdout: result.stdout,
-          stderr: result.stderr,
-        },
-      ];
+      return invocation.rules.map((r) => ({
+        ruleId: r.id,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      }));
     }
   }
 }
