@@ -20,6 +20,11 @@ export function makeRuleId(name: string, source: string): string {
   return `${sourceSlug}--${nameSlug}`;
 }
 
+export interface CreateRuleOptions {
+  group?: string | undefined;
+  frontmatter?: Record<string, unknown> | undefined;
+}
+
 /**
  * Create a Rule object with a generated ID.
  */
@@ -28,6 +33,7 @@ export function createRule(
   description: string,
   inclusions: string[],
   source: string,
+  options?: CreateRuleOptions,
 ): Rule {
   return {
     id: makeRuleId(name, source),
@@ -35,5 +41,9 @@ export function createRule(
     description,
     inclusions,
     source,
+    ...(options?.group !== undefined ? { group: options.group } : {}),
+    ...(options?.frontmatter && Object.keys(options.frontmatter).length > 0
+      ? { frontmatter: options.frontmatter }
+      : {}),
   };
 }

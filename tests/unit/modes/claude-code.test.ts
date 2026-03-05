@@ -51,14 +51,24 @@ function makeOptions(
   return {
     projectRoot: tmpDir,
     promptPaths: new Map(),
-    singleInstance: false,
-    agentTeams: false,
+    claudeToRuleShape: 'one-to-one',
+    maxConcurrentAgents: 0,
     maxTurns: 30,
     allowedTools: ['Read', 'Grep', 'Glob'],
     tools: [],
     additionalArgs: [],
     rules: [],
     ...overrides,
+  };
+}
+
+function makeRule(id: string) {
+  return {
+    id,
+    name: id,
+    description: 'Test rule',
+    inclusions: [],
+    source: 'RULES.md',
   };
 }
 
@@ -85,7 +95,10 @@ describe('claude-code mode', () => {
     promptPaths.set('rule-a', promptPathA);
     promptPaths.set('rule-b', promptPathB);
 
-    const options = makeOptions({ promptPaths });
+    const options = makeOptions({
+      promptPaths,
+      rules: [makeRule('rule-a'), makeRule('rule-b')],
+    });
     const results = await runClaudeCode(options);
 
     expect(results).toHaveLength(2);
@@ -102,11 +115,15 @@ describe('claude-code mode', () => {
     promptPaths.set('rule-a', promptPathA);
     promptPaths.set('rule-b', promptPathB);
 
-    const options = makeOptions({ promptPaths, singleInstance: true });
+    const options = makeOptions({
+      promptPaths,
+      claudeToRuleShape: 'one-to-many-single',
+      rules: [makeRule('rule-a'), makeRule('rule-b')],
+    });
     const results = await runClaudeCode(options);
 
     expect(results).toHaveLength(1);
-    expect(results[0]?.ruleId).toBe('__single_instance__');
+    expect(results[0]?.ruleId).toBe('__single__');
     expect(mockExeca).toHaveBeenCalledTimes(1);
   });
 
@@ -115,7 +132,7 @@ describe('claude-code mode', () => {
     const promptPaths = new Map<string, string>();
     promptPaths.set('rule-a', promptPath);
 
-    const options = makeOptions({ promptPaths });
+    const options = makeOptions({ promptPaths, rules: [makeRule('rule-a')] });
     const results = await runClaudeCode(options);
 
     expect(results).toHaveLength(1);
@@ -136,6 +153,7 @@ describe('claude-code mode', () => {
 
     const options = makeOptions({
       promptPaths,
+      rules: [makeRule('rule-a')],
       allowedTools: ['Read', 'Grep', 'Glob'],
     });
     await runClaudeCode(options);
@@ -158,6 +176,7 @@ describe('claude-code mode', () => {
 
     const options = makeOptions({
       promptPaths,
+      rules: [makeRule('rule-a'), makeRule('rule-b')],
       allowedTools: ['Read'],
     });
     await runClaudeCode(options);
@@ -200,7 +219,8 @@ describe('claude-code mode', () => {
 
     const options = makeOptions({
       promptPaths,
-      singleInstance: true,
+      claudeToRuleShape: 'one-to-many-single',
+      rules: [makeRule('rule-a'), makeRule('rule-b')],
       allowedTools: ['Read'],
     });
     await runClaudeCode(options);
@@ -222,7 +242,11 @@ describe('claude-code mode', () => {
     const promptPaths = new Map<string, string>();
     promptPaths.set('rule-a', promptPath);
 
-    const options = makeOptions({ promptPaths, maxTurns: 50 });
+    const options = makeOptions({
+      promptPaths,
+      rules: [makeRule('rule-a')],
+      maxTurns: 50,
+    });
     await runClaudeCode(options);
 
     const args = getClaudeArgs(0);
@@ -236,7 +260,7 @@ describe('claude-code mode', () => {
     const promptPaths = new Map<string, string>();
     promptPaths.set('rule-a', promptPath);
 
-    const options = makeOptions({ promptPaths });
+    const options = makeOptions({ promptPaths, rules: [makeRule('rule-a')] });
     await runClaudeCode(options);
 
     const args = getClaudeArgs(0);
@@ -252,6 +276,7 @@ describe('claude-code mode', () => {
 
     const options = makeOptions({
       promptPaths,
+      rules: [makeRule('rule-a')],
       systemPrompt: 'You are a linter.',
     });
     await runClaudeCode(options);
@@ -267,7 +292,7 @@ describe('claude-code mode', () => {
     const promptPaths = new Map<string, string>();
     promptPaths.set('rule-a', promptPath);
 
-    const options = makeOptions({ promptPaths });
+    const options = makeOptions({ promptPaths, rules: [makeRule('rule-a')] });
     await runClaudeCode(options);
 
     const args = getClaudeArgs(0);

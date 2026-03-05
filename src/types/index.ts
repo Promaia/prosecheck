@@ -18,6 +18,10 @@ export interface Rule {
   inclusions: string[];
   /** Source file the rule was discovered in (e.g., "src/RULES.md", "docs/adr/001-use-zod.md") */
   source: string;
+  /** Optional rule group — rules in the same group run under one agent sequentially */
+  group?: string | undefined;
+  /** Passthrough bag for unrecognized frontmatter fields (for future use) */
+  frontmatter?: Record<string, unknown> | undefined;
 }
 
 // --- Prompt types ---

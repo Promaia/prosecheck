@@ -24,11 +24,35 @@ program
   .option('--format <format>', 'Output format (stylish, json, sarif)')
   .option('--ref <ref>', 'Git comparison ref override')
   .option('--timeout <seconds>', 'Timeout in seconds', parseFloat)
-  .option('--warn-as-error <bool>', 'Treat warnings as errors (0 or 1)', parseBool)
-  .option('--retry-dropped <bool>', 'Retry rules that produce no output (0 or 1)', parseBool)
-  .option('--last-run-read <bool>', 'Read last-run hash for incremental narrowing (0 or 1)', parseBool)
-  .option('--last-run-write <bool>', 'Write current HEAD as last-run hash (0 or 1)', parseBool)
-  .option('--agent-teams <bool>', 'Enable agent teams for parallel rule processing (0 or 1)', parseBool)
+  .option(
+    '--warn-as-error <bool>',
+    'Treat warnings as errors (0 or 1)',
+    parseBool,
+  )
+  .option(
+    '--retry-dropped <bool>',
+    'Retry rules that produce no output (0 or 1)',
+    parseBool,
+  )
+  .option(
+    '--last-run-read <bool>',
+    'Read last-run hash for incremental narrowing (0 or 1)',
+    parseBool,
+  )
+  .option(
+    '--last-run-write <bool>',
+    'Write current HEAD as last-run hash (0 or 1)',
+    parseBool,
+  )
+  .option(
+    '--claude-to-rule-shape <shape>',
+    'How rules are dispatched (one-to-one, one-to-many-teams, one-to-many-single)',
+  )
+  .option(
+    '--max-concurrent-agents <count>',
+    'Maximum concurrent agents (0 = unlimited)',
+    parseInt,
+  )
   .option(
     '--max-turns <turns>',
     'Maximum agentic turns per Claude invocation',
@@ -49,7 +73,8 @@ program
       retryDropped?: boolean;
       lastRunRead?: boolean;
       lastRunWrite?: boolean;
-      agentTeams?: boolean;
+      claudeToRuleShape?: string;
+      maxConcurrentAgents?: number;
       maxTurns?: number;
       allowedTools?: string;
     }) => {
@@ -64,7 +89,8 @@ program
         retryDropped: options.retryDropped,
         lastRunRead: options.lastRunRead,
         lastRunWrite: options.lastRunWrite,
-        agentTeams: options.agentTeams,
+        claudeToRuleShape: options.claudeToRuleShape,
+        maxConcurrentAgents: options.maxConcurrentAgents,
         maxTurns: options.maxTurns,
         allowedTools: options.allowedTools,
       });

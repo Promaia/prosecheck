@@ -2,6 +2,10 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { createRule } from '../rule.js';
 import type { Rule } from '../../types/index.js';
+import {
+  parseFrontmatter,
+  extractGroupFromFrontmatter,
+} from '../frontmatter.js';
 
 export interface AdrOptions {
   /** Directory containing ADR markdown files. Defaults to 'docs/adr' */
@@ -36,18 +40,25 @@ export async function calculateAdr(
 
   for (const file of mdFiles) {
     const absolutePath = path.join(absoluteDir, file);
-    const content = await readFile(absolutePath, 'utf-8');
+    const rawContent = await readFile(absolutePath, 'utf-8');
+    const { data: frontmatterData, body } = parseFrontmatter(rawContent);
+    const { group, rest } = extractGroupFromFrontmatter(frontmatterData);
     // Use posix join for the source path so rule IDs are consistent across
     // platforms (forward slashes always), while absolutePath uses OS-native
     // separators for actual filesystem access.
     const relativePath = path.posix.join(adrDir, file);
-    const parsed = parseAdr(content, relativePath);
+    const parsed = parseAdr(body, relativePath, { group, frontmatter: rest });
     if (parsed) {
       rules.push(parsed);
     }
   }
 
   return rules;
+}
+
+interface AdrMetadata {
+  group?: string | undefined;
+  frontmatter?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -57,7 +68,11 @@ export async function calculateAdr(
  * The ADR title (`# ...`) becomes the rule name. The content under `## Rules`
  * becomes the rule description. ADR-derived rules apply project-wide.
  */
-export function parseAdr(content: string, source: string): Rule | undefined {
+export function parseAdr(
+  content: string,
+  source: string,
+  metadata?: AdrMetadata,
+): Rule | undefined {
   const lines = content.split('\n');
 
   // Extract title from the first `# ` heading
@@ -82,7 +97,10 @@ export function parseAdr(content: string, source: string): Rule | undefined {
   }
 
   // ADR rules apply project-wide (empty inclusions = all files)
-  return createRule(title, rulesContent, [], source);
+  return createRule(title, rulesContent, [], source, {
+    group: metadata?.group,
+    frontmatter: metadata?.frontmatter,
+  });
 }
 
 /**

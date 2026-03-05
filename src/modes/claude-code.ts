@@ -2,6 +2,12 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { execa } from 'execa';
 import type { Rule } from '../types/index.js';
+import {
+  buildExecutionPlan,
+  type ClaudeToRuleShape,
+  type ExecutionPlan,
+  type Invocation,
+} from '../lib/execution-plan.js';
 import { buildOrchestrationPrompt } from '../lib/orchestration-prompt.js';
 
 const OUTPUTS_DIR = '.prosecheck/working/outputs';
@@ -11,10 +17,10 @@ export interface ClaudeCodeModeOptions {
   projectRoot: string;
   /** Map of rule ID to prompt file path */
   promptPaths: Map<string, string>;
-  /** Whether to use single-instance strategy */
-  singleInstance: boolean;
-  /** Whether to enable agent teams */
-  agentTeams: boolean;
+  /** How ungrouped rules are dispatched */
+  claudeToRuleShape: ClaudeToRuleShape;
+  /** Maximum concurrent agents (0 = unlimited) */
+  maxConcurrentAgents: number;
   /** Maximum agentic turns per Claude CLI invocation */
   maxTurns: number;
   /** Tools the Claude CLI agent is allowed to use (permission scoping) */
@@ -48,135 +54,183 @@ export interface SpawnClaudeOptions {
 /**
  * Run rules via Claude Code CLI (`claude --print`).
  *
- * In multi-instance mode (default): spawns one `claude --print` process
- * per rule in parallel. Each process receives its prompt file content via
- * stdin and is expected to write results to the outputs directory.
- *
- * In single-instance mode: spawns a single `claude --print` process with
- * an orchestration prompt that covers all rules. When `agentTeams` is true,
- * CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 is set and the prompt instructs
- * the agent to launch sub-agents.
+ * Builds an execution plan based on `claudeToRuleShape`, `maxConcurrentAgents`,
+ * and rule groups, then executes batches sequentially with invocations within
+ * each batch running in parallel.
  */
 export async function runClaudeCode(
   options: ClaudeCodeModeOptions,
 ): Promise<ClaudeCodeResult[]> {
-  if (options.singleInstance) {
-    return runSingleInstance(options);
-  }
-  return runMultiInstance(options);
-}
-
-async function runMultiInstance(
-  options: ClaudeCodeModeOptions,
-): Promise<ClaudeCodeResult[]> {
-  const { projectRoot, promptPaths, maxTurns, allowedTools, tools, additionalArgs, systemPrompt } =
-    options;
+  const { rules, claudeToRuleShape, maxConcurrentAgents } = options;
   const verbose = !!process.env['PROSECHECK_VERBOSE'];
 
+  const plan = buildExecutionPlan({
+    rules,
+    claudeToRuleShape,
+    maxConcurrentAgents,
+  });
+
   if (verbose) {
-    const ruleIds = [...promptPaths.keys()];
-    debug(`multi-instance mode: ${String(ruleIds.length)} rules`);
-    for (const ruleId of ruleIds) {
-      debug(`  rule: ${ruleId} -> ${promptPaths.get(ruleId) ?? '???'}`);
+    debug(
+      `execution plan: ${String(plan.length)} batch(es), shape=${claudeToRuleShape}, ` +
+        `maxConcurrent=${String(maxConcurrentAgents)}`,
+    );
+    for (const [i, batch] of plan.entries()) {
+      debug(`  batch ${String(i)}: ${String(batch.length)} invocation(s)`);
+      for (const inv of batch) {
+        debug(
+          `    ${inv.type}: ${String(inv.rules.length)} rule(s) [${inv.rules.map((r) => r.id).join(', ')}]`,
+        );
+      }
     }
   }
 
-  const promises: Promise<ClaudeCodeResult>[] = [];
-
-  for (const [ruleId, promptPath] of promptPaths) {
-    // Grant Write access only to this rule's specific output file (absolute path)
-    const outputFile = path
-      .join(projectRoot, OUTPUTS_DIR, `${ruleId}.json`)
-      .replaceAll('\\', '/');
-    const ruleAllowedTools = [...allowedTools, `Write(${outputFile})`];
-
-    promises.push(
-      runOneRule(ruleId, promptPath, projectRoot, {
-        maxTurns,
-        allowedTools: ruleAllowedTools,
-        tools,
-        additionalArgs,
-        systemPrompt,
-      }),
-    );
-  }
-
-  return Promise.all(promises);
+  return executePlan(plan, options);
 }
 
-async function runSingleInstance(
+async function executePlan(
+  plan: ExecutionPlan,
+  options: ClaudeCodeModeOptions,
+): Promise<ClaudeCodeResult[]> {
+  const allResults: ClaudeCodeResult[] = [];
+
+  for (const batch of plan) {
+    const batchPromises = batch.map((invocation) =>
+      executeInvocation(invocation, options),
+    );
+    const batchResults = await Promise.all(batchPromises);
+    for (const results of batchResults) {
+      allResults.push(...results);
+    }
+  }
+
+  return allResults;
+}
+
+async function executeInvocation(
+  invocation: Invocation,
   options: ClaudeCodeModeOptions,
 ): Promise<ClaudeCodeResult[]> {
   const {
     projectRoot,
     promptPaths,
-    rules,
-    agentTeams,
     maxTurns,
     allowedTools,
     tools,
     additionalArgs,
     systemPrompt,
   } = options;
-  const verbose = !!process.env['PROSECHECK_VERBOSE'];
 
-  if (verbose) {
-    debug(
-      `single-instance mode: ${String(rules.length)} rules, agentTeams=${String(agentTeams)}`,
-    );
+  switch (invocation.type) {
+    case 'one-to-one': {
+      // Single rule — read prompt file and spawn
+      const rule = invocation.rules[0];
+      if (!rule) {
+        return [];
+      }
+      const promptPath = promptPaths.get(rule.id);
+      if (!promptPath) {
+        return [
+          {
+            ruleId: rule.id,
+            exitCode: 1,
+            stdout: '',
+            stderr: `No prompt path found for rule ${rule.id}`,
+          },
+        ];
+      }
+
+      const outputFile = path
+        .join(projectRoot, OUTPUTS_DIR, `${rule.id}.json`)
+        .replaceAll('\\', '/');
+      const ruleAllowedTools = [...allowedTools, `Write(${outputFile})`];
+
+      const promptContent = await readFile(promptPath, 'utf-8');
+      const result = await spawnClaude(promptContent, projectRoot, {
+        maxTurns,
+        allowedTools: ruleAllowedTools,
+        tools,
+        additionalArgs,
+        systemPrompt,
+      });
+
+      return [
+        {
+          ruleId: rule.id,
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        },
+      ];
+    }
+
+    case 'one-to-many-teams': {
+      // Agent teams — orchestration prompt with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+      const absOutputsDir = path
+        .join(projectRoot, OUTPUTS_DIR)
+        .replaceAll('\\', '/');
+      const teamAllowedTools = [...allowedTools, `Write(${absOutputsDir}/*)`];
+
+      const orchestrationPrompt = buildOrchestrationPrompt({
+        projectRoot,
+        promptPaths,
+        rules: invocation.rules,
+        agentTeams: true,
+      });
+
+      const env = { ...process.env, CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' };
+
+      const result = await spawnClaude(orchestrationPrompt, projectRoot, {
+        env,
+        maxTurns,
+        allowedTools: teamAllowedTools,
+        tools,
+        additionalArgs,
+        systemPrompt,
+      });
+
+      return [
+        {
+          ruleId: '__teams__',
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        },
+      ];
+    }
+
+    case 'one-to-many-single': {
+      // Sequential — orchestration prompt, single agent processes all rules
+      const absOutputsDir = path
+        .join(projectRoot, OUTPUTS_DIR)
+        .replaceAll('\\', '/');
+      const singleAllowedTools = [...allowedTools, `Write(${absOutputsDir}/*)`];
+
+      const orchestrationPrompt = buildOrchestrationPrompt({
+        projectRoot,
+        promptPaths,
+        rules: invocation.rules,
+        agentTeams: false,
+      });
+
+      const result = await spawnClaude(orchestrationPrompt, projectRoot, {
+        maxTurns,
+        allowedTools: singleAllowedTools,
+        tools,
+        additionalArgs,
+        systemPrompt,
+      });
+
+      return [
+        {
+          ruleId: '__single__',
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        },
+      ];
+    }
   }
-
-  const orchestrationPrompt = buildOrchestrationPrompt({
-    projectRoot,
-    promptPaths,
-    rules,
-    agentTeams,
-  });
-
-  const env = agentTeams
-    ? { ...process.env, CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' }
-    : undefined;
-
-  // Grant Write access to all output files in single-instance mode (absolute path)
-  const absOutputsDir = path
-    .join(projectRoot, OUTPUTS_DIR)
-    .replaceAll('\\', '/');
-  const singleAllowedTools = [...allowedTools, `Write(${absOutputsDir}/*)`];
-
-  const result = await spawnClaude(orchestrationPrompt, projectRoot, {
-    env,
-    maxTurns,
-    allowedTools: singleAllowedTools,
-    tools,
-    additionalArgs,
-    systemPrompt,
-  });
-
-  return [
-    {
-      ruleId: '__single_instance__',
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    },
-  ];
-}
-
-async function runOneRule(
-  ruleId: string,
-  promptPath: string,
-  projectRoot: string,
-  spawnOptions: SpawnClaudeOptions,
-): Promise<ClaudeCodeResult> {
-  const promptContent = await readFile(promptPath, 'utf-8');
-  const result = await spawnClaude(promptContent, projectRoot, spawnOptions);
-
-  return {
-    ruleId,
-    exitCode: result.exitCode,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
 }
 
 interface SpawnResult {
@@ -254,7 +308,9 @@ export async function spawnClaude(
     debug('--- spawning claude ---');
     debug(`  cmd: claude ${args.join(' ')}`);
     debug(`  cwd: ${cwd}`);
-    debug(`  prompt via stdin (${String(prompt.length)} chars): ${promptPreview}`);
+    debug(
+      `  prompt via stdin (${String(prompt.length)} chars): ${promptPreview}`,
+    );
     if (options.env) {
       const extraKeys = Object.keys(options.env).filter(
         (k) => process.env[k] !== options.env?.[k],

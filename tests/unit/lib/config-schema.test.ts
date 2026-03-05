@@ -31,7 +31,8 @@ describe('ConfigSchema', () => {
 
   it('applies nested defaults for claudeCode', () => {
     const result = ConfigSchema.parse({});
-    expect(result.claudeCode.singleInstance).toBe(true);
+    expect(result.claudeCode.claudeToRuleShape).toBe('one-to-many-teams');
+    expect(result.claudeCode.maxConcurrentAgents).toBe(10);
     expect(result.claudeCode.maxTurns).toBe(30);
     expect(result.claudeCode.allowedTools).toBeInstanceOf(Array);
     expect(result.claudeCode.allowedTools.length).toBeGreaterThan(0);
@@ -55,7 +56,7 @@ describe('ConfigSchema', () => {
       timeout: 600,
       warnAsError: true,
       lastRun: { read: true, write: false },
-      claudeCode: { singleInstance: true },
+      claudeCode: { claudeToRuleShape: 'one-to-many-teams' },
       ruleCalculators: [
         { name: 'rules-md', enabled: true },
         { name: 'adr', enabled: false, options: { path: 'docs/adr' } },

@@ -98,12 +98,14 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
 
   // 4b. In user-prompt mode, print the prompt before the UI starts rendering
   if (mode === 'user-prompt') {
+    const agentTeams =
+      config.claudeCode.claudeToRuleShape === 'one-to-many-teams';
     const orchestrationPrompt = buildUserPrompt({
       projectRoot,
       promptPaths,
       expectedRuleIds: changeResult.triggeredRules.map((r) => r.id),
       rules: changeResult.triggeredRules,
-      agentTeams: config.claudeCode.agentTeams,
+      agentTeams,
     });
     process.stdout.write(
       [
@@ -215,7 +217,8 @@ async function dispatchMode(
 ): Promise<void> {
   const expectedRuleIds = triggeredRules.map((r) => r.id);
 
-  const agentTeams = config.claudeCode.agentTeams;
+  const agentTeams =
+    config.claudeCode.claudeToRuleShape === 'one-to-many-teams';
 
   switch (mode) {
     case 'user-prompt': {
@@ -233,8 +236,8 @@ async function dispatchMode(
       await runClaudeCode({
         projectRoot,
         promptPaths,
-        singleInstance: config.claudeCode.singleInstance,
-        agentTeams,
+        claudeToRuleShape: config.claudeCode.claudeToRuleShape,
+        maxConcurrentAgents: config.claudeCode.maxConcurrentAgents,
         maxTurns: config.claudeCode.maxTurns,
         allowedTools: config.claudeCode.allowedTools,
         tools: config.claudeCode.tools,

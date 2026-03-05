@@ -60,17 +60,22 @@ const DEFAULT_TOOLS = [
 
 export const ClaudeCodeSchema = z
   .object({
-    singleInstance: z
-      .boolean()
-      .default(true)
+    claudeToRuleShape: z
+      .enum(['one-to-one', 'one-to-many-teams', 'one-to-many-single'])
+      .default('one-to-many-teams')
       .describe(
-        'Launch one Claude Code instance with a combined prompt instead of one instance per rule.',
+        'How ungrouped rules are dispatched to Claude processes. ' +
+          '"one-to-one": one process per rule. ' +
+          '"one-to-many-teams": rules packed into team invocations with parallel sub-agents. ' +
+          '"one-to-many-single": all rules in one process, evaluated sequentially.',
       ),
-    agentTeams: z
-      .boolean()
-      .default(true)
+    maxConcurrentAgents: z
+      .number()
+      .int()
+      .nonnegative()
+      .default(10)
       .describe(
-        'Enable agent teams support. When true, the orchestration prompt instructs the agent to launch sub-agents for each rule, and sets CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1.',
+        'Maximum concurrent agents (processes or sub-agents). 0 = unlimited.',
       ),
     maxTurns: z
       .number()
@@ -93,9 +98,7 @@ export const ClaudeCodeSchema = z
     additionalArgs: z
       .array(z.string())
       .default([])
-      .describe(
-        'Additional CLI arguments passed to each claude invocation.',
-      ),
+      .describe('Additional CLI arguments passed to each claude invocation.'),
   })
   .describe('Claude Code Headless mode settings');
 
@@ -127,8 +130,10 @@ export const EnvironmentOverrideSchema = z
     retryDroppedMaxAttempts: z.number().int().nonnegative().optional(),
     claudeCode: z
       .object({
-        singleInstance: z.boolean().optional(),
-        agentTeams: z.boolean().optional(),
+        claudeToRuleShape: z
+          .enum(['one-to-one', 'one-to-many-teams', 'one-to-many-single'])
+          .optional(),
+        maxConcurrentAgents: z.number().int().nonnegative().optional(),
         maxTurns: z.number().int().positive().optional(),
         allowedTools: z.array(z.string()).optional(),
         additionalArgs: z.array(z.string()).optional(),
@@ -185,8 +190,8 @@ export const ConfigSchema = z
       .default(1)
       .describe('Max retry attempts per dropped rule'),
     claudeCode: ClaudeCodeSchema.default(() => ({
-      singleInstance: true,
-      agentTeams: true,
+      claudeToRuleShape: 'one-to-many-teams' as const,
+      maxConcurrentAgents: 10,
       maxTurns: 30,
       allowedTools: DEFAULT_ALLOWED_TOOLS,
       tools: DEFAULT_TOOLS,

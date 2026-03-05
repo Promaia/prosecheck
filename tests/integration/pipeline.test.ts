@@ -127,8 +127,8 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     retryDropped: false,
     retryDroppedMaxAttempts: 1,
     claudeCode: {
-      singleInstance: false,
-      agentTeams: false,
+      claudeToRuleShape: 'one-to-one',
+      maxConcurrentAgents: 0,
       maxTurns: 30,
       allowedTools: [],
       tools: [],
@@ -202,8 +202,8 @@ describe('Integration: multi-instance mode full pipeline', () => {
     const context = makeContext(repo.dir, {
       config: makeConfig({
         claudeCode: {
-          singleInstance: false,
-          agentTeams: false,
+          claudeToRuleShape: 'one-to-one',
+          maxConcurrentAgents: 0,
           maxTurns: 30,
           allowedTools: [],
           tools: [],
@@ -277,8 +277,8 @@ describe('Integration: single-instance mode with agent teams', () => {
     const context = makeContext(repo.dir, {
       config: makeConfig({
         claudeCode: {
-          singleInstance: true,
-          agentTeams: true,
+          claudeToRuleShape: 'one-to-many-teams',
+          maxConcurrentAgents: 0,
           maxTurns: 30,
           allowedTools: [],
           tools: [],
@@ -408,5 +408,112 @@ describe('Integration: post-run env vars', () => {
     // The results dir should be an absolute path containing the outputs dir
     expect(envCheck['resultsDir']).toContain('.prosecheck');
     expect(envCheck['resultsDir']).toContain('outputs');
+  }, 30_000);
+});
+
+describe('Integration: grouped rules with one-to-one shape', () => {
+  it('runs grouped rules in one combined invocation and ungrouped rules individually', async () => {
+    const repo = await createTestRepo();
+    repos.push(repo);
+
+    await mkdir(path.join(repo.dir, '.prosecheck'), { recursive: true });
+    await writeFile(
+      path.join(repo.dir, '.prosecheck/config.json'),
+      JSON.stringify({ baseBranch: 'main' }),
+      'utf-8',
+    );
+
+    // RULES.md with frontmatter grouping two rules, plus one ungrouped
+    await writeFile(
+      path.join(repo.dir, 'RULES.md'),
+      [
+        '---',
+        'group: perf',
+        '---',
+        '# No console.log',
+        '',
+        'Do not use console.log in source files.',
+        '',
+        '# Keep functions short',
+        '',
+        'Functions should be under 50 lines.',
+      ].join('\n') + '\n',
+      'utf-8',
+    );
+
+    // A second RULES.md in a subdirectory, ungrouped
+    await mkdir(path.join(repo.dir, 'lib'), { recursive: true });
+    await writeFile(
+      path.join(repo.dir, 'lib/RULES.md'),
+      ['# Use strict mode', '', 'All files must use strict mode.'].join('\n') +
+        '\n',
+      'utf-8',
+    );
+
+    await gitCommit(repo.dir, 'Add rules with groups');
+
+    // Feature branch with changes in both scopes
+    await execaFn('git', ['checkout', '-b', 'feature'], { cwd: repo.dir });
+    await mkdir(path.join(repo.dir, 'src'), { recursive: true });
+    await writeFile(
+      path.join(repo.dir, 'src/foo.ts'),
+      'console.log("hello");\n',
+      'utf-8',
+    );
+    await mkdir(path.join(repo.dir, 'lib/src'), { recursive: true });
+    await writeFile(
+      path.join(repo.dir, 'lib/src/bar.ts'),
+      '"use strict";\n',
+      'utf-8',
+    );
+    await gitCommit(repo.dir, 'Add source files');
+
+    shared.fakeClaudeEnv = { FAKE_CLAUDE_STATUS: 'pass' };
+
+    const context = makeContext(repo.dir, {
+      config: makeConfig({
+        claudeCode: {
+          claudeToRuleShape: 'one-to-one',
+          maxConcurrentAgents: 0,
+          maxTurns: 30,
+          allowedTools: [],
+          tools: [],
+          additionalArgs: [],
+        },
+      }),
+    });
+    const result = await runEngine(context);
+
+    // 2 grouped rules (perf) + 1 ungrouped rule = 3 total results
+    expect(result.results.results).toHaveLength(3);
+    expect(result.results.dropped).toHaveLength(0);
+    expect(result.overallStatus).toBe('pass');
+
+    // Should spawn 2 claude processes:
+    // - 1 combined invocation for the "perf" group (one-to-many-single)
+    // - 1 individual invocation for "Use strict mode" (one-to-one)
+    expect(shared.claudeCallCount).toBe(2);
+
+    // The grouped invocation should have wildcard Write permission (outputs/*)
+    // The ungrouped invocation should have specific file Write permission
+    const repoPrefix = repo.dir.replaceAll('\\', '/');
+    const allowedToolsValues = shared.lastClaudeArgs.map((args) => {
+      const idx = args.indexOf('--allowedTools');
+      return idx >= 0 ? (args[idx + 1] as string) : '';
+    });
+
+    // One call should have the wildcard pattern (grouped)
+    const hasWildcard = allowedToolsValues.some((v) =>
+      v.includes(`Write(${repoPrefix}/.prosecheck/working/outputs/*)`),
+    );
+    expect(hasWildcard).toBe(true);
+
+    // One call should have a specific file pattern (ungrouped)
+    const hasSpecific = allowedToolsValues.some((v) =>
+      v.includes(
+        `Write(${repoPrefix}/.prosecheck/working/outputs/lib-rules-md--use-strict-mode.json)`,
+      ),
+    );
+    expect(hasSpecific).toBe(true);
   }, 30_000);
 });
