@@ -31,6 +31,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:slow": "vitest run --config vitest.config.slow.ts",
+    "test:slow:verbose": "vitest run --config vitest.config.slow-verbose.ts",
+    "test:prepare": "tsx scripts/prepare-scenario.ts",
     "ci": "npm run typecheck && npm run lint && npm run test && npm run format:check && npm run build"
   },
   "dependencies": {
@@ -55,6 +58,7 @@
     "msw": "^2.12.10",
     "prettier": "^3.8.1",
     "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
     "vitest": "^4.0.18"

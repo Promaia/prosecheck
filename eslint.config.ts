@@ -8,7 +8,12 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['eslint.config.ts', '*.config.ts'],
+          allowDefaultProject: [
+            'eslint.config.ts',
+            '*.config.ts',
+            'vitest.config.slow.ts',
+            'vitest.config.slow-verbose.ts',
+          ],
           defaultProject: 'tsconfig.json',
         },
         tsconfigRootDir: import.meta.dirname,

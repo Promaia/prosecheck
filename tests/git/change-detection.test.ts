@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { rm, writeFile, mkdir } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { execa } from 'execa';
 import {
   detectChanges,
@@ -11,53 +11,12 @@ import {
 } from '../../src/lib/change-detection.js';
 import { ConfigSchema } from '../../src/lib/config-schema.js';
 import { createRule } from '../../src/lib/rule.js';
-
-// --- Helpers ---
-
-interface TestRepo {
-  dir: string;
-  cleanup: () => Promise<void>;
-}
-
-async function createTestRepo(): Promise<TestRepo> {
-  const suffix = randomBytes(8).toString('hex');
-  const dir = path.join(os.tmpdir(), `prosecheck-test-${suffix}`);
-  await mkdir(dir, { recursive: true });
-
-  await execa('git', ['init'], { cwd: dir });
-  await execa('git', ['checkout', '-b', 'main'], { cwd: dir });
-  await execa('git', ['config', 'user.name', 'Test'], { cwd: dir });
-  await execa('git', ['config', 'user.email', 'test@test.com'], { cwd: dir });
-
-  // Initial commit so HEAD exists
-  const readmePath = path.join(dir, 'README.md');
-  await writeFile(readmePath, '# test\n', 'utf-8');
-  await gitCommit(dir, 'Initial commit');
-
-  return {
-    dir,
-    cleanup: async () => {
-      await rm(dir, { recursive: true, force: true });
-    },
-  };
-}
-
-async function gitCommit(dir: string, message: string): Promise<void> {
-  await execa('git', ['add', '-A'], { cwd: dir });
-  await execa('git', ['commit', '-m', message, '--allow-empty-message'], {
-    cwd: dir,
-  });
-}
-
-async function writeTestFile(
-  dir: string,
-  relativePath: string,
-  content = '// placeholder\n',
-): Promise<void> {
-  const fullPath = path.join(dir, relativePath);
-  await mkdir(path.dirname(fullPath), { recursive: true });
-  await writeFile(fullPath, content, 'utf-8');
-}
+import {
+  createTestRepo,
+  gitCommit,
+  writeTestFile,
+  type TestRepo,
+} from '../helpers/git-repo.js';
 
 // --- Tests ---
 
