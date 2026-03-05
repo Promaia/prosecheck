@@ -1,6 +1,6 @@
 {
   "name": "prosecheck",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "type": "module",
   "bin": {
     "prosecheck": "./dist/cli.js"
@@ -34,7 +34,8 @@
     "test:slow": "vitest run --config vitest.config.slow.ts",
     "test:slow:verbose": "vitest run --config vitest.config.slow-verbose.ts",
     "test:prepare": "tsx scripts/prepare-scenario.ts",
-    "ci": "npm run typecheck && npm run lint && npm run test && npm run format:check && npm run build"
+    "ci": "npm run typecheck && npm run lint && npm run test && npm run format:check && npm run build",
+    "prepublishOnly": "npm run ci"
   },
   "dependencies": {
     "commander": "^14.0.3",
