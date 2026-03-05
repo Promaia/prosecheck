@@ -238,7 +238,87 @@ Real Claude CLI integration for prompt template regression testing. Gated behind
 
 ---
 
-## Milestone 19: npm Publishing
+## Milestone 19: Rule Groups & Concurrency Control
+
+Group multiple rules under a single agent and limit parallel execution for large repos.
+
+Rule groups allow multiple rules to run under one agent invocation. The agent evaluates all rules in the group sequentially, reducing total parallel agent runs for repos with many rules. A `maxConcurrentAgents` config caps how many rule/group slots execute at once, splitting the work into sequential batches of parallel runs: `[sequential by maxConcurrentAgents: [grouped by ruleGroup: [rule]]]`.
+
+This milestone also introduces frontmatter parsing for both RULES.md and ADR markdown files. For now, only `group` is implemented; the parser should be designed to accept and preserve arbitrary frontmatter fields (e.g. `severity`, `scope`, `exclude`) so future milestones can consume them without changing the parser.
+
+### Frontmatter parsing
+
+- [ ] Add YAML frontmatter parser (`src/lib/frontmatter.ts`) — extract frontmatter from markdown files, return typed metadata object (with `group` as the only actively-used field) + remaining body. Preserve unknown fields as passthrough for future use. Handle files with and without frontmatter gracefully
+- [ ] Extend `rules-md` calculator to parse frontmatter — consume `group` field. File-level frontmatter applies to all rules in that file. Unknown fields are stored on the `Rule` object for future consumers
+- [ ] Extend `adr` calculator to parse frontmatter — consume `group` field. Unknown fields stored on `Rule` for future use
+- [ ] Add `ruleGroup` field to `Rule` type — optional string identifying which group a rule belongs to
+- [ ] Add optional `frontmatter` bag to `Rule` type — `Record<string, unknown>` for preserving unrecognized frontmatter fields
+
+### Unified execution pipeline
+
+Refactor `claude-code.ts` to plan claude invocations, then execute them. The execution shape is:
+
+```
+[claude invocations in sequence [claude invocations in parallel [rules]]]
+```
+
+Each claude invocation is one of three types:
+
+| Invocation type | Rules per process | Processing style | Prompt builder |
+|---|---|---|---|
+| **one-to-one** | 1 | Single rule via stdin | Per-rule prompt file |
+| **one-to-many-teams** | N | Parallel sub-agents | `buildAgentTeamsPrompt` |
+| **one-to-many-single** | N | Sequential in one agent | `buildSequentialPrompt` |
+
+#### How rules map to invocations
+
+The user chooses a `claudeToRuleShape` (`"one-to-one"` \| `"one-to-many-teams"` \| `"one-to-many-single"`) which controls how **ungrouped rules** are dispatched. **Grouped rules always become separate `one-to-many-single` invocations** regardless of this setting (one process per group, sequential prompt).
+
+Ungrouped rule baseline (before adding groups):
+
+| `claudeToRuleShape` | Invocation plan |
+|---|---|
+| `one-to-one` | Each rule → its own invocation. Split into sequential batches of `maxConcurrentAgents` parallel invocations. |
+| `one-to-many-teams` | Pack rules into invocations of up to `maxConcurrentAgents` rules each. Each invocation uses agent-teams to process its rules as parallel sub-agents. |
+| `one-to-many-single` | All ungrouped rules → one invocation, processed sequentially. |
+
+Then group invocations are inserted using the same no-split logic as `one-to-one` (see below).
+
+#### `maxConcurrentAgents` and batch insertion
+
+Controls the number of concurrent agents (processes or sub-agents depending on invocation type). 0 = unlimited. The plan builder fills batches using these insertion rules:
+
+- **`one-to-one`**: Each rule is one agent. Add to the current parallel batch until it reaches `maxConcurrentAgents`, then start a new sequential batch. No splitting.
+- **`one-to-many-teams`**: Each invocation has N sub-agents, each counting as one agent. If `currentBatchSize + teamSize ≤ maxConcurrentAgents`, insert the whole team invocation. Otherwise, split: create one team of `maxConcurrentAgents - currentBatchSize` rules to fill the current batch, and put the remaining rules back into the queue to be processed later (they may need to be split again if they still exceed a fresh batch).
+- **`one-to-many-single`**: One agent regardless of rule count. Add to the current parallel batch until it reaches `maxConcurrentAgents`, then start a new sequential batch. No splitting (same as `one-to-one`).
+- **Groups**: One agent each. Inserted with the same no-split logic as `one-to-one` — add to the first batch with space, or start a new batch.
+
+#### Implementation
+
+- [ ] Define execution plan types — `Invocation` (type + rules), `ExecutionPlan` (sequence of parallel batches of invocations)
+- [ ] Add `buildExecutionPlan()` — takes rules, `claudeToRuleShape`, `maxConcurrentAgents`, and rule groups; returns an `ExecutionPlan`
+- [ ] Refactor `runClaudeCode()` to execute an `ExecutionPlan` — iterate batches sequentially, run invocations within each batch in parallel, collect results
+- [ ] Reuse `buildSequentialPrompt` for `one-to-many-single` invocations and group invocations
+- [ ] Reuse `buildAgentTeamsPrompt` for `one-to-many-teams` invocations
+
+### Config & CLI
+
+- [ ] Add `claudeToRuleShape` to `ConfigSchema` — `"one-to-one"` | `"one-to-many-teams"` | `"one-to-many-single"`, replaces current `singleInstance` + `agentTeams` booleans
+- [ ] Add `maxConcurrentAgents` to `ConfigSchema` — integer (0 = unlimited), controls concurrent agents per the rules above
+- [ ] Add `--claude-to-rule-shape` and `--max-concurrent-agents` CLI flags
+- [ ] Migration: map old `singleInstance`/`agentTeams` config to new `claudeToRuleShape` for backwards compatibility
+
+### Tests
+
+- [ ] Write unit tests for frontmatter parsing (with/without frontmatter, unknown fields preserved, invalid YAML, `group` extraction)
+- [ ] Write unit tests for `buildExecutionPlan()` — all mode combinations produce correct hierarchy shapes
+- [ ] Write unit tests for unified pipeline execution (batch splitting, sequential ordering, result collection across groups)
+- [ ] Write integration test with fake-claude — grouped rules produce correct combined prompts and multiple outputs
+- [ ] Verify `npm run ci` passes
+
+---
+
+## Milestone 20: npm Publishing
 
 Prepare and publish prosecheck to the npm registry.
 
@@ -252,7 +332,7 @@ Prepare and publish prosecheck to the npm registry.
 
 ---
 
-## Milestone 20: Integration Setup via `init`
+## Milestone 21: Integration Setup via `init`
 
 Make `prosecheck init` re-runnable with flags to set up CI and local hooks. Running `init` again in an already-initialized project applies the requested integrations without overwriting existing config.
 
@@ -267,7 +347,7 @@ Make `prosecheck init` re-runnable with flags to set up CI and local hooks. Runn
 
 ---
 
-## Milestone 21: GitHub Actions Action
+## Milestone 22: GitHub Actions Action
 
 A published GitHub Action (`Promaia/prosecheck-action`) for running prosecheck in CI with minimal config.
 
@@ -282,7 +362,7 @@ A published GitHub Action (`Promaia/prosecheck-action`) for running prosecheck i
 
 ---
 
-## Milestone 22: Binary Distribution
+## Milestone 23: Binary Distribution
 
 Build standalone binaries so users can run prosecheck without Node.js installed.
 
@@ -314,12 +394,6 @@ These are designed in the plan but not targeted for the initial implementation.
 - [ ] Register `internal-loop` mode in CLI
 - [ ] Write tests for internal loop mode
 
-### RULES.md Frontmatter
-- [ ] Extend rules-md calculator to parse optional YAML frontmatter for per-rule metadata (severity, tags, custom scope overrides, exclusion patterns)
-
-### ADR Frontmatter Scoping
-- [ ] Extend adr calculator to parse YAML frontmatter in ADR files for targeted inclusion/exclusion patterns instead of project-wide scope
-
 ### Custom/External Rule Calculators
 - [ ] Design and implement external calculator loading mechanism (dynamic import from configured paths or npm packages)
 
@@ -327,5 +401,4 @@ These are designed in the plan but not targeted for the initial implementation.
 - [ ] Extend post-run system beyond shell commands to support structured actions: `post-pr-comment`, `update-check-run`, Slack notifications, etc.
 
 ### Performance Optimization
-- [ ] Rule batching — optionally combine multiple rules into a single agent call for cost reduction
 - [ ] Large-scope caching — cache file listings for global-scope rules to avoid redundant filesystem traversal
