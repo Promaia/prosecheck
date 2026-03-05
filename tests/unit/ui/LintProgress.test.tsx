@@ -21,27 +21,47 @@ function getFrame(instance: ReturnType<typeof render>): string {
 }
 
 describe('LintProgress', () => {
+  it('renders a table with box-drawing characters and headers', () => {
+    const rules: RuleProgressEntry[] = [
+      makeEntry({ ruleId: 'rule-a', name: 'Rule A', runStatus: 'waiting' }),
+    ];
+
+    const frame = getFrame(render(<LintProgress rules={rules} />));
+
+    expect(frame).toContain('┌');
+    expect(frame).toContain('┐');
+    expect(frame).toContain('└');
+    expect(frame).toContain('┘');
+    expect(frame).toContain('│');
+    expect(frame).toContain('─');
+    expect(frame).toContain('STATUS');
+    expect(frame).toContain('RULE');
+  });
+
   it('renders waiting rules with WAIT label', () => {
     const rules: RuleProgressEntry[] = [
       makeEntry({ ruleId: 'rule-a', name: 'Rule A', runStatus: 'waiting' }),
     ];
 
-    const inst = render(<LintProgress rules={rules} />);
-    const frame = getFrame(inst);
+    const frame = getFrame(render(<LintProgress rules={rules} />));
 
     expect(frame).toContain('WAIT');
     expect(frame).toContain('Rule A');
   });
 
-  it('renders running rules with .. label', () => {
+  it('renders running rules with timer', () => {
     const rules: RuleProgressEntry[] = [
-      makeEntry({ ruleId: 'rule-a', name: 'Rule A', runStatus: 'running' }),
+      makeEntry({
+        ruleId: 'rule-a',
+        name: 'Rule A',
+        runStatus: 'running',
+        startedAt: Date.now() - 5000,
+      }),
     ];
 
-    const inst = render(<LintProgress rules={rules} />);
-    const frame = getFrame(inst);
+    const frame = getFrame(render(<LintProgress rules={rules} />));
 
-    expect(frame).toContain('..');
+    expect(frame).toMatch(/\d+\.\ds/);
     expect(frame).toContain('Rule A');
   });
 
@@ -55,14 +75,13 @@ describe('LintProgress', () => {
       }),
     ];
 
-    const inst = render(<LintProgress rules={rules} />);
-    const frame = getFrame(inst);
+    const frame = getFrame(render(<LintProgress rules={rules} />));
 
     expect(frame).toContain('PASS');
     expect(frame).toContain('Rule A');
   });
 
-  it('renders done/fail rules with FAIL label and headline', () => {
+  it('renders done/fail rules with FAIL label', () => {
     const rules: RuleProgressEntry[] = [
       makeEntry({
         ruleId: 'rule-a',
@@ -78,14 +97,13 @@ describe('LintProgress', () => {
       }),
     ];
 
-    const inst = render(<LintProgress rules={rules} />);
-    const frame = getFrame(inst);
+    const frame = getFrame(render(<LintProgress rules={rules} />));
 
     expect(frame).toContain('FAIL');
-    expect(frame).toContain('Found violations');
+    expect(frame).toContain('Rule A');
   });
 
-  it('renders done/warn rules with WARN label and headline', () => {
+  it('renders done/warn rules with WARN label', () => {
     const rules: RuleProgressEntry[] = [
       makeEntry({
         ruleId: 'rule-a',
@@ -101,11 +119,10 @@ describe('LintProgress', () => {
       }),
     ];
 
-    const inst = render(<LintProgress rules={rules} />);
-    const frame = getFrame(inst);
+    const frame = getFrame(render(<LintProgress rules={rules} />));
 
     expect(frame).toContain('WARN');
-    expect(frame).toContain('Minor issue');
+    expect(frame).toContain('Rule A');
   });
 
   it('renders done with no result as DROP', () => {
@@ -113,8 +130,7 @@ describe('LintProgress', () => {
       makeEntry({ ruleId: 'rule-a', name: 'Rule A', runStatus: 'done' }),
     ];
 
-    const inst = render(<LintProgress rules={rules} />);
-    const frame = getFrame(inst);
+    const frame = getFrame(render(<LintProgress rules={rules} />));
 
     expect(frame).toContain('DROP');
   });
@@ -131,40 +147,18 @@ describe('LintProgress', () => {
         ruleId: 'rule-b',
         name: 'Second Rule',
         runStatus: 'running',
+        startedAt: Date.now(),
       }),
       makeEntry({ ruleId: 'rule-c', name: 'Third Rule', runStatus: 'waiting' }),
     ];
 
-    const inst = render(<LintProgress rules={rules} />);
-    const frame = getFrame(inst);
+    const frame = getFrame(render(<LintProgress rules={rules} />));
 
     expect(frame).toContain('PASS');
     expect(frame).toContain('First Rule');
-    expect(frame).toContain('..');
     expect(frame).toContain('Second Rule');
     expect(frame).toContain('WAIT');
     expect(frame).toContain('Third Rule');
-  });
-
-  it('shows pass comment when present', () => {
-    const rules: RuleProgressEntry[] = [
-      makeEntry({
-        ruleId: 'rule-a',
-        name: 'Rule A',
-        runStatus: 'done',
-        result: {
-          status: 'pass',
-          rule: 'Rule A',
-          source: 'RULES.md',
-          comment: 'All good!',
-        },
-      }),
-    ];
-
-    const inst = render(<LintProgress rules={rules} />);
-    const frame = getFrame(inst);
-
-    expect(frame).toContain('All good!');
   });
 
   it('updates when rerendered with new status', () => {

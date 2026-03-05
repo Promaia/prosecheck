@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import type { RuleResult } from '../../lib/config-schema.js';
 
@@ -14,6 +14,8 @@ export interface RuleProgressEntry {
   runStatus: RuleRunStatus;
   /** Agent result (only present when runStatus is 'done') */
   result?: RuleResult | undefined;
+  /** Timestamp when the rule started running */
+  startedAt?: number | undefined;
 }
 
 export interface LintProgressProps {
@@ -21,23 +23,25 @@ export interface LintProgressProps {
   rules: RuleProgressEntry[];
 }
 
-function statusLabel(runStatus: RuleRunStatus, result?: RuleResult): string {
-  if (runStatus === 'waiting') return 'WAIT';
-  if (runStatus === 'running') return ' .. ';
-  if (!result) return 'DROP';
-  switch (result.status) {
-    case 'pass':
-      return 'PASS';
-    case 'warn':
-      return 'WARN';
-    case 'fail':
-      return 'FAIL';
+const STATUS_WIDTH = 6;
+const MIN_RULE_WIDTH = 20;
+
+function pad(
+  s: string,
+  width: number,
+  align: 'left' | 'center' = 'left',
+): string {
+  if (s.length >= width) return s.slice(0, width);
+  if (align === 'center') {
+    const leftPad = Math.floor((width - s.length) / 2);
+    return ' '.repeat(leftPad) + s + ' '.repeat(width - s.length - leftPad);
   }
+  return s + ' '.repeat(width - s.length);
 }
 
 function statusColor(runStatus: RuleRunStatus, result?: RuleResult): string {
   if (runStatus === 'waiting') return 'gray';
-  if (runStatus === 'running') return 'blue';
+  if (runStatus === 'running') return 'cyan';
   if (!result) return 'magenta';
   switch (result.status) {
     case 'pass':
@@ -49,35 +53,88 @@ function statusColor(runStatus: RuleRunStatus, result?: RuleResult): string {
   }
 }
 
-function resultDetail(result?: RuleResult): string {
-  if (!result) return '';
-  if (result.status === 'pass') return result.comment ?? '';
-  return result.headline;
+function getStatusText(entry: RuleProgressEntry, now: number): string {
+  if (entry.runStatus === 'waiting') return 'WAIT';
+  if (entry.runStatus === 'running') {
+    if (entry.startedAt != null) {
+      const elapsed = (now - entry.startedAt) / 1000;
+      return elapsed.toFixed(1) + 's';
+    }
+    return '..';
+  }
+  if (!entry.result) return 'DROP';
+  switch (entry.result.status) {
+    case 'pass':
+      return 'PASS';
+    case 'warn':
+      return 'WARN';
+    case 'fail':
+      return 'FAIL';
+  }
 }
 
 /**
- * Live table showing each rule's name, run status (waiting/running/done),
- * and result as agents complete.
+ * Live table showing each rule's name and run status with a
+ * box-drawing border and running timer for in-progress rules.
  */
 export function LintProgress({ rules }: LintProgressProps): React.ReactElement {
+  const [now, setNow] = useState(Date.now());
+  const hasRunning = rules.some((r) => r.runStatus === 'running');
+
+  useEffect(() => {
+    if (!hasRunning) return;
+    const id = setInterval(() => {
+      setNow(Date.now());
+    }, 100);
+    return () => {
+      clearInterval(id);
+    };
+  }, [hasRunning]);
+
+  if (rules.length === 0) {
+    return <Box />;
+  }
+
+  const ruleWidth = Math.max(
+    MIN_RULE_WIDTH,
+    ...rules.map((r) => r.name.length),
+  );
+  const sCol = STATUS_WIDTH + 2;
+  const rCol = ruleWidth + 2;
+
+  const topBorder = `┌${'─'.repeat(sCol)}┬${'─'.repeat(rCol)}┐`;
+  const headerSep = `├${'─'.repeat(sCol)}┼${'─'.repeat(rCol)}┤`;
+  const bottomBorder = `└${'─'.repeat(sCol)}┴${'─'.repeat(rCol)}┘`;
+
   return (
     <Box flexDirection="column">
+      <Text>{topBorder}</Text>
+      <Text>
+        {'│ '}
+        {pad('STATUS', STATUS_WIDTH, 'center')}
+        {' │ '}
+        {pad('RULE', ruleWidth)}
+        {' │'}
+      </Text>
+      <Text>{headerSep}</Text>
       {rules.map((entry) => {
-        const label = statusLabel(entry.runStatus, entry.result);
+        const statusText = getStatusText(entry, now);
         const color = statusColor(entry.runStatus, entry.result);
-        const detail =
-          entry.runStatus === 'done' ? resultDetail(entry.result) : '';
-
+        const align: 'left' | 'center' =
+          entry.runStatus === 'running' ? 'center' : 'left';
         return (
-          <Box key={entry.ruleId} gap={1}>
+          <Text key={entry.ruleId}>
+            {'│ '}
             <Text color={color} bold>
-              {label}
+              {pad(statusText, STATUS_WIDTH, align)}
             </Text>
-            <Text>{entry.name}</Text>
-            {detail ? <Text dimColor>{detail}</Text> : null}
-          </Box>
+            {' │ '}
+            {pad(entry.name, ruleWidth)}
+            {' │'}
+          </Text>
         );
       })}
+      <Text>{bottomBorder}</Text>
     </Box>
   );
 }

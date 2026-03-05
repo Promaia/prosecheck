@@ -67,7 +67,7 @@ describe('LintApp', () => {
     });
 
     await vi.waitFor(() => {
-      expect(getFrame(inst)).toContain('..');
+      expect(getFrame(inst)).toMatch(/\d+\.\ds/);
     });
   });
 
@@ -142,13 +142,11 @@ describe('LintApp', () => {
     const inst = render(<LintApp progressRef={ref} finalResults={results} />);
 
     await vi.waitFor(() => {
-      const frame = getFrame(inst);
-      expect(frame).toContain('1 rules');
-      expect(frame).toContain('PASS');
+      expect(getFrame(inst)).toContain('1 passed');
     });
   });
 
-  it('shows fail result with headline', async () => {
+  it('shows fail result status', async () => {
     const ref = makeRef();
     const inst = render(<LintApp progressRef={ref} />);
 
@@ -171,9 +169,7 @@ describe('LintApp', () => {
     });
 
     await vi.waitFor(() => {
-      const frame = getFrame(inst);
-      expect(frame).toContain('FAIL');
-      expect(frame).toContain('Violations found');
+      expect(getFrame(inst)).toContain('FAIL');
     });
   });
 });
