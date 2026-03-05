@@ -13,7 +13,9 @@ const program = new Command();
 
 program
   .name('prosecheck')
-  .description('LLM-powered code linter with natural-language rules.\n♥ by the Promaia team')
+  .description(
+    'LLM-powered code linter with natural-language rules.\n♥ by the Promaia team',
+  )
   .version('0.0.1');
 
 program

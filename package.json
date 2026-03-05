@@ -1,6 +1,27 @@
 {
   "name": "prosecheck",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "description": "LLM-powered code linter with natural-language rules",
+  "license": "Apache-2.0",
+  "author": "Promaia",
+  "homepage": "https://github.com/Promaia/prosecheck",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Promaia/prosecheck.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Promaia/prosecheck/issues"
+  },
+  "keywords": [
+    "linter",
+    "lint",
+    "llm",
+    "claude",
+    "natural-language",
+    "code-review",
+    "static-analysis",
+    "sarif"
+  ],
   "type": "module",
   "bin": {
     "prosecheck": "./dist/cli.js"
