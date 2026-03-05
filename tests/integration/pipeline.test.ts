@@ -7,10 +7,8 @@
  * while passing `git` calls through to real execa.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import os from 'node:os';
-import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '../../src/lib/config-schema.js';
 import type { RunContext } from '../../src/types/index.js';
@@ -23,6 +21,7 @@ const FAKE_CLAUDE_PATH = path.resolve(__dirname, '../fixtures/fake-claude.mjs');
 const shared = vi.hoisted(() => ({
   claudeCallCount: 0,
   lastClaudeEnv: {} as Record<string, string | undefined>,
+  lastClaudeArgs: [] as string[][],
   fakeClaudeEnv: {} as Record<string, string>,
   /** Optional per-call override: (callIndex) => env overrides, or undefined to use fakeClaudeEnv */
   perCallEnvFn: undefined as
@@ -37,6 +36,7 @@ vi.mock('execa', async (importOriginal) => {
     execa: (cmd: string, args: string[], opts?: Record<string, unknown>) => {
       if (cmd === 'claude') {
         shared.claudeCallCount++;
+        shared.lastClaudeArgs.push(args);
         const optsEnv = (opts ? opts['env'] : undefined) as
           | Record<string, string | undefined>
           | undefined;
@@ -68,41 +68,22 @@ const { runEngine } = await import('../../src/lib/engine.js');
 
 // --- Helpers ---
 
-interface TestRepo {
-  dir: string;
-  cleanup: () => Promise<void>;
-}
+import {
+  createTestRepo as createTestRepoBase,
+  gitCommit as gitCommitBase,
+  type TestRepo,
+  type ExecaFn,
+} from '../helpers/git-repo.js';
 
 async function createTestRepo(): Promise<TestRepo> {
-  const suffix = randomBytes(8).toString('hex');
-  const dir = path.join(os.tmpdir(), `prosecheck-integ-${suffix}`);
-  await mkdir(dir, { recursive: true });
-
-  // These git calls go through the mock, but since cmd !== 'claude' they pass through to real execa
-  await execaFn('git', ['init'], { cwd: dir });
-  await execaFn('git', ['checkout', '-b', 'main'], { cwd: dir });
-  await execaFn('git', ['config', 'user.name', 'Test'], { cwd: dir });
-  await execaFn('git', ['config', 'user.email', 'test@test.com'], {
-    cwd: dir,
+  return createTestRepoBase({
+    prefix: 'prosecheck-integ',
+    execFn: execaFn as ExecaFn,
   });
-
-  // Initial commit
-  await writeFile(path.join(dir, 'README.md'), '# test\n', 'utf-8');
-  await gitCommit(dir, 'Initial commit');
-
-  return {
-    dir,
-    cleanup: async () => {
-      await rm(dir, { recursive: true, force: true });
-    },
-  };
 }
 
 async function gitCommit(dir: string, message: string): Promise<void> {
-  await execaFn('git', ['add', '-A'], { cwd: dir });
-  await execaFn('git', ['commit', '-m', message, '--allow-empty-message'], {
-    cwd: dir,
-  });
+  return gitCommitBase(dir, message, execaFn as ExecaFn);
 }
 
 /** Write RULES.md with two rules and .prosecheck/config.json */
@@ -145,7 +126,14 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     warnAsError: false,
     retryDropped: false,
     retryDroppedMaxAttempts: 1,
-    claudeCode: { singleInstance: false, agentTeams: false },
+    claudeCode: {
+      singleInstance: false,
+      agentTeams: false,
+      maxTurns: 30,
+      allowedTools: [],
+      tools: [],
+      additionalArgs: [],
+    },
     postRun: [],
     environments: {},
     ruleCalculators: [{ name: 'rules-md', enabled: true, options: {} }],
@@ -175,6 +163,7 @@ const repos: TestRepo[] = [];
 beforeEach(() => {
   shared.claudeCallCount = 0;
   shared.lastClaudeEnv = {};
+  shared.lastClaudeArgs = [];
   shared.fakeClaudeEnv = {};
   shared.perCallEnvFn = undefined;
   vi.spyOn(process.stdout, 'write').mockReturnValue(true);
@@ -212,7 +201,14 @@ describe('Integration: multi-instance mode full pipeline', () => {
 
     const context = makeContext(repo.dir, {
       config: makeConfig({
-        claudeCode: { singleInstance: false, agentTeams: false },
+        claudeCode: {
+          singleInstance: false,
+          agentTeams: false,
+          maxTurns: 30,
+          allowedTools: [],
+          tools: [],
+          additionalArgs: [],
+        },
       }),
     });
     const result = await runEngine(context);
@@ -232,6 +228,30 @@ describe('Integration: multi-instance mode full pipeline', () => {
 
     // Should have spawned 2 claude processes (one per rule)
     expect(shared.claudeCallCount).toBe(2);
+
+    // Each claude call should have --output-format json and --allowedTools
+    for (const args of shared.lastClaudeArgs) {
+      expect(args).toContain('--print');
+      expect(args).toContain('--output-format');
+      expect(args[args.indexOf('--output-format') + 1]).toBe('json');
+    }
+
+    // Each call should have Write permission scoped to its specific output file (absolute path)
+    const allowedToolsValues = shared.lastClaudeArgs.map((args) => {
+      const idx = args.indexOf('--allowedTools');
+      return idx >= 0 ? args[idx + 1] : undefined;
+    });
+    const repoPrefix = repo.dir.replaceAll('\\', '/');
+    expect(allowedToolsValues).toContainEqual(
+      expect.stringContaining(
+        `Write(${repoPrefix}/.prosecheck/working/outputs/rules-md--no-console-log.json)`,
+      ),
+    );
+    expect(allowedToolsValues).toContainEqual(
+      expect.stringContaining(
+        `Write(${repoPrefix}/.prosecheck/working/outputs/rules-md--keep-functions-short.json)`,
+      ),
+    );
   }, 30_000);
 });
 
@@ -256,7 +276,14 @@ describe('Integration: single-instance mode with agent teams', () => {
 
     const context = makeContext(repo.dir, {
       config: makeConfig({
-        claudeCode: { singleInstance: true, agentTeams: true },
+        claudeCode: {
+          singleInstance: true,
+          agentTeams: true,
+          maxTurns: 30,
+          allowedTools: [],
+          tools: [],
+          additionalArgs: [],
+        },
       }),
     });
     const result = await runEngine(context);
@@ -272,6 +299,18 @@ describe('Integration: single-instance mode with agent teams', () => {
     // All rules should have results (fake-claude extracts all output paths)
     expect(result.results.results.length).toBe(2);
     expect(result.results.dropped).toHaveLength(0);
+
+    // Single-instance should get wildcard Write permission for outputs
+    const args = shared.lastClaudeArgs[0] as string[];
+    expect(args).toContain('--output-format');
+    expect(args[args.indexOf('--output-format') + 1]).toBe('json');
+    const toolsIdx = args.indexOf('--allowedTools');
+    expect(toolsIdx).toBeGreaterThan(-1);
+    const toolsArg = args[toolsIdx + 1] as string;
+    const repoPrefix = repo.dir.replaceAll('\\', '/');
+    expect(toolsArg).toContain(
+      `Write(${repoPrefix}/.prosecheck/working/outputs/*)`,
+    );
   }, 30_000);
 });
 

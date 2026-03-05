@@ -3,8 +3,8 @@
 /**
  * Fake Claude CLI shim for integration tests.
  *
- * Simulates the `claude --print -p <prompt>` interface by:
- * 1. Parsing args to extract the prompt text
+ * Simulates the `claude --print` interface by:
+ * 1. Reading the prompt from stdin
  * 2. Extracting the output path(s) and rule name(s) from the prompt
  * 3. Writing JSON result files based on env-var behavior controls
  *
@@ -18,15 +18,17 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
-const args = process.argv.slice(2);
+// Read prompt from stdin
+const chunks = [];
+for await (const chunk of process.stdin) {
+  chunks.push(chunk);
+}
+const prompt = Buffer.concat(chunks).toString('utf-8');
 
-// Find -p flag → next arg is the prompt text
-const pIndex = args.indexOf('-p');
-if (pIndex === -1 || pIndex + 1 >= args.length) {
-  console.error('fake-claude: missing -p <prompt> argument');
+if (!prompt) {
+  console.error('fake-claude: no prompt received on stdin');
   process.exit(1);
 }
-const prompt = args[pIndex + 1];
 
 // Extract all output paths: ``Write your result as JSON to: `<path>` ``
 const outputPathRegex = /Write your result as JSON to: `(.+?)`/g;

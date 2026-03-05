@@ -23,6 +23,7 @@ vi.mock('../../../src/lib/change-detection.js', () => ({
 }));
 vi.mock('../../../src/lib/prompt.js', () => ({
   generatePrompts: mockGeneratePrompts,
+  loadGlobalPrompt: () => Promise.resolve(undefined),
 }));
 const mockComputeOverallStatus = vi.fn();
 vi.mock('../../../src/lib/results.js', () => ({
@@ -61,7 +62,14 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     warnAsError: false,
     retryDropped: false,
     retryDroppedMaxAttempts: 1,
-    claudeCode: { singleInstance: false, agentTeams: true },
+    claudeCode: {
+      singleInstance: false,
+      agentTeams: true,
+      maxTurns: 30,
+      allowedTools: [],
+      tools: [],
+      additionalArgs: [],
+    },
     postRun: [],
     environments: {},
     ruleCalculators: [],
