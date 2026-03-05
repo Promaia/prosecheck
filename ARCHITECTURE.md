@@ -324,7 +324,7 @@ ADR files ───────→ adr calculator ───────┘      
     └── outputs/             # Agent result files (<rule-id>.json)
 ```
 
-Working directory is wiped at the start of each run. Prompts and outputs are retained after the run for debugging.
+`.prosecheck/working` is wiped at the start of each run. Prompts and outputs are retained after the run for debugging.
 
 ---
 
@@ -333,7 +333,7 @@ Working directory is wiped at the start of each run. Prompts and outputs are ret
 See `docs/adr/` for full records:
 
 1. **Plain-text rules evaluated by LLM** — no DSL, natural language
-2. **One agent per rule** — parallel, isolated evaluation
+2. ~~One agent per rule~~ — superceded by ADR-012
 3. **Change detection selects rules, agents see full codebase** — diffs control what runs, not what agents see
 4. **Environment vs operating mode separation** — orthogonal config and execution axes
 5. **Pluggable rule calculators** — extensible rule discovery
@@ -342,6 +342,8 @@ See `docs/adr/` for full records:
 8. **TypeScript/ESM strict stack** — strict TS, ESM-only, modern tooling
 9. **Configuration model and runtime defaults** — layered config, ESLint-style exit codes
 10. **Zod-defined config schema** — single declaration for types, validation, defaults, and editor introspection
+11. **acceptEdits permission mode** — uses `--permission-mode acceptEdits` for Claude CLI because scoped `Write()` permissions are buggy upstream
+12. **Flexible rule dispatch** — configurable `claudeToRuleShape` (one-to-one, one-to-many-teams, one-to-many-single) with rule groups and concurrency limits; supercedes ADR-002
 
 ---
 
