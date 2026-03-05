@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-012](012-flexible-rule-dispatch.md)
 
 ## Context
 
