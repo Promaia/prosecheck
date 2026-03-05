@@ -101,12 +101,40 @@ program
   .command('init')
   .description('Initialize prosecheck in the current project')
   .option('--rules', 'Create a starter RULES.md file')
-  .action(async (options: { rules?: boolean }) => {
-    await init({
-      projectRoot: process.cwd(),
-      createRules: options.rules ?? false,
-    });
-  });
+  .option('--github-actions', 'Generate a full-check GitHub Actions workflow')
+  .option(
+    '--github-actions-incremental',
+    'Generate incremental GitHub Actions workflows (PR + merge queue)',
+  )
+  .option(
+    '--github-actions-hash-check',
+    'Generate a hash-check GitHub Actions workflow (zero token cost)',
+  )
+  .option('--git-pre-push', 'Install a git pre-push hook')
+  .option(
+    '--claude-stop-hook',
+    'Add a Claude Code Stop hook that runs prosecheck after responses',
+  )
+  .action(
+    async (options: {
+      rules?: boolean;
+      githubActions?: boolean;
+      githubActionsIncremental?: boolean;
+      githubActionsHashCheck?: boolean;
+      gitPrePush?: boolean;
+      claudeStopHook?: boolean;
+    }) => {
+      await init({
+        projectRoot: process.cwd(),
+        createRules: options.rules ?? false,
+        githubActions: options.githubActions ?? false,
+        githubActionsIncremental: options.githubActionsIncremental ?? false,
+        githubActionsHashCheck: options.githubActionsHashCheck ?? false,
+        gitPrePush: options.gitPrePush ?? false,
+        claudeStopHook: options.claudeStopHook ?? false,
+      });
+    },
+  );
 
 const configCmd = program
   .command('config')

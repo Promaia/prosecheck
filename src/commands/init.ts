@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readFile, access } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, access, chmod } from 'node:fs/promises';
 import path from 'node:path';
 
 export interface InitOptions {
@@ -6,6 +6,16 @@ export interface InitOptions {
   projectRoot: string;
   /** Whether to create a starter RULES.md */
   createRules: boolean;
+  /** Generate a full-check GitHub Actions workflow */
+  githubActions?: boolean;
+  /** Generate incremental GitHub Actions workflows (PR + merge queue) */
+  githubActionsIncremental?: boolean;
+  /** Generate a hash-check GitHub Actions workflow */
+  githubActionsHashCheck?: boolean;
+  /** Install a git pre-push hook */
+  gitPrePush?: boolean;
+  /** Add a Claude Code Stop hook */
+  claudeStopHook?: boolean;
 }
 
 const DEFAULT_CONFIG = {
@@ -20,13 +30,9 @@ const STARTER_RULES = `# Rules
 
 Production source files should not contain \`console.log\` statements. Use a proper logging library instead.
 
-**Scope:** \`src/\`
-
 ## Keep functions under 50 lines
 
 Functions should be concise and focused. If a function exceeds 50 lines, consider refactoring it into smaller helper functions.
-
-**Scope:** \`src/\`
 `;
 
 const GITIGNORE_ENTRIES = [
@@ -34,55 +40,317 @@ const GITIGNORE_ENTRIES = [
   '.prosecheck/config.local.json',
 ];
 
+// --- Workflow templates ---
+
+const WORKFLOW_FULL = `name: Prosecheck
+on: [push, pull_request]
+
+jobs:
+  prosecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: npx prosecheck lint --last-run-read 0
+        env:
+          ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
+`;
+
+const WORKFLOW_INCREMENTAL_PR = `name: Prosecheck (incremental)
+on: [pull_request]
+
+jobs:
+  prosecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: npx prosecheck lint --last-run-read 1
+        env:
+          ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
+`;
+
+const WORKFLOW_INCREMENTAL_MERGE_QUEUE = `name: Prosecheck (merge queue)
+on:
+  merge_group:
+
+jobs:
+  prosecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: npx prosecheck lint --last-run-read 0
+        env:
+          ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
+`;
+
+const WORKFLOW_HASH_CHECK = `name: Prosecheck (hash check)
+on: [push, pull_request]
+
+jobs:
+  check-hash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify prosecheck was run
+        run: |
+          if [ ! -f .prosecheck/last-user-run ]; then
+            echo "::error::No .prosecheck/last-user-run file found. Run 'prosecheck lint --last-run-write 1' locally before pushing."
+            exit 1
+          fi
+          EXPECTED=\$(git rev-parse HEAD)
+          ACTUAL=\$(cat .prosecheck/last-user-run | tr -d '\\n')
+          if [ "\$ACTUAL" != "\$EXPECTED" ]; then
+            echo "::error::last-user-run hash (\$ACTUAL) does not match HEAD (\$EXPECTED). Run 'prosecheck lint --last-run-write 1' on the latest commit."
+            exit 1
+          fi
+          echo "Prosecheck hash verified."
+`;
+
+const PRE_PUSH_HOOK = `#!/bin/sh
+# prosecheck pre-push hook
+npx prosecheck lint
+`;
+
 /**
  * Initialize prosecheck in a project.
  *
- * 1. Create `.prosecheck/` directory
- * 2. Write default `config.json`
- * 3. Add entries to `.gitignore`
- * 4. Optionally create a starter `RULES.md`
+ * First run creates `.prosecheck/` directory, config, and gitignore entries.
+ * Subsequent runs skip base setup but still process integration flags.
  */
 export async function init(options: InitOptions): Promise<void> {
-  const { projectRoot, createRules } = options;
+  const { projectRoot } = options;
   const prosecheckDir = path.join(projectRoot, '.prosecheck');
-
-  // Check if already initialized
   const configPath = path.join(prosecheckDir, 'config.json');
-  if (await fileExists(configPath)) {
+  const alreadyInitialized = await fileExists(configPath);
+
+  const hasIntegrationFlags =
+    options.createRules ||
+    options.githubActions ||
+    options.githubActionsIncremental ||
+    options.githubActionsHashCheck ||
+    options.gitPrePush ||
+    options.claudeStopHook;
+
+  if (alreadyInitialized && !hasIntegrationFlags) {
     process.stdout.write(
       'prosecheck is already initialized in this project.\n',
     );
     return;
   }
 
-  // 1. Create directories (working/ shows users the full structure upfront;
-  //    the engine wipes and recreates it on each lint run)
-  await mkdir(prosecheckDir, { recursive: true });
-  await mkdir(path.join(prosecheckDir, 'working'), { recursive: true });
+  // Base setup (only on first init)
+  if (!alreadyInitialized) {
+    await mkdir(prosecheckDir, { recursive: true });
+    await mkdir(path.join(prosecheckDir, 'working'), { recursive: true });
 
-  // 2. Write default config
-  await writeFile(
-    configPath,
-    JSON.stringify(DEFAULT_CONFIG, null, 2) + '\n',
-    'utf-8',
+    await writeFile(
+      configPath,
+      JSON.stringify(DEFAULT_CONFIG, null, 2) + '\n',
+      'utf-8',
+    );
+    process.stdout.write('Created .prosecheck/config.json\n');
+
+    await updateGitignore(projectRoot);
+  }
+
+  // Integration flags (run on every invocation when specified)
+  if (options.createRules) {
+    await createStarterRules(projectRoot);
+  }
+
+  if (options.githubActions) {
+    await writeWorkflow(projectRoot, 'prosecheck.yml', WORKFLOW_FULL);
+  }
+
+  if (options.githubActionsIncremental) {
+    await writeWorkflow(
+      projectRoot,
+      'prosecheck-incremental.yml',
+      WORKFLOW_INCREMENTAL_PR,
+    );
+    await writeWorkflow(
+      projectRoot,
+      'prosecheck-merge-queue.yml',
+      WORKFLOW_INCREMENTAL_MERGE_QUEUE,
+    );
+    await setInteractiveLastRunWrite(projectRoot);
+  }
+
+  if (options.githubActionsHashCheck) {
+    await writeWorkflow(
+      projectRoot,
+      'prosecheck-hash-check.yml',
+      WORKFLOW_HASH_CHECK,
+    );
+  }
+
+  if (options.gitPrePush) {
+    await installPrePushHook(projectRoot);
+  }
+
+  if (options.claudeStopHook) {
+    await addClaudeStopHook(projectRoot);
+  }
+
+  if (!alreadyInitialized) {
+    process.stdout.write('prosecheck initialized successfully.\n');
+  }
+}
+
+// --- Helpers ---
+
+async function createStarterRules(projectRoot: string): Promise<void> {
+  const rulesPath = path.join(projectRoot, 'RULES.md');
+  if (await fileExists(rulesPath)) {
+    process.stdout.write('RULES.md already exists, skipping.\n');
+  } else {
+    await writeFile(rulesPath, STARTER_RULES, 'utf-8');
+    process.stdout.write('Created RULES.md with starter rules\n');
+  }
+}
+
+async function writeWorkflow(
+  projectRoot: string,
+  filename: string,
+  content: string,
+): Promise<void> {
+  const workflowDir = path.join(projectRoot, '.github', 'workflows');
+  const workflowPath = path.join(workflowDir, filename);
+
+  if (await fileExists(workflowPath)) {
+    process.stdout.write(`${filename} already exists, skipping.\n`);
+    return;
+  }
+
+  await mkdir(workflowDir, { recursive: true });
+  await writeFile(workflowPath, content, 'utf-8');
+  process.stdout.write(`Created .github/workflows/${filename}\n`);
+}
+
+async function setInteractiveLastRunWrite(projectRoot: string): Promise<void> {
+  const configPath = path.join(projectRoot, '.prosecheck', 'config.json');
+  let config: Record<string, unknown> = {};
+
+  try {
+    const raw = await readFile(configPath, 'utf-8');
+    config = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    // Config may not exist yet if called during first init
+  }
+
+  const environments = (config['environments'] ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const interactive = (environments['interactive'] ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const lastRun = (interactive['lastRun'] ?? {}) as Record<string, unknown>;
+
+  if (lastRun['write'] === true) {
+    return; // Already set
+  }
+
+  lastRun['write'] = true;
+  interactive['lastRun'] = lastRun;
+  environments['interactive'] = interactive;
+  config['environments'] = environments;
+
+  await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  process.stdout.write(
+    'Set lastRun.write=true for interactive environment in config.json\n',
   );
-  process.stdout.write('Created .prosecheck/config.json\n');
+}
 
-  // 3. Update .gitignore
-  await updateGitignore(projectRoot);
+async function installPrePushHook(projectRoot: string): Promise<void> {
+  const hooksDir = path.join(projectRoot, '.git', 'hooks');
+  const hookPath = path.join(hooksDir, 'pre-push');
 
-  // 4. Optionally create starter RULES.md
-  if (createRules) {
-    const rulesPath = path.join(projectRoot, 'RULES.md');
-    if (await fileExists(rulesPath)) {
-      process.stdout.write('RULES.md already exists, skipping.\n');
-    } else {
-      await writeFile(rulesPath, STARTER_RULES, 'utf-8');
-      process.stdout.write('Created RULES.md with starter rules\n');
+  if (await fileExists(hookPath)) {
+    const existing = await readFile(hookPath, 'utf-8');
+    if (existing.includes('prosecheck')) {
+      process.stdout.write(
+        'pre-push hook already contains prosecheck, skipping.\n',
+      );
+      return;
+    }
+    // Append to existing hook
+    const separator = existing.endsWith('\n') ? '' : '\n';
+    await writeFile(
+      hookPath,
+      existing + separator + '\n# prosecheck\nnpx prosecheck lint\n',
+      'utf-8',
+    );
+    process.stdout.write('Appended prosecheck to existing pre-push hook\n');
+  } else {
+    await mkdir(hooksDir, { recursive: true });
+    await writeFile(hookPath, PRE_PUSH_HOOK, 'utf-8');
+    await chmod(hookPath, 0o755);
+    process.stdout.write('Created .git/hooks/pre-push\n');
+  }
+}
+
+async function addClaudeStopHook(projectRoot: string): Promise<void> {
+  const claudeDir = path.join(projectRoot, '.claude');
+  const settingsPath = path.join(claudeDir, 'settings.json');
+
+  let settings: Record<string, unknown> = {};
+
+  if (await fileExists(settingsPath)) {
+    try {
+      const raw = await readFile(settingsPath, 'utf-8');
+      settings = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      // Malformed JSON — start fresh
     }
   }
 
-  process.stdout.write('prosecheck initialized successfully.\n');
+  const hooks = (settings['hooks'] ?? {}) as Record<string, unknown>;
+  const stopHooks = (hooks['Stop'] ?? []) as Array<Record<string, unknown>>;
+
+  // Check if prosecheck hook already exists
+  if (
+    stopHooks.some((h) => {
+      const cmd = h['command'];
+      return typeof cmd === 'string' && cmd.includes('prosecheck');
+    })
+  ) {
+    process.stdout.write(
+      'Claude Stop hook already contains prosecheck, skipping.\n',
+    );
+    return;
+  }
+
+  stopHooks.push({
+    matcher: '',
+    command: 'npx prosecheck lint',
+  });
+
+  hooks['Stop'] = stopHooks;
+  settings['hooks'] = hooks;
+
+  await mkdir(claudeDir, { recursive: true });
+  await writeFile(
+    settingsPath,
+    JSON.stringify(settings, null, 2) + '\n',
+    'utf-8',
+  );
+  process.stdout.write('Added prosecheck Stop hook to .claude/settings.json\n');
 }
 
 async function updateGitignore(projectRoot: string): Promise<void> {
