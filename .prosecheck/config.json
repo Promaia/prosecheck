@@ -6,5 +6,12 @@
     "build/",
     ".prosecheck/working/",
     "tests/fixtures/"
-  ]
+  ],
+  "environments": {
+    "interactive": {
+      "lastRun": {
+        "write": true
+      }
+    }
+  }
 }
