@@ -1,0 +1,21 @@
+name: Prosecheck (hash check)
+on: [push, pull_request]
+
+jobs:
+  check-hash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify prosecheck was run
+        run: |
+          if [ ! -f .prosecheck/last-user-run ]; then
+            echo "::error::No .prosecheck/last-user-run file found. Run 'prosecheck lint --last-run-write 1' locally before pushing."
+            exit 1
+          fi
+          EXPECTED=$(git rev-parse HEAD)
+          ACTUAL=$(cat .prosecheck/last-user-run | tr -d '\n')
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::last-user-run hash ($ACTUAL) does not match HEAD ($EXPECTED). Run 'prosecheck lint --last-run-write 1' on the latest commit."
+            exit 1
+          fi
+          echo "Prosecheck hash verified."
