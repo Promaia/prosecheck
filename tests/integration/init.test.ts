@@ -225,6 +225,25 @@ describe('--github-actions-incremental', () => {
 });
 
 describe('--github-actions-hash-check', () => {
+  it('sets lastRun.write=true for interactive environment', async () => {
+    await init({
+      projectRoot: tmpDir,
+      ...DEFAULT_OPTS,
+      githubActionsHashCheck: true,
+    });
+
+    const configPath = path.join(tmpDir, '.prosecheck/config.json');
+    const raw = await readFile(configPath, 'utf-8');
+    const config = JSON.parse(raw) as Record<
+      string,
+      Record<string, Record<string, Record<string, unknown>>>
+    >;
+
+    expect(
+      config['environments']?.['interactive']?.['lastRun']?.['write'],
+    ).toBe(true);
+  });
+
   it('creates a hash-check workflow', async () => {
     await init({
       projectRoot: tmpDir,

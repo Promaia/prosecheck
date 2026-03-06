@@ -130,6 +130,7 @@ export async function init(options: InitOptions): Promise<void> {
       'prosecheck-hash-check.yml',
       WORKFLOW_HASH_CHECK,
     );
+    await setInteractiveLastRunWrite(projectRoot);
   }
 
   if (options.gitPrePush) {
