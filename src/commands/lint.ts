@@ -135,6 +135,10 @@ export async function lint(options: LintOptions): Promise<void> {
     // Output results
     if (interactiveUI) {
       interactiveUI.finish(result.results);
+      // Print full details after the interactive summary
+      if (result.output) {
+        process.stdout.write('\n' + result.output + '\n');
+      }
     } else if (result.output) {
       process.stdout.write(result.output + '\n');
     }
