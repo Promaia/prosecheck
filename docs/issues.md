@@ -52,6 +52,10 @@ Post-run task execution (`config.postRun` → `executePostRun`) is unit-tested b
 
 The claude-code tests mock `execa` but don't verify that `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is passed through in the `env` option when `claudeToRuleShape` is `one-to-many-teams`. The env var injection logic in `executeInvocation` is untested at the unit level.
 
+### No regression tests and no rule requiring them
+
+Bug fixes don't currently require regression tests. Adding a prosecheck rule for this would improve confidence that fixed bugs stay fixed, but needs careful wording to avoid false positives on trivial fixes.
+
 ### `cli.ts`: `--claude-to-rule-shape` is not validated at the CLI layer
 
 The `--claude-to-rule-shape <shape>` flag accepts any string. Invalid values like `--claude-to-rule-shape foo` are only caught by Zod's final `safeParse()`, which produces a generic "Invalid configuration after merging all layers" error instead of a clear CLI error.

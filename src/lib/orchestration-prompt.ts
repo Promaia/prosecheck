@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { Rule } from '../types/index.js';
+import { RESULT_SCHEMA } from './prompt.js';
 
 const OUTPUTS_DIR = '.prosecheck/working/outputs';
 
@@ -49,16 +50,48 @@ export function buildOrchestrationPrompt(
   const ruleList = ruleEntries.join('\n');
 
   if (agentTeams) {
-    return buildAgentTeamsPrompt(ruleList);
+    return buildAgentTeamsPrompt(ruleList, projectRoot, promptPaths, ruleNames);
   }
   return buildSequentialPrompt(ruleList, projectRoot, promptPaths, ruleNames);
 }
 
-function buildAgentTeamsPrompt(ruleList: string): string {
+function buildAgentTeamsPrompt(
+  ruleList: string,
+  projectRoot: string,
+  promptPaths: Map<string, string>,
+  ruleNames: Map<string, string>,
+): string {
+  // Build output path list so the orchestrator knows where to validate
+  const sortedIds = [...promptPaths.keys()].sort();
+  const outputEntries: string[] = [];
+  for (const ruleId of sortedIds) {
+    const name = ruleNames.get(ruleId) ?? ruleId;
+    const outputPath = path
+      .join(projectRoot, OUTPUTS_DIR, `${ruleId}.json`)
+      .replaceAll('\\', '/');
+    outputEntries.push(`  - ${name}: \`${outputPath}\``);
+  }
+
   return [
     'You are a lint agent orchestrator. Launch agent teams to process the following lint rules. Each rule has a prompt file that the agent should follow to check the rule and output its result in the correct place:',
     '',
     ruleList,
+    '',
+    '## Required output schema',
+    '',
+    'Every sub-agent MUST write a JSON file matching one of these exact shapes. Include this schema in every message you send to sub-agents:',
+    '',
+    RESULT_SCHEMA,
+    '',
+    'The "status" field is REQUIRED and must be exactly "pass", "warn", or "fail". The "rule" field must be a string. Do not use alternative field names like "violations", "pass", "ruleId", or "ruleName".',
+    '',
+    '## Output file paths',
+    '',
+    ...outputEntries,
+    '',
+    '## Validation pass',
+    '',
+    'After all sub-agents complete, read every output file listed above and verify each one matches the required schema. If any file is missing the "status" field, uses wrong field names, or has any other schema violation, rewrite it to conform exactly. Do not skip this step.',
   ].join('\n');
 }
 

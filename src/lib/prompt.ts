@@ -7,6 +7,47 @@ const OUTPUTS_DIR = '.prosecheck/working/outputs';
 const CUSTOM_TEMPLATE_PATH = '.prosecheck/prompt-template.md';
 const GLOBAL_PROMPT_PATH = '.prosecheck/prompt.md';
 
+/**
+ * The canonical JSON output schema for lint rule results.
+ * Used in per-rule prompts, orchestration prompts, and system prompts
+ * to ensure agents produce valid output.
+ */
+export const RESULT_SCHEMA = `**Pass:**
+\`\`\`json
+{
+  "status": "pass",
+  "rule": "<rule name>",
+  "source": "<RULES.md path>",
+  "comment": "Optional summary"
+}
+\`\`\`
+
+**Warn:**
+\`\`\`json
+{
+  "status": "warn",
+  "rule": "<rule name>",
+  "source": "<RULES.md path>",
+  "headline": "Short summary of concern",
+  "comments": [
+    { "message": "Detail", "file": "path/to/file.ts", "line": 1 }
+  ]
+}
+\`\`\`
+
+**Fail:**
+\`\`\`json
+{
+  "status": "fail",
+  "rule": "<rule name>",
+  "source": "<RULES.md path>",
+  "headline": "Short summary of violation",
+  "comments": [
+    { "message": "Detail", "file": "path/to/file.ts", "line": 1 }
+  ]
+}
+\`\`\``;
+
 const DEFAULT_TEMPLATE = `# Rule: {{ruleName}}
 
 ## Rule Text
