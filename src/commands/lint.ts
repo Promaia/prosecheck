@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 import { loadConfig, resolveEnvironment, ConfigError } from '../lib/config.js';
 import type { PartialConfig } from '../lib/config-schema.js';
 import { runEngine } from '../lib/engine.js';
@@ -33,6 +34,8 @@ export interface LintOptions {
   maxTurns?: number | undefined;
   /** Override allowedTools config (comma-separated string from CLI) */
   allowedTools?: string | undefined;
+  /** Write output to a file instead of (in addition to) stdout */
+  output?: string | undefined;
 }
 
 /**
@@ -143,6 +146,11 @@ export async function lint(options: LintOptions): Promise<void> {
       process.stdout.write(result.output + '\n');
     }
 
+    // Write to output file if requested
+    if (options.output && result.output) {
+      writeFileSync(options.output, result.output + '\n');
+    }
+
     // Set exit code based on status
     switch (result.overallStatus) {
       case 'fail':
@@ -173,7 +181,9 @@ export async function lint(options: LintOptions): Promise<void> {
       return;
     }
 
-    process.stderr.write('An unexpected error occurred\n');
+    process.stderr.write(
+      `Unexpected error: ${String(error)}\nRun with PROSECHECK_VERBOSE=1 for more details.\n`,
+    );
     process.exitCode = 2;
   }
 }

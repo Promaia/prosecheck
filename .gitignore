@@ -2,6 +2,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 .prosecheck/working/
+.prosecheck/output.*
 .prosecheck/config.local.json
 coverage/
 .claude/settings.local.json

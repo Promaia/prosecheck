@@ -49,11 +49,11 @@ Programmatic entry point for use as a library dependency. Exports: core types (`
 
 ### `src/commands/lint.ts` — Lint Command [IMPLEMENTED]
 
-Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, timeout, claudeToRuleShape, maxConcurrentAgents), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). When stdout is a TTY and format is `stylish`, lazy-imports the Ink UI (`src/ui/render.ts`) for interactive progress display instead of plain text output. Key function: `lint(options: LintOptions)`.
+Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, timeout, claudeToRuleShape, maxConcurrentAgents, maxTurns, allowedTools, output), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). When stdout is a TTY and format is `stylish`, lazy-imports the Ink UI (`src/ui/render.ts`) for interactive progress display instead of plain text output. Supports `--output <file>` to write results to a file (in addition to stdout) for environments where stdout capture is unreliable. Key function: `lint(options: LintOptions)`.
 
 ### `src/commands/init.ts` — Init Command [IMPLEMENTED]
 
-Scaffolds `.prosecheck/` directory with default `config.json` (baseBranch, globalIgnore, ruleCalculators defaults), creates `working/` subdirectory, adds entries to `.gitignore` (working/, config.local.json, last-user-run) with a `# prosecheck` header, and optionally creates a starter `RULES.md` with example rules. Idempotent — detects existing initialization and skips. Key function: `init(options: InitOptions)`.
+Scaffolds `.prosecheck/` directory with default `config.json` (baseBranch, globalIgnore, ruleCalculators defaults), creates `working/` subdirectory, adds entries to `.gitignore` (working/, output.*, config.local.json) with a `# prosecheck` header, and optionally creates a starter `RULES.md` with example rules. Supports integration scaffolding flags: `--github-actions`, `--github-actions-incremental`, `--github-actions-hash-check`, `--git-pre-push`, `--claude-stop-hook`, and `--sarif`. Integration flags are idempotent — re-running overwrites existing generated files. Key function: `init(options: InitOptions)`.
 
 ### `src/commands/config.ts` — Config List & Set Command [IMPLEMENTED]
 
@@ -188,7 +188,7 @@ Dispatches to named calculators based on config. Supports `enabled: false` to di
 
 ### `rules-md.ts` — RULES.md Calculator [IMPLEMENTED]
 
-Discovers `RULES.md` files throughout the project tree using `glob`. Parses YAML frontmatter (if present) to extract `group` and preserve unknown fields. Top-level `#` headings become rule names; content between headings is the rule description. Subheadings (`##`, `###`) are part of the description. Text before the first heading is ignored. The file's directory becomes the rule's inclusion scope (empty for root-level files). File-level frontmatter applies to all rules in the file.
+Discovers `RULES.md` files throughout the project tree using `glob`. Supports an `ignore` option for excluding paths. Parses YAML frontmatter (if present) to extract `group` and preserve unknown fields. Supports two heading modes auto-detected by `detectHeadingLevel()`: if the first heading is `# Rules`, `##` headings delimit rules (section mode); otherwise `#` headings delimit rules (original mode). Content between headings is the rule description; deeper subheadings are part of the description. Text before the first rule heading is ignored. The file's directory becomes the rule's inclusion scope (empty for root-level files). File-level frontmatter applies to all rules in the file.
 
 ### `adr.ts` — ADR Calculator [IMPLEMENTED]
 
@@ -206,12 +206,12 @@ Generates an orchestration prompt (via the shared `orchestration-prompt.ts` buil
 
 ### `claude-code.ts` — Claude Code Headless Mode [IMPLEMENTED]
 
-Builds an execution plan via `buildExecutionPlan()` from `execution-plan.ts`, then executes batches sequentially with invocations within each batch running in parallel. Each invocation spawns a `claude --print` process via `execa`. Invocation types:
+Builds an execution plan via `buildExecutionPlan()` from `execution-plan.ts`, then executes batches sequentially with invocations within each batch running in parallel. Each invocation spawns a `claude --print` process via `execa` with `--permission-mode acceptEdits`, `--strict-mcp-config`, `--no-session-persistence`, and configurable `--max-turns`, `--allowedTools`, `--tools`, and `--system-prompt`. Clears the `CLAUDECODE` env var so child CLI processes don't reject as nested sessions. Supports verbose mode (`PROSECHECK_VERBOSE`) with `--output-format stream-json --verbose` and inherited stdout/stderr for live streaming. Invocation types:
 - **`one-to-one`**: reads the per-rule prompt file, spawns with scoped `Write` permission for that rule's output file.
 - **`one-to-many-teams`**: builds an orchestration prompt via `buildAgentTeamsPrompt()`, sets `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
 - **`one-to-many-single`**: builds an orchestration prompt via `buildSequentialPrompt()` for sequential rule processing.
 
-Configured by `claudeToRuleShape` (replaces old `singleInstance`/`agentTeams`) and `maxConcurrentAgents`. Key functions: `runClaudeCode()`, `spawnClaude()`.
+Configured by `claudeToRuleShape`, `maxConcurrentAgents`, `maxTurns`, `allowedTools`, `tools`, `additionalArgs`, `systemPrompt`, and `signal` (abort). Key functions: `runClaudeCode()`, `spawnClaude()`.
 
 ### Claude Agents SDK Mode **[PLANNED]**
 

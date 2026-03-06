@@ -330,11 +330,15 @@ export async function spawnClaude(
   // so inheriting is safe.
   const stdio = verbose ? (['pipe', 'inherit', 'inherit'] as const) : undefined;
 
+  // Clear CLAUDECODE env var so child Claude CLI doesn't think it's a nested
+  // session and refuse to start (Claude CLI sets CLAUDECODE=1 and checks for it).
+  const env = { ...process.env, ...options.env, CLAUDECODE: '' };
+
   try {
     const result = await execa('claude', args, {
       cwd,
       input: prompt,
-      ...(options.env ? { env: options.env } : {}),
+      env,
       ...(stdio ? { stdout: stdio[1], stderr: stdio[2] } : {}),
       ...(options.signal ? { cancelSignal: options.signal } : {}),
       maxBuffer: 10 * 1024 * 1024,
@@ -360,7 +364,9 @@ export async function spawnClaude(
     return {
       exitCode,
       stdout: e.stdout ?? '',
-      stderr: e.stderr ?? 'Failed to spawn claude CLI process',
+      stderr:
+        e.stderr ??
+        'Failed to spawn claude CLI process. Is the Claude CLI installed and available on your PATH?',
     };
   }
 }

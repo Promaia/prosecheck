@@ -64,6 +64,7 @@ program
     '--allowed-tools <tools>',
     'Comma-separated list of allowed tools for Claude',
   )
+  .option('--output <file>', 'Write output to a file (in addition to stdout)')
   .action(
     async (options: {
       env?: string;
@@ -79,6 +80,7 @@ program
       maxConcurrentAgents?: number;
       maxTurns?: number;
       allowedTools?: string;
+      output?: string;
     }) => {
       await lint({
         projectRoot: process.cwd(),
@@ -95,6 +97,7 @@ program
         maxConcurrentAgents: options.maxConcurrentAgents,
         maxTurns: options.maxTurns,
         allowedTools: options.allowedTools,
+        output: options.output,
       });
     },
   );
