@@ -11,6 +11,8 @@ import {
 export interface RulesMdOptions {
   // Glob pattern for RULES.md files. Defaults to all RULES.md files recursively.
   pattern?: string;
+  // Additional glob patterns to exclude from rule discovery.
+  ignore?: string[];
 }
 
 /**
@@ -26,10 +28,15 @@ export async function calculateRulesMd(
 ): Promise<Rule[]> {
   const pattern = options.pattern ?? '**/RULES.md';
 
+  const defaultIgnore = ['node_modules/**', '.git/**'];
+  const extraIgnore = (options.ignore ?? []).map((p) =>
+    p.endsWith('/') ? `${p}**` : p,
+  );
+
   const files = (
     await glob(pattern, {
       cwd: projectRoot,
-      ignore: ['node_modules/**', '.git/**'],
+      ignore: [...defaultIgnore, ...extraIgnore],
       posix: true,
     })
   ).sort();

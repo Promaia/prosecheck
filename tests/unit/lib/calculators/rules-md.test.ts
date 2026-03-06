@@ -132,6 +132,19 @@ describe('calculateRulesMd', () => {
     expect(ruleNames).toContain('API routes must validate input with Zod');
   });
 
+  it('excludes paths matching ignore patterns', async () => {
+    const projectRoot = path.join(fixturesDir, 'project-nested');
+    const rules = await calculateRulesMd(projectRoot, {
+      ignore: ['src/api/'],
+    });
+
+    // Root RULES.md (1 rule) + src/RULES.md (1 rule), api excluded
+    expect(rules).toHaveLength(2);
+    for (const rule of rules) {
+      expect(rule.source).not.toContain('src/api/');
+    }
+  });
+
   it('sets correct inclusions for nested RULES.md files', async () => {
     const projectRoot = path.join(fixturesDir, 'project-nested');
     const rules = await calculateRulesMd(projectRoot);

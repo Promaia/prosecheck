@@ -1,0 +1,10 @@
+{
+  "globalIgnore": [
+    ".git/",
+    "node_modules/",
+    "dist/",
+    "build/",
+    ".prosecheck/working/",
+    "tests/fixtures/"
+  ]
+}

@@ -35,7 +35,9 @@ export async function runCalculators(
 
   // Default: run rules-md if no calculators configured
   if (calculators.length === 0) {
-    const rules = await calculateRulesMd(projectRoot);
+    const rules = await calculateRulesMd(projectRoot, {
+      ignore: config.globalIgnore,
+    });
     assertNoDuplicateIds(rules);
     return rules;
   }
@@ -54,7 +56,11 @@ export async function runCalculators(
       );
     }
 
-    const result = await fn(projectRoot, calc.options);
+    const options =
+      calc.name === 'rules-md'
+        ? { ignore: config.globalIgnore, ...calc.options }
+        : calc.options;
+    const result = await fn(projectRoot, options);
     rules.push(...result);
   }
 
