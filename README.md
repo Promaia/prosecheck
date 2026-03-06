@@ -66,9 +66,9 @@ This creates:
 Edit `RULES.md` to define your own rules:
 
 ```markdown
-# Rules
+This file defines conventions that should be followed. Each rule is checked by prosecheck. Rule names are headings; rule contents are everything until the next heading or the end of file.
 
-## Request ID must propagate from endpoints to background jobs
+# Request ID must propagate from endpoints to background jobs
 
 The `requestId` from incoming API requests must be threaded through to all
 background job dispatches (queue publishers, async workers). This ensures
@@ -76,7 +76,7 @@ end-to-end tracing across synchronous and asynchronous boundaries. Check
 that job dispatch calls include the request ID from context, not a newly
 generated one.
 
-## Architecture docs are updated when modules change
+# Architecture docs are updated when modules change
 
 When a module under `src/lib/` is added, removed, or has its public API
 changed, the corresponding section in `docs/architecture/ARCHITECTURE.md`
