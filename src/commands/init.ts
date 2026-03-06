@@ -45,6 +45,7 @@ Functions should be concise and focused. If a function exceeds 50 lines, conside
 
 const GITIGNORE_ENTRIES = [
   '.prosecheck/working/',
+  '.prosecheck/output.*',
   '.prosecheck/config.local.json',
 ];
 
