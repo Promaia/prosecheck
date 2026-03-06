@@ -65,11 +65,37 @@ interface FileMetadata {
 }
 
 /**
+ * Detect whether rules are delimited by `#` or `##` headings.
+ *
+ * If the first heading in the file is exactly `# Rules`, the file uses
+ * section mode: `##` headings delimit rules and the `# Rules` heading is
+ * not itself a rule. Otherwise, `#` headings delimit rules (original
+ * behaviour).
+ */
+function detectHeadingLevel(lines: string[]): { level: 1 | 2; skip: number } {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+    // First heading in the file decides the mode
+    if (/^#{1,6} /.test(line)) {
+      if (/^# Rules\s*$/.test(line)) {
+        return { level: 2, skip: i };
+      }
+      return { level: 1, skip: -1 };
+    }
+  }
+  return { level: 1, skip: -1 };
+}
+
+/**
  * Parse a RULES.md file into rules.
  *
- * Rules are delimited by top-level `# ` headings. Content before the first
- * heading is ignored. Subheadings (`##`, `###`, etc.) are part of the
- * description.
+ * Rules are delimited by headings whose level is auto-detected:
+ * - If the first heading is `# Rules`, then `##` headings delimit rules
+ *   (section mode). The `# Rules` line is skipped.
+ * - Otherwise, `#` headings delimit rules (original behaviour).
+ *
+ * Content before the first rule heading is ignored. Deeper subheadings are
+ * part of the description.
  *
  * File-level frontmatter metadata (group, extra fields) is applied to all
  * rules in the file.
@@ -82,6 +108,9 @@ export function parseRulesMd(
   const lines = content.split('\n');
   const rules: Rule[] = [];
 
+  const { level, skip } = detectHeadingLevel(lines);
+  const headingPattern = level === 1 ? /^# (.+)$/ : /^## (.+)$/;
+
   let currentName: string | undefined;
   let descriptionLines: string[] = [];
   const dir = path.dirname(source);
@@ -93,9 +122,11 @@ export function parseRulesMd(
     frontmatter: metadata?.frontmatter,
   };
 
-  for (const line of lines) {
-    // Match top-level heading only (# Title), not ## or deeper
-    const headingMatch = /^# (.+)$/.exec(line);
+  for (let i = 0; i < lines.length; i++) {
+    if (i === skip) continue; // skip the `# Rules` line in section mode
+
+    const line = lines[i] ?? '';
+    const headingMatch = headingPattern.exec(line);
     const headingText = headingMatch?.[1];
 
     if (headingText !== undefined) {
