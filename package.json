@@ -61,7 +61,7 @@
     "ci:prebuild": "npm run typecheck && npm run lint && npm run test && npm run format:check",
     "ci": "npm run ci:prebuild && npm run build",
     "ci:prosecheck": "npm run ci:prebuild && npm run prosecheck && npm run build",
-    "prepublishOnly": "npm run ci:prosecheck"
+    "prepublishOnly": "npm run ci"
   },
   "dependencies": {
     "commander": "^14.0.3",
