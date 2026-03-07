@@ -11,4 +11,4 @@ jobs:
           node-version: '20'
       - run: npm ci
       - name: Verify prosecheck was run
-        run: npx prosecheck lint --hash-check
+        run: npm run prosecheck:self -- --hash-check
