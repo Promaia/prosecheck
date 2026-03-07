@@ -91,7 +91,12 @@ jobs:
   check-hash:
     runs-on: ubuntu-latest
     steps:
+      # Checkout the PR head commit, not the merge commit.
+      # pull_request events default to a merge of PR + target, which
+      # changes file contents and breaks the committed content hash.
       - uses: actions/checkout@v4
+        with:
+          ref: \${{ github.event.pull_request.head.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
