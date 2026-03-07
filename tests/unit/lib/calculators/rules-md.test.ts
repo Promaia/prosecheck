@@ -101,6 +101,91 @@ describe('parseRulesMd', () => {
 
     expect(rules[0]?.id).toBe('src-rules-md--no-console-log');
   });
+
+  describe('section mode (# Rules header)', () => {
+    it('uses ## headings as rule delimiters when first heading is # Rules', () => {
+      const content = [
+        '# Rules',
+        '',
+        '## No console.log',
+        '',
+        'Remove all console.log statements.',
+        '',
+        '## Use strict mode',
+        '',
+        'Always enable strict mode.',
+      ].join('\n');
+
+      const rules = parseRulesMd(content, 'RULES.md');
+      expect(rules).toHaveLength(2);
+      expect(rules[0]?.name).toBe('No console.log');
+      expect(rules[0]?.description).toBe('Remove all console.log statements.');
+      expect(rules[1]?.name).toBe('Use strict mode');
+      expect(rules[1]?.description).toBe('Always enable strict mode.');
+    });
+
+    it('ignores preamble between # Rules and first ## heading', () => {
+      const content = [
+        '# Rules',
+        '',
+        'These are our project rules.',
+        '',
+        '## Actual Rule',
+        '',
+        'Description.',
+      ].join('\n');
+
+      const rules = parseRulesMd(content, 'RULES.md');
+      expect(rules).toHaveLength(1);
+      expect(rules[0]?.name).toBe('Actual Rule');
+      expect(rules[0]?.description).not.toContain('project rules');
+    });
+
+    it('includes ### subheadings in rule description in section mode', () => {
+      const content = [
+        '# Rules',
+        '',
+        '## Main Rule',
+        '',
+        'Overview.',
+        '',
+        '### Details',
+        '',
+        'More info.',
+      ].join('\n');
+
+      const rules = parseRulesMd(content, 'RULES.md');
+      expect(rules).toHaveLength(1);
+      expect(rules[0]?.description).toContain('### Details');
+      expect(rules[0]?.description).toContain('More info.');
+    });
+
+    it('does not trigger section mode for # Rules as a non-first heading', () => {
+      const content = [
+        '# First Rule',
+        '',
+        'Description.',
+        '',
+        '# Rules',
+        '',
+        'This is another rule named Rules.',
+      ].join('\n');
+
+      const rules = parseRulesMd(content, 'RULES.md');
+      expect(rules).toHaveLength(2);
+      expect(rules[0]?.name).toBe('First Rule');
+      expect(rules[1]?.name).toBe('Rules');
+    });
+
+    it('does not trigger section mode for ## Rules', () => {
+      const content = ['## Rules', '', 'This has no # heading first.'].join(
+        '\n',
+      );
+
+      const rules = parseRulesMd(content, 'RULES.md');
+      expect(rules).toEqual([]);
+    });
+  });
 });
 
 describe('calculateRulesMd', () => {

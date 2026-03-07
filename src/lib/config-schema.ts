@@ -16,6 +16,12 @@ export const LastRunSchema = z
       .describe(
         'Write the current hash after a run for future incremental checks. Off by default; enable via environment overrides or CLI flags.',
       ),
+    files: z
+      .boolean()
+      .default(false)
+      .describe(
+        'Include per-file content hashes in the last-run file. Enables precise diff reporting in hash-check mode and files-based change detection.',
+      ),
   })
   .describe('Incremental run tracking via .prosecheck/last-user-run');
 
@@ -122,6 +128,7 @@ export const EnvironmentOverrideSchema = z
       .object({
         read: z.boolean().optional(),
         write: z.boolean().optional(),
+        files: z.boolean().optional(),
       })
       .optional(),
     timeout: z.number().positive().optional(),
@@ -153,13 +160,7 @@ export const ConfigSchema = z
       .describe('Git branch to diff against for change detection'),
     globalIgnore: z
       .array(z.string())
-      .default([
-        '.git/',
-        'node_modules/',
-        'dist/',
-        'build/',
-        '.prosecheck/working/',
-      ])
+      .default(['.git/', 'node_modules/', 'dist/', 'build/', '.prosecheck/'])
       .describe(
         'Gitignore-format patterns applied to all rules. Matching files are never considered changed.',
       ),
@@ -169,7 +170,11 @@ export const ConfigSchema = z
       .describe(
         'External ignore files whose patterns are merged into the global ignore set.',
       ),
-    lastRun: LastRunSchema.default(() => ({ read: false, write: false })),
+    lastRun: LastRunSchema.default(() => ({
+      read: false,
+      write: false,
+      files: false,
+    })),
     timeout: z
       .number()
       .positive()

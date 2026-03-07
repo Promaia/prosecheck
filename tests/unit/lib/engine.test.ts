@@ -18,8 +18,30 @@ const mockFormatSarif = vi.fn();
 vi.mock('../../../src/lib/calculators/index.js', () => ({
   runCalculators: mockRunCalculators,
 }));
+const mockCollectInScopeFiles = vi.fn();
+const mockReadLastRunData = vi.fn();
+const mockWriteLastRunData = vi.fn();
+const mockGetCurrentHead = vi.fn();
 vi.mock('../../../src/lib/change-detection.js', () => ({
   detectChanges: mockDetectChanges,
+  collectInScopeFiles: (...args: unknown[]) =>
+    mockCollectInScopeFiles(...args) as unknown,
+  readLastRunData: (...args: unknown[]) =>
+    mockReadLastRunData(...args) as unknown,
+  writeLastRunData: (...args: unknown[]) =>
+    mockWriteLastRunData(...args) as unknown,
+  getCurrentHead: (...args: unknown[]) =>
+    mockGetCurrentHead(...args) as unknown,
+}));
+const mockBuildIgnoreFilter = vi.fn();
+vi.mock('../../../src/lib/ignore.js', () => ({
+  buildIgnoreFilter: (...args: unknown[]) =>
+    mockBuildIgnoreFilter(...args) as unknown,
+}));
+const mockComputeFilesHash = vi.fn();
+vi.mock('../../../src/lib/content-hash.js', () => ({
+  computeFilesHash: (...args: unknown[]) =>
+    mockComputeFilesHash(...args) as unknown,
 }));
 vi.mock('../../../src/lib/prompt.js', () => ({
   generatePrompts: mockGeneratePrompts,
@@ -57,7 +79,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     baseBranch: 'main',
     globalIgnore: [],
     additionalIgnore: ['.gitignore'],
-    lastRun: { read: false, write: false },
+    lastRun: { read: false, write: false, files: false },
     timeout: 300,
     warnAsError: false,
     retryDropped: false,
@@ -495,7 +517,7 @@ describe('runEngine', () => {
       expect(result.results.dropped).toHaveLength(0);
     });
 
-    it('retries only the dropped rules, not already-resolved ones', async () => {
+    it('retries only dropped rules, not already-resolved ones', async () => {
       mockRunCalculators.mockResolvedValue([ruleA, ruleB]);
       mockDetectChanges.mockResolvedValue({
         comparisonRef: 'abc123',
@@ -552,6 +574,212 @@ describe('runEngine', () => {
       ).rules;
       expect(retryPromptRules).toHaveLength(1);
       expect(retryPromptRules[0]?.id).toBe('rule-b');
+    });
+  });
+
+  describe('hash-check mode', () => {
+    const rule = {
+      id: 'rule-a',
+      name: 'Rule A',
+      description: 'D',
+      inclusions: ['src/'],
+      source: 'RULES.md',
+    };
+
+    function setupHashCheckMocks() {
+      mockRunCalculators.mockResolvedValue([rule]);
+      mockBuildIgnoreFilter.mockResolvedValue({ ignores: () => false });
+      mockCollectInScopeFiles.mockResolvedValue(['src/foo.ts']);
+    }
+
+    it('passes when filesHash matches stored hash', async () => {
+      setupHashCheckMocks();
+      mockComputeFilesHash.mockResolvedValue({
+        filesHash: 'abc123',
+        files: { 'src/foo.ts': 'hash1' },
+      });
+      mockReadLastRunData.mockResolvedValue({
+        commitHash: 'commit1',
+        filesHash: 'abc123',
+      });
+
+      const context = makeContext({ hashCheck: true });
+      const result = await runEngine(context);
+
+      expect(result.overallStatus).toBe('pass');
+      expect(result.output).toContain('Hash check passed');
+      expect(result.output).toContain('1 in-scope files');
+      // Should not launch agents
+      expect(mockDetectChanges).not.toHaveBeenCalled();
+      expect(mockRunClaudeCode).not.toHaveBeenCalled();
+    });
+
+    it('fails when filesHash does not match', async () => {
+      setupHashCheckMocks();
+      mockComputeFilesHash.mockResolvedValue({
+        filesHash: 'new-hash',
+        files: { 'src/foo.ts': 'hash-new' },
+      });
+      mockReadLastRunData.mockResolvedValue({
+        commitHash: 'commit1',
+        filesHash: 'old-hash',
+      });
+
+      const context = makeContext({ hashCheck: true });
+      const result = await runEngine(context);
+
+      expect(result.overallStatus).toBe('fail');
+      expect(result.output).toContain('Hash check failed');
+      expect(mockRunClaudeCode).not.toHaveBeenCalled();
+    });
+
+    it('reports changed files when per-file detail is available', async () => {
+      setupHashCheckMocks();
+      mockComputeFilesHash.mockResolvedValue({
+        filesHash: 'new-hash',
+        files: { 'src/foo.ts': 'hash-new', 'src/bar.ts': 'hash-same' },
+      });
+      mockReadLastRunData.mockResolvedValue({
+        commitHash: 'commit1',
+        filesHash: 'old-hash',
+        files: { 'src/foo.ts': 'hash-old', 'src/bar.ts': 'hash-same' },
+      });
+
+      const context = makeContext({ hashCheck: true });
+      const result = await runEngine(context);
+
+      expect(result.overallStatus).toBe('fail');
+      expect(result.output).toContain('src/foo.ts');
+      expect(result.output).not.toContain('src/bar.ts');
+    });
+
+    it('reports removed files', async () => {
+      setupHashCheckMocks();
+      mockComputeFilesHash.mockResolvedValue({
+        filesHash: 'new-hash',
+        files: { 'src/foo.ts': 'hash1' },
+      });
+      mockReadLastRunData.mockResolvedValue({
+        commitHash: 'commit1',
+        filesHash: 'old-hash',
+        files: {
+          'src/foo.ts': 'hash1',
+          'src/deleted.ts': 'hash-del',
+        },
+      });
+
+      const context = makeContext({ hashCheck: true });
+      const result = await runEngine(context);
+
+      expect(result.overallStatus).toBe('fail');
+      expect(result.output).toContain('src/deleted.ts');
+    });
+
+    it('fails when no last-run data exists', async () => {
+      setupHashCheckMocks();
+      mockComputeFilesHash.mockResolvedValue({
+        filesHash: 'abc123',
+        files: {},
+      });
+      mockReadLastRunData.mockResolvedValue(undefined);
+
+      const context = makeContext({ hashCheck: true });
+      const result = await runEngine(context);
+
+      expect(result.overallStatus).toBe('fail');
+      expect(result.output).toContain('no last-run data found');
+    });
+
+    it('fails when last-run data has no filesHash', async () => {
+      setupHashCheckMocks();
+      mockComputeFilesHash.mockResolvedValue({
+        filesHash: 'abc123',
+        files: {},
+      });
+      mockReadLastRunData.mockResolvedValue({
+        commitHash: 'commit1',
+      });
+
+      const context = makeContext({ hashCheck: true });
+      const result = await runEngine(context);
+
+      expect(result.overallStatus).toBe('fail');
+      expect(result.output).toContain('no filesHash');
+    });
+
+    it('returns early when no rules found', async () => {
+      mockRunCalculators.mockResolvedValue([]);
+
+      const context = makeContext({ hashCheck: true });
+      const result = await runEngine(context);
+
+      expect(result.overallStatus).toBe('pass');
+      expect(mockCollectInScopeFiles).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('hash-check-write mode', () => {
+    const rule = {
+      id: 'rule-a',
+      name: 'Rule A',
+      description: 'D',
+      inclusions: ['src/'],
+      source: 'RULES.md',
+    };
+
+    it('writes current hashes and returns pass', async () => {
+      mockRunCalculators.mockResolvedValue([rule]);
+      mockBuildIgnoreFilter.mockResolvedValue({ ignores: () => false });
+      mockCollectInScopeFiles.mockResolvedValue(['src/foo.ts', 'src/bar.ts']);
+      mockComputeFilesHash.mockResolvedValue({
+        filesHash: 'new-digest',
+        files: { 'src/foo.ts': 'h1', 'src/bar.ts': 'h2' },
+      });
+      mockGetCurrentHead.mockResolvedValue('head123');
+      mockWriteLastRunData.mockResolvedValue(undefined);
+
+      const context = makeContext({ hashCheckWrite: true });
+      const result = await runEngine(context);
+
+      expect(result.overallStatus).toBe('pass');
+      expect(result.output).toContain('Hash check write');
+      expect(result.output).toContain('2 in-scope files');
+      expect(mockWriteLastRunData).toHaveBeenCalledWith(
+        '/tmp/fake-project',
+        expect.objectContaining({
+          commitHash: 'head123',
+          filesHash: 'new-digest',
+        }),
+      );
+      expect(mockRunClaudeCode).not.toHaveBeenCalled();
+      expect(mockDetectChanges).not.toHaveBeenCalled();
+    });
+
+    it('includes per-file hashes when lastRun.files is enabled', async () => {
+      mockRunCalculators.mockResolvedValue([rule]);
+      mockBuildIgnoreFilter.mockResolvedValue({ ignores: () => false });
+      mockCollectInScopeFiles.mockResolvedValue(['src/foo.ts']);
+      mockComputeFilesHash.mockResolvedValue({
+        filesHash: 'digest',
+        files: { 'src/foo.ts': 'h1' },
+      });
+      mockGetCurrentHead.mockResolvedValue('head456');
+      mockWriteLastRunData.mockResolvedValue(undefined);
+
+      const context = makeContext({
+        hashCheckWrite: true,
+        config: makeConfig({
+          lastRun: { read: false, write: false, files: true },
+        }),
+      });
+      await runEngine(context);
+
+      expect(mockWriteLastRunData).toHaveBeenCalledWith(
+        '/tmp/fake-project',
+        expect.objectContaining({
+          files: { 'src/foo.ts': 'h1' },
+        }),
+      );
     });
   });
 });
