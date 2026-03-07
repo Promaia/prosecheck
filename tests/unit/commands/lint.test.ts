@@ -52,7 +52,7 @@ beforeEach(async () => {
       retryDroppedMaxAttempts: 1,
       timeout: 300,
       postRun: [],
-      lastRun: { read: false, write: false },
+      lastRun: { read: false, write: false, files: false },
       environments: {},
       ruleCalculators: [],
       claudeCode: {

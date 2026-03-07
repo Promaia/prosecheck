@@ -24,6 +24,12 @@ export interface LintOptions {
   lastRunRead?: boolean | undefined;
   /** Override lastRun.write config */
   lastRunWrite?: boolean | undefined;
+  /** Override lastRun.files config */
+  lastRunFiles?: boolean | undefined;
+  /** Run in hash-check mode (no agents, just compare file hashes) */
+  hashCheck?: boolean | undefined;
+  /** Update stored hashes without running agents */
+  hashCheckWrite?: boolean | undefined;
   /** Override timeout config */
   timeout?: number | undefined;
   /** Override claudeToRuleShape config */
@@ -65,7 +71,8 @@ export async function lint(options: LintOptions): Promise<void> {
     }
     if (
       options.lastRunRead !== undefined ||
-      options.lastRunWrite !== undefined
+      options.lastRunWrite !== undefined ||
+      options.lastRunFiles !== undefined
     ) {
       const lastRun: Record<string, unknown> = {};
       if (options.lastRunRead !== undefined) {
@@ -73,6 +80,9 @@ export async function lint(options: LintOptions): Promise<void> {
       }
       if (options.lastRunWrite !== undefined) {
         lastRun['write'] = options.lastRunWrite;
+      }
+      if (options.lastRunFiles !== undefined) {
+        lastRun['files'] = options.lastRunFiles;
       }
       cliOverrides['lastRun'] = lastRun;
     }
@@ -129,6 +139,8 @@ export async function lint(options: LintOptions): Promise<void> {
       format,
       projectRoot,
       comparisonRef: options.ref ?? '',
+      hashCheck: options.hashCheck,
+      hashCheckWrite: options.hashCheckWrite,
       onProgress: interactiveUI?.onProgress,
     };
 

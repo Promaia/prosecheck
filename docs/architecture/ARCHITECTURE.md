@@ -49,7 +49,7 @@ Programmatic entry point for use as a library dependency. Exports: core types (`
 
 ### `src/commands/lint.ts` — Lint Command [IMPLEMENTED]
 
-Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, timeout, claudeToRuleShape, maxConcurrentAgents, maxTurns, allowedTools, output), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). When stdout is a TTY and format is `stylish`, lazy-imports the Ink UI (`src/ui/render.ts`) for interactive progress display instead of plain text output. Supports `--output <file>` to write results to a file (in addition to stdout) for environments where stdout capture is unreliable. Key function: `lint(options: LintOptions)`.
+Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, lastRunFiles, timeout, claudeToRuleShape, maxConcurrentAgents, maxTurns, allowedTools, output, hashCheck), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). When stdout is a TTY and format is `stylish`, lazy-imports the Ink UI (`src/ui/render.ts`) for interactive progress display instead of plain text output. Supports `--output <file>` to write results to a file (in addition to stdout) for environments where stdout capture is unreliable. `--hash-check` runs in lightweight mode (no agents, no API key) comparing content hashes only. Key function: `lint(options: LintOptions)`.
 
 ### `src/commands/init.ts` — Init Command [IMPLEMENTED]
 
@@ -100,6 +100,7 @@ Central coordinator that drives the lint pipeline:
 
 1. Cleanup `.prosecheck/working/`
 2. Run rule calculators → collect all rules (early return if none)
+2b. If `--hash-check` is set, run hash-check mode (compare content hashes, pass/fail without agents) and return early
 3. Run change detection → get triggered rules (early return if none)
 4. Fire `discovered` and `running` progress events (if `onProgress` callback set)
 5. Generate per-rule prompts
@@ -117,18 +118,24 @@ Key function: `runEngine(context: RunContext): Promise<EngineResult>`. Returns f
 
 ### `change-detection.ts` — Git Diff & File Filtering [IMPLEMENTED]
 
-Detects changed files via `git diff --name-only` and determines which rules to trigger. Pipeline:
+Detects changed files and determines which rules to trigger. Uses a tiered detection strategy when `lastRun.read` is enabled:
 
-1. Compute comparison ref via `git merge-base HEAD <baseBranch>` (with fallback to branch name for shallow clones)
-2. Optionally read `.prosecheck/last-user-run` hash for incremental narrowing (last-run hash narrows which rules fire, but agents still get the merge-base ref for comparison)
-3. Run `git diff --name-only <ref>` to get changed files
-4. Filter through global ignore patterns (`buildIgnoreFilter`)
-5. Match remaining files to rule scopes via `filterFiles` — a rule triggers if at least one changed file matches its inclusions
-6. Optionally write current HEAD to `.prosecheck/last-user-run`
+1. **Files-based** — If stored per-file content hashes exist, diff against current hashes to find exactly which files changed (added, modified, removed).
+2. **Digest-only** — If only a `filesHash` digest exists and matches current, skip all rules (nothing changed). On mismatch, fall through.
+3. **Git-based** — Use stored `commitHash` as `git diff` ref.
+4. **Merge-base** — Default fallback: `git merge-base HEAD <baseBranch>` (with fallback to branch name for shallow clones).
 
-Returns `ChangeDetectionResult` with: `comparisonRef` (for agents), `triggeredRules`, `changedFiles`, and `changedFilesByRule` map.
+Git diff includes both committed/staged/unstaged changes (`git diff --name-only`) and untracked files (`git ls-files --others --exclude-standard`). Changed files are filtered through global ignore patterns, then matched to rule scopes.
 
-Default last-run behavior: both `read` and `write` are off. Users enable incremental tracking via environment overrides or CLI flags (e.g., `--last-run-write 1` for local development, `--last-run-read 1` in CI).
+Returns `ChangeDetectionResult` with: `comparisonRef` (for agents), `triggeredRules`, `changedFiles`, `changedFilesByRule` map, and optional `commitLastRunHash` callback.
+
+Default last-run behavior: `read`, `write`, and `files` are all off. Users enable incremental tracking via environment overrides or CLI flags (e.g., `--last-run-write 1` for local development, `--last-run-read 1` in CI, `--last-run-files 1` for per-file hash detail).
+
+### `content-hash.ts` — Content Hashing [IMPLEMENTED]
+
+Computes SHA-256 content hashes for files with cross-platform consistency. Normalizes `\r\n` to `\n` before hashing. `computeFilesHash()` produces both a per-file hash map and a single digest (hash of sorted `path:hash` pairs). Used by change detection for files-based diffing and by `--hash-check` mode.
+
+**Hash-check mode** (`--hash-check`): Lightweight lint mode that compares in-scope file content hashes against stored last-run data without launching agents or requiring an API key. Passes if nothing changed, fails with a list of changed files if content differs.
 
 ### `ignore.ts` — Pattern Matching [IMPLEMENTED]
 
@@ -317,7 +324,7 @@ ADR files ───────→ adr calculator ───────┘      
 ├── config.local.json        # Personal overrides (gitignored)
 ├── prompt.md                # (optional) Global system prompt
 ├── prompt-template.md       # (optional) Custom prompt template
-├── last-user-run            # Git hash of last run (auto-managed)
+├── last-user-run            # JSON: commitHash, filesHash, per-file hashes (auto-managed)
 └── working/                 # Ephemeral workspace (gitignored)
     ├── prompts/             # Generated per-rule prompts (<rule-id>.md)
     └── outputs/             # Agent result files (<rule-id>.json)
@@ -343,6 +350,7 @@ See `docs/adr/` for full records:
 10. **Zod-defined config schema** — single declaration for types, validation, defaults, and editor introspection
 11. **acceptEdits permission mode** — uses `--permission-mode acceptEdits` for Claude CLI because scoped `Write()` permissions are buggy upstream
 12. **Flexible rule dispatch** — configurable `claudeToRuleShape` (one-to-one, one-to-many-teams, one-to-many-single) with rule groups and concurrency limits; supercedes ADR-002
+13. **Content-based file hashing** — SHA-256 content hashes replace git commit hashes for change detection, fixing circular dependency in CI; enables lightweight `--hash-check` mode
 
 ---
 

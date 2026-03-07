@@ -119,9 +119,9 @@ async function setupFixtureProject(
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
     baseBranch: 'main',
-    globalIgnore: ['node_modules/', 'dist/'],
+    globalIgnore: ['node_modules/', 'dist/', '.prosecheck/'],
     additionalIgnore: [],
-    lastRun: { read: false, write: false },
+    lastRun: { read: false, write: false, files: false },
     timeout: 300,
     warnAsError: false,
     retryDropped: false,
@@ -515,5 +515,74 @@ describe('Integration: grouped rules with one-to-one shape', () => {
       ),
     );
     expect(hasSpecific).toBe(true);
+  }, 30_000);
+});
+
+describe('Integration: hash-check mode', () => {
+  it('passes when files unchanged, fails after modification', async () => {
+    const repo = await createTestRepo();
+    repos.push(repo);
+
+    await setupFixtureProject(repo.dir);
+    await gitCommit(repo.dir, 'Add rules and config');
+
+    // Create feature branch with source file
+    await execaFn('git', ['checkout', '-b', 'feature'], { cwd: repo.dir });
+    await mkdir(path.join(repo.dir, 'src'), { recursive: true });
+    await writeFile(
+      path.join(repo.dir, 'src/foo.ts'),
+      'export const x = 1;\n',
+      'utf-8',
+    );
+    await gitCommit(repo.dir, 'Add source file');
+
+    // Run 1: lint with lastRun.write to store content hashes
+    shared.fakeClaudeEnv = { FAKE_CLAUDE_STATUS: 'pass' };
+
+    const writeContext = makeContext(repo.dir, {
+      config: makeConfig({
+        lastRun: { read: false, write: true, files: false },
+      }),
+    });
+    const writeResult = await runEngine(writeContext);
+    expect(writeResult.overallStatus).toBe('pass');
+
+    // Verify last-run file was written
+    const lastRunPath = path.join(repo.dir, '.prosecheck/last-user-run');
+    const lastRunRaw = await readFile(lastRunPath, 'utf-8');
+    const lastRunData = JSON.parse(lastRunRaw.trim()) as Record<
+      string,
+      unknown
+    >;
+    expect(lastRunData['filesHash']).toBeDefined();
+
+    // Run 2: hash-check with no changes → should pass
+    const passContext = makeContext(repo.dir, {
+      hashCheck: true,
+      config: makeConfig(),
+    });
+    const passResult = await runEngine(passContext);
+    expect(passResult.overallStatus).toBe('pass');
+    expect(passResult.output).toContain('Hash check passed');
+    // No agents should have been launched
+    const agentCallsBefore = shared.claudeCallCount;
+
+    // Modify a source file
+    await writeFile(
+      path.join(repo.dir, 'src/foo.ts'),
+      'export const x = 2;\n',
+      'utf-8',
+    );
+
+    // Run 3: hash-check after modification → should fail
+    const failContext = makeContext(repo.dir, {
+      hashCheck: true,
+      config: makeConfig(),
+    });
+    const failResult = await runEngine(failContext);
+    expect(failResult.overallStatus).toBe('fail');
+    expect(failResult.output).toContain('Hash check failed');
+    // No new agents launched for hash-check
+    expect(shared.claudeCallCount).toBe(agentCallsBefore);
   }, 30_000);
 });

@@ -4,7 +4,15 @@ import type { Rule, Config, RunContext, OnProgress } from '../types/index.js';
 import type { CollectResultsOutput } from './results.js';
 import type { ChangeDetectionResult } from './change-detection.js';
 import { runCalculators } from './calculators/index.js';
-import { detectChanges } from './change-detection.js';
+import {
+  detectChanges,
+  readLastRunData,
+  writeLastRunData,
+  collectInScopeFiles,
+  getCurrentHead,
+} from './change-detection.js';
+import { computeFilesHash } from './content-hash.js';
+import { buildIgnoreFilter } from './ignore.js';
 import { generatePrompts, loadGlobalPrompt } from './prompt.js';
 import { collectResults, computeOverallStatus } from './results.js';
 import { executePostRun } from './post-run.js';
@@ -61,6 +69,16 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
       overallStatus: 'pass',
       results: emptyResults,
     };
+  }
+
+  // 2b. Hash-check mode — compare content hashes without launching agents
+  if (context.hashCheck) {
+    return runHashCheck(projectRoot, config, rules, format);
+  }
+
+  // 2c. Hash-check-write mode — update stored hashes without running agents
+  if (context.hashCheckWrite) {
+    return runHashCheckWrite(projectRoot, config, rules, format);
   }
 
   // 3. Change detection — find triggered rules
@@ -407,4 +425,152 @@ async function retryDroppedRules(options: RetryDroppedOptions): Promise<void> {
     collected.dropped,
     collected.errors,
   );
+}
+
+/**
+ * Hash-check mode: compare in-scope file content hashes against stored
+ * last-run data. Passes if nothing changed, fails if files differ.
+ * No agents are launched and no API key is needed.
+ */
+async function runHashCheck(
+  projectRoot: string,
+  config: Config,
+  rules: Rule[],
+  format: string,
+): Promise<EngineResult> {
+  const globalFilter = await buildIgnoreFilter(
+    projectRoot,
+    config.globalIgnore,
+    config.additionalIgnore,
+  );
+
+  // Collect all in-scope files
+  const inScopeFiles = await collectInScopeFiles(
+    projectRoot,
+    rules,
+    globalFilter,
+  );
+
+  // Compute current content hashes
+  const current = await computeFilesHash(projectRoot, inScopeFiles);
+
+  // Read stored last-run data
+  const lastRun = await readLastRunData(projectRoot);
+
+  const failResults: CollectResultsOutput = {
+    results: [],
+    dropped: [],
+    errors: [],
+    overallStatus: 'fail',
+  };
+
+  if (!lastRun) {
+    return hashCheckResult(
+      'Hash check failed: no last-run data found. Run prosecheck lint --last-run-write 1 first.',
+      'fail',
+      failResults,
+      format,
+    );
+  }
+
+  if (!lastRun.filesHash) {
+    return hashCheckResult(
+      'Hash check failed: last-run data has no filesHash. Re-run prosecheck lint --last-run-write 1 to generate content hashes.',
+      'fail',
+      failResults,
+      format,
+    );
+  }
+
+  if (current.filesHash === lastRun.filesHash) {
+    const passResults: CollectResultsOutput = {
+      results: [],
+      dropped: [],
+      errors: [],
+      overallStatus: 'pass',
+    };
+    return hashCheckResult(
+      `Hash check passed: ${String(inScopeFiles.length)} in-scope files unchanged since last run.`,
+      'pass',
+      passResults,
+      format,
+    );
+  }
+
+  // Digest mismatch — report which files changed if per-file detail is available
+  const changedFiles: string[] = [];
+  if (lastRun.files) {
+    for (const [filePath, hash] of Object.entries(current.files)) {
+      if (lastRun.files[filePath] !== hash) {
+        changedFiles.push(filePath);
+      }
+    }
+    for (const filePath of Object.keys(lastRun.files)) {
+      if (current.files[filePath] === undefined) {
+        changedFiles.push(filePath);
+      }
+    }
+  }
+
+  let msg = 'Hash check failed: in-scope files changed since last run.';
+  if (changedFiles.length > 0) {
+    msg += ' Changed files:\n' + changedFiles.map((f) => `  - ${f}`).join('\n');
+  }
+  msg += '\nRun prosecheck lint --last-run-write 1 to update.';
+
+  return hashCheckResult(msg, 'fail', failResults, format);
+}
+
+/**
+ * Hash-check-write mode: compute current content hashes and write them
+ * to the last-run file without running any agents. Lets users manually
+ * mark the current state as "checked" when they know changes are irrelevant.
+ */
+async function runHashCheckWrite(
+  projectRoot: string,
+  config: Config,
+  rules: Rule[],
+  format: string,
+): Promise<EngineResult> {
+  const globalFilter = await buildIgnoreFilter(
+    projectRoot,
+    config.globalIgnore,
+    config.additionalIgnore,
+  );
+
+  const inScopeFiles = await collectInScopeFiles(
+    projectRoot,
+    rules,
+    globalFilter,
+  );
+
+  const current = await computeFilesHash(projectRoot, inScopeFiles);
+  const headHash = await getCurrentHead(projectRoot);
+
+  await writeLastRunData(projectRoot, {
+    commitHash: headHash,
+    filesHash: current.filesHash,
+    files: config.lastRun.files ? current.files : undefined,
+  });
+
+  const passResults: CollectResultsOutput = {
+    results: [],
+    dropped: [],
+    errors: [],
+    overallStatus: 'pass',
+  };
+
+  const msg = `Hash check write: updated last-run hashes for ${String(inScopeFiles.length)} in-scope files.`;
+  return hashCheckResult(msg, 'pass', passResults, format);
+}
+
+function hashCheckResult(
+  message: string,
+  overallStatus: string,
+  results: CollectResultsOutput,
+  format: string,
+): EngineResult {
+  // For structured formats, use the standard formatter so output is valid JSON/SARIF
+  const output = format === 'stylish' ? message : formatOutput(results, format);
+  return { output, overallStatus, results };
 }

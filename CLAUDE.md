@@ -11,8 +11,10 @@ Prosecheck is an LLM-powered code linter with natural-language rules. See `docs/
 - `npm run build` — build with tsup
 - `npm run typecheck` — type-check with tsc
 - `npm run lint` — lint with eslint
+- `npm run format:check` — check formatting with prettier
 - `npm run test` — run tests with vitest
-- `npm run ci` — full CI pipeline (typecheck + lint + test + build)
+- `npm run ci` — full CI pipeline (typecheck + lint + format:check + test + build)
+- `npm run prosecheck:self` — check against RULES.md files
 
 ## Keeping docs in sync
 
@@ -26,7 +28,7 @@ After making changes to the codebase, you MUST:
 
 ## Verification
 
-After completing each milestone (or any significant set of changes), run `npm run ci` to verify everything passes. This runs typecheck, lint, test, and build in sequence. Do not move to the next milestone until CI passes cleanly. If CI fails, fix the issue before proceeding. If formatting fails, even for files you didn't modify, run the formatter. Iterate until CI passes.
+After completing each milestone (or any significant set of changes), run `npm run ci` and `npm run prosecheck:self` to verify everything passes. This runs typecheck, lint, test, format:check, and build in sequence. Do not move to the next milestone until CI passes cleanly. Read `.prosecheck/output.log` for prosecheck output. If CI fails, fix the issue before proceeding. If formatting fails, even for files you didn't modify, run the formatter. Iterate until CI passes.
 
 ## Self-review
 

@@ -221,6 +221,9 @@ describe('--github-actions-incremental', () => {
     expect(
       config['environments']?.['interactive']?.['lastRun']?.['write'],
     ).toBe(true);
+    expect(
+      config['environments']?.['interactive']?.['lastRun']?.['files'],
+    ).toBe(true);
   });
 });
 
@@ -257,8 +260,7 @@ describe('--github-actions-hash-check', () => {
     );
     const content = await readFile(workflowPath, 'utf-8');
 
-    expect(content).toContain('last-user-run');
-    expect(content).toContain('git rev-parse HEAD');
+    expect(content).toContain('prosecheck lint --hash-check');
     expect(content).not.toContain('ANTHROPIC_API_KEY');
   });
 });

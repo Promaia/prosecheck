@@ -41,9 +41,9 @@ const { runEngine } = await import('../../src/lib/engine.js');
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
     baseBranch: 'main',
-    globalIgnore: ['node_modules/', 'dist/'],
+    globalIgnore: ['node_modules/', 'dist/', '.prosecheck/'],
     additionalIgnore: [],
-    lastRun: { read: false, write: false },
+    lastRun: { read: false, write: false, files: false },
     timeout: 300,
     warnAsError: false,
     retryDropped: false,
@@ -393,6 +393,24 @@ describe('E2E: incremental run tracking', () => {
       'utf-8',
     );
 
+    // Make ls-files return RULES.md so collectInScopeFiles finds real files
+    mockExeca.mockImplementation((cmd: string, args: string[]) => {
+      const firstArg = args[0];
+      if (cmd === 'git' && firstArg === 'merge-base') {
+        return Promise.resolve({ stdout: 'abc123def456' });
+      }
+      if (cmd === 'git' && firstArg === 'ls-files') {
+        return Promise.resolve({ stdout: 'RULES.md' });
+      }
+      if (cmd === 'git' && firstArg === 'diff') {
+        return Promise.resolve({ stdout: 'src/foo.ts\nsrc/bar.ts' });
+      }
+      if (cmd === 'git' && firstArg === 'rev-parse') {
+        return Promise.resolve({ stdout: 'deadbeef12345678' });
+      }
+      return Promise.resolve({ stdout: '' });
+    });
+
     mockRunClaudeCode.mockImplementation(async () => {
       await writeAgentOutput('rules-md--no-console-log', {
         status: 'pass',
@@ -403,16 +421,27 @@ describe('E2E: incremental run tracking', () => {
 
     // Run 1: lastRun.write = true
     const context1 = makeContext({
-      config: makeConfig({ lastRun: { read: false, write: true } }),
+      config: makeConfig({
+        lastRun: { read: false, write: true, files: false },
+      }),
     });
     await runEngine(context1);
 
-    // Verify last-run hash was written
+    // Verify last-run data was written as JSON
     const lastRunPath = path.join(tmpDir, '.prosecheck/last-user-run');
-    const hash = (await readFile(lastRunPath, 'utf-8')).trim();
-    expect(hash).toBe('deadbeef12345678');
+    const raw = (await readFile(lastRunPath, 'utf-8')).trim();
+    const lastRunData = JSON.parse(raw) as Record<string, unknown>;
+    expect(lastRunData['commitHash']).toBe('deadbeef12345678');
+    expect(lastRunData['filesHash']).toBeDefined();
 
-    // Run 2: lastRun.read = true — git diff should use last-run hash
+    // Modify RULES.md so content hash changes between runs
+    await writeFile(
+      path.join(tmpDir, 'RULES.md'),
+      '# No console.log\n\nDo not use console.log.\n\n# Keep it short\n\nKeep functions short.\n',
+      'utf-8',
+    );
+
+    // Run 2: lastRun.read = true — content changed so falls through to git-based
     mockExeca.mockClear();
     mockRunClaudeCode.mockClear();
 
@@ -421,9 +450,12 @@ describe('E2E: incremental run tracking', () => {
       if (cmd === 'git' && firstArg === 'merge-base') {
         return Promise.resolve({ stdout: 'abc123def456' });
       }
+      if (cmd === 'git' && firstArg === 'ls-files') {
+        return Promise.resolve({ stdout: 'RULES.md' });
+      }
       if (cmd === 'git' && firstArg === 'diff') {
         // When reading last-run, diff should be called with the last-run hash
-        return Promise.resolve({ stdout: 'src/foo.ts' });
+        return Promise.resolve({ stdout: 'RULES.md' });
       }
       if (cmd === 'git' && firstArg === 'rev-parse') {
         return Promise.resolve({ stdout: 'newheadhash1234' });
@@ -437,16 +469,23 @@ describe('E2E: incremental run tracking', () => {
         rule: 'No console.log',
         source: 'RULES.md',
       });
+      await writeAgentOutput('rules-md--keep-it-short', {
+        status: 'pass',
+        rule: 'Keep it short',
+        source: 'RULES.md',
+      });
     });
 
     const context2 = makeContext({
-      config: makeConfig({ lastRun: { read: true, write: false } }),
+      config: makeConfig({
+        lastRun: { read: true, write: false, files: false },
+      }),
     });
     const result2 = await runEngine(context2);
 
     expect(result2.overallStatus).toBe('pass');
 
-    // Verify git diff was called with the last-run hash
+    // Verify git diff was called with the last-run commitHash
     const diffCalls = mockExeca.mock.calls.filter(
       (c: unknown[]) => c[0] === 'git' && (c[1] as string[])[0] === 'diff',
     );

@@ -4,7 +4,8 @@
     "node_modules/",
     "dist/",
     "build/",
-    ".prosecheck/working/",
+    ".prosecheck/",
+    ".github/",
     "tests/fixtures/"
   ],
   "environments": {
