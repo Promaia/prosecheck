@@ -52,7 +52,7 @@ ${permissions(sarif)}    steps:
 
 export function buildFullWorkflow(sarif: boolean): string {
   return `name: Prosecheck
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
   prosecheck:
@@ -85,7 +85,7 @@ ${prosecheckStep('--last-run-read 0', sarif)}
 }
 
 export const WORKFLOW_HASH_CHECK = `name: Prosecheck (hash check)
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
   check-hash:

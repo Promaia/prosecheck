@@ -49,11 +49,15 @@ Programmatic entry point for use as a library dependency. Exports: core types (`
 
 ### `src/commands/lint.ts` — Lint Command [IMPLEMENTED]
 
-Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, lastRunFiles, timeout, claudeToRuleShape, maxConcurrentAgents, maxTurns, allowedTools, output, hashCheck), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). When stdout is a TTY and format is `stylish`, lazy-imports the Ink UI (`src/ui/render.ts`) for interactive progress display instead of plain text output. Supports `--output <file>` to write results to a file (in addition to stdout) for environments where stdout capture is unreliable. `--hash-check` runs in lightweight mode (no agents, no API key) comparing content hashes only. Key function: `lint(options: LintOptions)`.
+Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, lastRunFiles, timeout, claudeToRuleShape, maxConcurrentAgents, maxTurns, allowedTools, output, hashCheck, hashCheckWrite), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). When stdout is a TTY and format is `stylish`, lazy-imports the Ink UI (`src/ui/render.ts`) for interactive progress display instead of plain text output. Supports `--output <file>` to write results to a file (in addition to stdout) for environments where stdout capture is unreliable. `--hash-check` runs in lightweight mode (no agents, no API key) comparing content hashes only. `--hash-check-write` updates stored hashes without running agents. Key function: `lint(options: LintOptions)`.
 
 ### `src/commands/init.ts` — Init Command [IMPLEMENTED]
 
 Scaffolds `.prosecheck/` directory with default `config.json` (baseBranch, globalIgnore, ruleCalculators defaults), creates `working/` subdirectory, adds entries to `.gitignore` (working/, output.*, config.local.json) with a `# prosecheck` header, and optionally creates a starter `RULES.md` with example rules. Supports integration scaffolding flags: `--github-actions`, `--github-actions-incremental`, `--github-actions-hash-check`, `--git-pre-push`, `--claude-stop-hook`, and `--sarif`. Integration flags are idempotent — re-running overwrites existing generated files. Key function: `init(options: InitOptions)`.
+
+### `src/templates/workflows.ts` — GitHub Actions Workflow Templates [IMPLEMENTED]
+
+Builders for GitHub Actions workflow YAML files used by `init`. Each builder takes a `sarif` flag to optionally add SARIF output and Code Scanning upload steps. Templates: `buildFullWorkflow` (full lint on PR), `buildIncrementalPrWorkflow` (incremental with last-run), `buildMergeQueueWorkflow` (merge queue trigger), `WORKFLOW_HASH_CHECK` (lightweight hash-check, no API key).
 
 ### `src/commands/config.ts` — Config List & Set Command [IMPLEMENTED]
 
@@ -101,6 +105,7 @@ Central coordinator that drives the lint pipeline:
 1. Cleanup `.prosecheck/working/`
 2. Run rule calculators → collect all rules (early return if none)
 2b. If `--hash-check` is set, run hash-check mode (compare content hashes, pass/fail without agents) and return early
+2c. If `--hash-check-write` is set, compute and write current hashes without running agents and return early
 3. Run change detection → get triggered rules (early return if none)
 4. Fire `discovered` and `running` progress events (if `onProgress` callback set)
 5. Generate per-rule prompts
@@ -136,6 +141,8 @@ Default last-run behavior: `read`, `write`, and `files` are all off. Users enabl
 Computes SHA-256 content hashes for files with cross-platform consistency. Normalizes `\r\n` to `\n` before hashing. `computeFilesHash()` produces both a per-file hash map and a single digest (hash of sorted `path:hash` pairs). Used by change detection for files-based diffing and by `--hash-check` mode.
 
 **Hash-check mode** (`--hash-check`): Lightweight lint mode that compares in-scope file content hashes against stored last-run data without launching agents or requiring an API key. Passes if nothing changed, fails with a list of changed files if content differs.
+
+**Hash-check-write mode** (`--hash-check-write`): Computes current content hashes and writes them to the last-run file without running agents. Lets users manually mark the current state as checked when they know changes are irrelevant.
 
 ### `ignore.ts` — Pattern Matching [IMPLEMENTED]
 

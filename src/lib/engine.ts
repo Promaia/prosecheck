@@ -284,7 +284,9 @@ async function dispatchMode(
       break;
     }
     default:
-      throw new Error(`Unknown operating mode: "${mode}"`);
+      throw new Error(
+        `Unknown operating mode: "${mode}". Valid modes: claude-code, user-prompt`,
+      );
   }
 }
 

@@ -20,4 +20,4 @@ Any new feature must include corresponding test coverage. Test files belong in t
 
 # Architecture docs reflect implemented state
 
-Files in `docs/architecture/` must accurately describe the current codebase. Status markers (`[STUB]`, `[IMPLEMENTED]`, `[PLANNED]`) must match reality. Do not describe features that don't exist without a status marker.
+Files in `docs/architecture/` must accurately describe the current codebase. Status markers (`[STUB]`, `[IMPLEMENTED]`, `[PLANNED]`) must match reality. Do not describe features that don't exist without a status marker. Compare against the working tree, not just committed code — uncommitted changes count as the current state.
