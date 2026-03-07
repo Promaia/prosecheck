@@ -171,7 +171,7 @@ describe('loadConfig', () => {
   it('deep merges nested objects in local config', async () => {
     // Use an env with no lastRun override so we can observe the local merge
     await writeConfig(tmpDir, {
-      lastRun: { read: false, write: true },
+      lastRun: { read: false, write: true, files: false },
       environments: {
         interactive: {},
       },

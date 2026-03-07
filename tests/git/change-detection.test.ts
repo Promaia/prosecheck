@@ -307,7 +307,7 @@ describe('git integration: shallow clone behavior', () => {
     const config = ConfigSchema.parse({
       globalIgnore: [],
       additionalIgnore: [],
-      lastRun: { read: false, write: false },
+      lastRun: { read: false, write: false, files: false },
     });
     const rules = [createRule('All', 'Everything', [], 'RULES.md')];
 

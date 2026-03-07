@@ -121,7 +121,7 @@ export async function init(options: InitOptions): Promise<void> {
       'prosecheck-merge-queue.yml',
       buildMergeQueueWorkflow(sarif),
     );
-    await setInteractiveLastRunWrite(projectRoot);
+    await setInteractiveLastRun(projectRoot, { write: true, files: true });
   }
 
   if (options.githubActionsHashCheck) {
@@ -130,7 +130,7 @@ export async function init(options: InitOptions): Promise<void> {
       'prosecheck-hash-check.yml',
       WORKFLOW_HASH_CHECK,
     );
-    await setInteractiveLastRunWrite(projectRoot);
+    await setInteractiveLastRun(projectRoot, { write: true });
   }
 
   if (options.gitPrePush) {
@@ -176,7 +176,10 @@ async function writeWorkflow(
   process.stdout.write(`Created .github/workflows/${filename}\n`);
 }
 
-async function setInteractiveLastRunWrite(projectRoot: string): Promise<void> {
+async function setInteractiveLastRun(
+  projectRoot: string,
+  fields: Record<string, boolean>,
+): Promise<void> {
   const configPath = path.join(projectRoot, '.prosecheck', 'config.json');
   let config: Record<string, unknown> = {};
 
@@ -197,18 +200,26 @@ async function setInteractiveLastRunWrite(projectRoot: string): Promise<void> {
   >;
   const lastRun = (interactive['lastRun'] ?? {}) as Record<string, unknown>;
 
-  if (lastRun['write'] === true) {
-    return; // Already set
+  let changed = false;
+  for (const [key, value] of Object.entries(fields)) {
+    if (lastRun[key] !== value) {
+      lastRun[key] = value;
+      changed = true;
+    }
   }
 
-  lastRun['write'] = true;
+  if (!changed) return;
+
   interactive['lastRun'] = lastRun;
   environments['interactive'] = interactive;
   config['environments'] = environments;
 
   await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  const setFields = Object.entries(fields)
+    .map(([k, v]) => `lastRun.${k}=${String(v)}`)
+    .join(', ');
   process.stdout.write(
-    'Set lastRun.write=true for interactive environment in config.json\n',
+    `Set ${setFields} for interactive environment in config.json\n`,
   );
 }
 

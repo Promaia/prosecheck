@@ -4,6 +4,7 @@ import { execa } from 'execa';
 import type { Config } from './config-schema.js';
 import type { Rule } from '../types/index.js';
 import { buildIgnoreFilter, buildInclusionFilter } from './ignore.js';
+import { computeFilesHash } from './content-hash.js';
 
 export interface ChangeDetectionOptions {
   /** Project root directory */
@@ -36,12 +37,16 @@ export interface ChangeDetectionResult {
 /**
  * Detect changed files and determine which rules should be triggered.
  *
- * 1. Compute the comparison ref (explicit, or merge-base with baseBranch)
- * 2. Optionally read last-run hash for incremental narrowing
- * 3. Run `git diff --name-only` to get changed files
- * 4. Filter through global ignore patterns
- * 5. Match files to rule scopes
- * 6. Optionally prepare a deferred callback to persist the current HEAD hash
+ * When `lastRun.read` is enabled, uses a tiered detection strategy:
+ * 1. **Files-based**: If stored per-file hashes exist, diff against current
+ *    content hashes to find exactly which files changed.
+ * 2. **Digest-only**: If only a filesHash digest exists and it matches,
+ *    skip all rules (nothing changed). On mismatch, fall through.
+ * 3. **Git-based**: Use stored commitHash as git diff ref.
+ * 4. **Merge-base**: Default fallback using `git merge-base HEAD baseBranch`.
+ *
+ * When `lastRun.write` is enabled, prepares a deferred callback that writes
+ * both git hash and content hashes to the last-run file.
  */
 export async function detectChanges(
   options: ChangeDetectionOptions,
@@ -53,28 +58,126 @@ export async function detectChanges(
     options.comparisonRef ??
     (await getMergeBase(projectRoot, config.baseBranch));
 
-  // Determine the diff ref (may differ from comparisonRef when using last-run)
-  let diffRef = comparisonRef;
-  if (config.lastRun.read) {
-    const lastRunHash = await readLastRunHash(projectRoot);
-    if (lastRunHash) {
-      diffRef = lastRunHash;
-    }
-  }
-
-  // Get changed files from git
-  const rawChangedFiles = await getChangedFiles(projectRoot, diffRef);
-
-  // Apply global ignore filtering
+  // Build global ignore filter (shared across all detection paths)
   const globalFilter = await buildIgnoreFilter(
     projectRoot,
     config.globalIgnore,
     config.additionalIgnore,
   );
 
+  // Collect all in-scope file paths across all rules (for content hashing)
+  const allInScopeFiles = await collectInScopeFiles(
+    projectRoot,
+    rules,
+    globalFilter,
+  );
+
+  // Try files-based detection first when lastRun.read is enabled
+  let lastRunData: LastRunData | undefined;
+  if (config.lastRun.read) {
+    lastRunData = await readLastRunData(projectRoot);
+
+    if (lastRunData) {
+      // Tier 1: Files-based diff (stored per-file hashes exist)
+      if (lastRunData.files) {
+        const result = await detectChangesFromFileHashes(
+          projectRoot,
+          rules,
+          allInScopeFiles,
+          lastRunData.files,
+          comparisonRef,
+          config,
+        );
+        if (result) return result;
+      }
+
+      // Tier 2: Digest-only (filesHash exists but no per-file detail)
+      if (lastRunData.filesHash && !lastRunData.files) {
+        const current = await computeFilesHash(projectRoot, allInScopeFiles);
+        if (current.filesHash === lastRunData.filesHash) {
+          // Nothing changed — no rules triggered
+          return buildEmptyResult(
+            comparisonRef,
+            config,
+            projectRoot,
+            rules,
+            allInScopeFiles,
+          );
+        }
+        // Digest mismatch — fall through to git-based
+      }
+    }
+  }
+
+  // Tier 3: Git-based diff (commitHash or merge-base)
+  let diffRef = comparisonRef;
+  if (config.lastRun.read && lastRunData?.commitHash) {
+    diffRef = lastRunData.commitHash;
+  }
+
+  const rawChangedFiles = await getChangedFiles(projectRoot, diffRef);
   const changedFiles = rawChangedFiles.filter((f) => !globalFilter.ignores(f));
 
-  // Match changed files to rule scopes (global ignore already applied above)
+  return buildResult(
+    changedFiles,
+    rules,
+    comparisonRef,
+    config,
+    projectRoot,
+    allInScopeFiles,
+  );
+}
+
+/**
+ * Detect changes by comparing stored per-file hashes against current content.
+ * Returns a ChangeDetectionResult if the comparison is conclusive, or
+ * undefined to signal that the caller should fall through to git-based.
+ */
+async function detectChangesFromFileHashes(
+  projectRoot: string,
+  rules: Rule[],
+  allInScopeFiles: string[],
+  storedFiles: Record<string, string>,
+  comparisonRef: string,
+  config: Config,
+): Promise<ChangeDetectionResult | undefined> {
+  const current = await computeFilesHash(projectRoot, allInScopeFiles);
+
+  // Find files that changed, were added, or were removed
+  const changedFiles: string[] = [];
+  for (const [filePath, hash] of Object.entries(current.files)) {
+    if (storedFiles[filePath] !== hash) {
+      changedFiles.push(filePath);
+    }
+  }
+  // Files that were in the stored set but no longer exist
+  for (const filePath of Object.keys(storedFiles)) {
+    if (current.files[filePath] === undefined) {
+      changedFiles.push(filePath);
+    }
+  }
+
+  return buildResult(
+    changedFiles,
+    rules,
+    comparisonRef,
+    config,
+    projectRoot,
+    allInScopeFiles,
+  );
+}
+
+/**
+ * Build a ChangeDetectionResult from a list of changed files.
+ */
+function buildResult(
+  changedFiles: string[],
+  rules: Rule[],
+  comparisonRef: string,
+  config: Config,
+  projectRoot: string,
+  allInScopeFiles: string[],
+): ChangeDetectionResult {
   const changedFilesByRule = new Map<string, string[]>();
   const triggeredRules: Rule[] = [];
 
@@ -94,13 +197,103 @@ export async function detectChanges(
     changedFilesByRule,
   };
 
-  // Prepare deferred last-run write for the caller (engine) to invoke after success
   if (config.lastRun.write) {
-    const headHash = await getCurrentHead(projectRoot);
-    result.commitLastRunHash = () => writeLastRunHash(projectRoot, headHash);
+    result.commitLastRunHash = buildLastRunWriter(
+      projectRoot,
+      config,
+      allInScopeFiles,
+    );
   }
 
   return result;
+}
+
+/**
+ * Build an empty result (no triggered rules) with an optional last-run writer.
+ */
+function buildEmptyResult(
+  comparisonRef: string,
+  config: Config,
+  projectRoot: string,
+  rules: Rule[],
+  allInScopeFiles: string[],
+): ChangeDetectionResult {
+  return buildResult(
+    [],
+    rules,
+    comparisonRef,
+    config,
+    projectRoot,
+    allInScopeFiles,
+  );
+}
+
+/**
+ * Build the deferred last-run writer callback.
+ */
+function buildLastRunWriter(
+  projectRoot: string,
+  config: Config,
+  allInScopeFiles: string[],
+): () => Promise<void> {
+  return async () => {
+    const headHash = await getCurrentHead(projectRoot);
+    const { filesHash, files } = await computeFilesHash(
+      projectRoot,
+      allInScopeFiles,
+    );
+    await writeLastRunData(projectRoot, {
+      commitHash: headHash,
+      filesHash,
+      files: config.lastRun.files ? files : undefined,
+    });
+  };
+}
+
+/**
+ * Collect all file paths that fall within any rule's scope.
+ * Uses `git ls-files` for tracked files plus `git ls-files --others`
+ * for untracked files, then filters through global ignore and rule scopes.
+ */
+export async function collectInScopeFiles(
+  projectRoot: string,
+  rules: Rule[],
+  globalFilter: { ignores: (path: string) => boolean },
+): Promise<string[]> {
+  // Get all tracked files
+  const { stdout: trackedOutput } = await execa('git', ['ls-files'], {
+    cwd: projectRoot,
+  });
+  // Get untracked files (respects .gitignore)
+  const { stdout: untrackedOutput } = await execa(
+    'git',
+    ['ls-files', '--others', '--exclude-standard'],
+    { cwd: projectRoot },
+  );
+
+  const allFiles = new Set<string>();
+  for (const line of trackedOutput.trim().split('\n')) {
+    if (line) allFiles.add(line);
+  }
+  for (const line of untrackedOutput.trim().split('\n')) {
+    if (line) allFiles.add(line);
+  }
+
+  // Filter through global ignore
+  const filtered = [...allFiles].filter((f) => !globalFilter.ignores(f));
+
+  // Filter to files that match at least one rule's scope
+  const inScope = new Set<string>();
+  for (const rule of rules) {
+    const inclusionFilter = buildInclusionFilter(rule.inclusions);
+    for (const file of filtered) {
+      if (inclusionFilter(file)) {
+        inScope.add(file);
+      }
+    }
+  }
+
+  return [...inScope].sort();
 }
 
 /**
@@ -124,22 +317,37 @@ export async function getMergeBase(
 }
 
 /**
- * Get the list of changed files between a ref and HEAD.
+ * Get the list of changed files between a ref and HEAD, plus any
+ * untracked files (new files not yet staged).
  * Returns paths relative to project root, using forward slashes.
  */
 export async function getChangedFiles(
   projectRoot: string,
   ref: string,
 ): Promise<string[]> {
-  const { stdout } = await execa('git', ['diff', '--name-only', ref], {
-    cwd: projectRoot,
-  });
+  // Changed files (committed, staged, and unstaged) since ref
+  const { stdout: diffOutput } = await execa(
+    'git',
+    ['diff', '--name-only', ref],
+    { cwd: projectRoot },
+  );
 
-  if (!stdout.trim()) {
-    return [];
+  // Untracked files (respects .gitignore)
+  const { stdout: untrackedOutput } = await execa(
+    'git',
+    ['ls-files', '--others', '--exclude-standard'],
+    { cwd: projectRoot },
+  );
+
+  const files = new Set<string>();
+  for (const line of diffOutput.trim().split('\n')) {
+    if (line) files.add(line);
+  }
+  for (const line of untrackedOutput.trim().split('\n')) {
+    if (line) files.add(line);
   }
 
-  return stdout.trim().split('\n');
+  return [...files];
 }
 
 /**
@@ -156,40 +364,120 @@ const LAST_RUN_PATH = '.prosecheck/last-user-run';
 
 const GIT_HASH_RE = /^[0-9a-f]{4,40}$/;
 
+export interface LastRunData {
+  /** Git HEAD at time of run */
+  commitHash: string;
+  /** SHA-256 digest of all in-scope file contents */
+  filesHash?: string | undefined;
+  /** Per-file content hashes (only when lastRun.files is enabled) */
+  files?: Record<string, string> | undefined;
+}
+
 /**
- * Read the last-run hash from `.prosecheck/last-user-run`.
- * Returns undefined if the file doesn't exist or contains an invalid hash.
+ * Read the last-run data from `.prosecheck/last-user-run`.
+ *
+ * Supports two formats for backwards compatibility:
+ * - New JSON format: `{"commitHash":"...","filesHash":"...","files":{...}}`
+ * - Legacy plain-text format: bare git hash on a single line
+ *
+ * Returns undefined if the file doesn't exist or is unparseable.
  */
-export async function readLastRunHash(
+export async function readLastRunData(
   projectRoot: string,
-): Promise<string | undefined> {
+): Promise<LastRunData | undefined> {
+  let content: string;
   try {
-    const content = await readFile(
-      path.join(projectRoot, LAST_RUN_PATH),
-      'utf-8',
-    );
-    const hash = content.trim();
-    if (!hash) return undefined;
-    if (!GIT_HASH_RE.test(hash)) return undefined;
-    return hash;
+    content = await readFile(path.join(projectRoot, LAST_RUN_PATH), 'utf-8');
   } catch (error: unknown) {
     if (isEnoent(error)) {
       return undefined;
     }
     throw error;
   }
+
+  const trimmed = content.trim();
+  if (!trimmed) return undefined;
+
+  // Try JSON format first
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      const commitHash = parsed['commitHash'];
+      if (typeof commitHash !== 'string') return undefined;
+      return {
+        commitHash,
+        filesHash:
+          typeof parsed['filesHash'] === 'string'
+            ? parsed['filesHash']
+            : undefined,
+        files:
+          parsed['files'] &&
+          typeof parsed['files'] === 'object' &&
+          !Array.isArray(parsed['files'])
+            ? (parsed['files'] as Record<string, string>)
+            : undefined,
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Legacy plain-text git hash
+  if (GIT_HASH_RE.test(trimmed)) {
+    return { commitHash: trimmed };
+  }
+
+  return undefined;
+}
+
+/**
+ * Read only the commit hash from the last-run file (for git-based diffing).
+ * Convenience wrapper around readLastRunData.
+ */
+export async function readLastRunHash(
+  projectRoot: string,
+): Promise<string | undefined> {
+  const data = await readLastRunData(projectRoot);
+  return data?.commitHash;
+}
+
+export interface WriteLastRunOptions {
+  commitHash: string;
+  filesHash?: string | undefined;
+  files?: Record<string, string> | undefined;
+}
+
+/**
+ * Write last-run data to `.prosecheck/last-user-run` as a single compact
+ * JSON line. Non-mergeable by design — most recent version always wins.
+ */
+export async function writeLastRunData(
+  projectRoot: string,
+  data: WriteLastRunOptions,
+): Promise<void> {
+  const filePath = path.join(projectRoot, LAST_RUN_PATH);
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const obj: Record<string, unknown> = {
+    commitHash: data.commitHash,
+  };
+  if (data.filesHash !== undefined) {
+    obj['filesHash'] = data.filesHash;
+  }
+  if (data.files !== undefined) {
+    obj['files'] = data.files;
+  }
+  await writeFile(filePath, JSON.stringify(obj) + '\n', 'utf-8');
 }
 
 /**
  * Write the current HEAD hash to `.prosecheck/last-user-run`.
+ * @deprecated Use writeLastRunData for the new JSON format.
  */
 export async function writeLastRunHash(
   projectRoot: string,
   hash: string,
 ): Promise<void> {
-  const filePath = path.join(projectRoot, LAST_RUN_PATH);
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, hash + '\n', 'utf-8');
+  await writeLastRunData(projectRoot, { commitHash: hash });
 }
 
 function isEnoent(error: unknown): boolean {
