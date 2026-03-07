@@ -52,7 +52,7 @@ ${permissions(sarif)}    steps:
 
 export function buildFullWorkflow(sarif: boolean): string {
   return `name: Prosecheck
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
   prosecheck:
@@ -85,24 +85,22 @@ ${prosecheckStep('--last-run-read 0', sarif)}
 }
 
 export const WORKFLOW_HASH_CHECK = `name: Prosecheck (hash check)
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
   check-hash:
     runs-on: ubuntu-latest
     steps:
+      # Checkout the PR head commit, not the merge commit.
+      # pull_request events default to a merge of PR + target, which
+      # changes file contents and breaks the committed content hash.
       - uses: actions/checkout@v4
+        with:
+          ref: \${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
       - name: Verify prosecheck was run
-        run: |
-          if [ ! -f .prosecheck/last-user-run ]; then
-            echo "::error::No .prosecheck/last-user-run file found. Run 'prosecheck lint --last-run-write 1' locally before pushing."
-            exit 1
-          fi
-          EXPECTED=$(git rev-parse HEAD)
-          ACTUAL=$(cat .prosecheck/last-user-run | tr -d '\\n')
-          if [ "$ACTUAL" != "$EXPECTED" ]; then
-            echo "::error::last-user-run hash ($ACTUAL) does not match HEAD ($EXPECTED). Run 'prosecheck lint --last-run-write 1' on the latest commit."
-            exit 1
-          fi
-          echo "Prosecheck hash verified."
+        run: npx prosecheck lint --hash-check
 `;

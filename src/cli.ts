@@ -47,6 +47,19 @@ program
     parseBool,
   )
   .option(
+    '--last-run-files <bool>',
+    'Include per-file content hashes in last-run file (0 or 1)',
+    parseBool,
+  )
+  .option(
+    '--hash-check',
+    'Check if in-scope files changed since last run (no agents, no API key)',
+  )
+  .option(
+    '--hash-check-write',
+    'Update stored hashes without running agents (mark current state as checked)',
+  )
+  .option(
     '--claude-to-rule-shape <shape>',
     'How rules are dispatched (one-to-one, one-to-many-teams, one-to-many-single)',
   )
@@ -64,6 +77,7 @@ program
     '--allowed-tools <tools>',
     'Comma-separated list of allowed tools for Claude',
   )
+  .option('--output <file>', 'Write output to a file (in addition to stdout)')
   .action(
     async (options: {
       env?: string;
@@ -75,10 +89,14 @@ program
       retryDropped?: boolean;
       lastRunRead?: boolean;
       lastRunWrite?: boolean;
+      lastRunFiles?: boolean;
+      hashCheck?: boolean;
+      hashCheckWrite?: boolean;
       claudeToRuleShape?: string;
       maxConcurrentAgents?: number;
       maxTurns?: number;
       allowedTools?: string;
+      output?: string;
     }) => {
       await lint({
         projectRoot: process.cwd(),
@@ -91,10 +109,14 @@ program
         retryDropped: options.retryDropped,
         lastRunRead: options.lastRunRead,
         lastRunWrite: options.lastRunWrite,
+        lastRunFiles: options.lastRunFiles,
+        hashCheck: options.hashCheck,
+        hashCheckWrite: options.hashCheckWrite,
         claudeToRuleShape: options.claudeToRuleShape,
         maxConcurrentAgents: options.maxConcurrentAgents,
         maxTurns: options.maxTurns,
         allowedTools: options.allowedTools,
+        output: options.output,
       });
     },
   );

@@ -9,6 +9,11 @@ import {
   type Invocation,
 } from '../lib/execution-plan.js';
 import { buildOrchestrationPrompt } from '../lib/orchestration-prompt.js';
+import { RESULT_SCHEMA } from '../lib/prompt.js';
+
+const SCHEMA_SYSTEM_PROMPT = `All lint rule output files MUST use this exact JSON schema. The "status" field is required and must be "pass", "warn", or "fail". Never use alternative formats.
+
+${RESULT_SCHEMA}`;
 
 const OUTPUTS_DIR = '.prosecheck/working/outputs';
 
@@ -51,6 +56,7 @@ export interface SpawnClaudeOptions {
   tools?: string[] | undefined;
   additionalArgs?: string[] | undefined;
   systemPrompt?: string | undefined;
+  appendSystemPrompt?: string | undefined;
   signal?: AbortSignal | undefined;
 }
 
@@ -156,6 +162,7 @@ async function executeInvocation(
         tools,
         additionalArgs,
         systemPrompt,
+        appendSystemPrompt: SCHEMA_SYSTEM_PROMPT,
         signal,
       });
 
@@ -192,6 +199,7 @@ async function executeInvocation(
         tools,
         additionalArgs,
         systemPrompt,
+        appendSystemPrompt: SCHEMA_SYSTEM_PROMPT,
         signal,
       });
 
@@ -223,6 +231,7 @@ async function executeInvocation(
         tools,
         additionalArgs,
         systemPrompt,
+        appendSystemPrompt: SCHEMA_SYSTEM_PROMPT,
         signal,
       });
 
@@ -300,6 +309,11 @@ export async function spawnClaude(
     args.push('--system-prompt', options.systemPrompt);
   }
 
+  // Append system prompt (added after default system prompt)
+  if (options.appendSystemPrompt) {
+    args.push('--append-system-prompt', options.appendSystemPrompt);
+  }
+
   // Additional user-configured args
   if (options.additionalArgs && options.additionalArgs.length > 0) {
     args.push(...options.additionalArgs);
@@ -330,11 +344,15 @@ export async function spawnClaude(
   // so inheriting is safe.
   const stdio = verbose ? (['pipe', 'inherit', 'inherit'] as const) : undefined;
 
+  // Clear CLAUDECODE env var so child Claude CLI doesn't think it's a nested
+  // session and refuse to start (Claude CLI sets CLAUDECODE=1 and checks for it).
+  const env = { ...process.env, ...options.env, CLAUDECODE: '' };
+
   try {
     const result = await execa('claude', args, {
       cwd,
       input: prompt,
-      ...(options.env ? { env: options.env } : {}),
+      env,
       ...(stdio ? { stdout: stdio[1], stderr: stdio[2] } : {}),
       ...(options.signal ? { cancelSignal: options.signal } : {}),
       maxBuffer: 10 * 1024 * 1024,
@@ -360,7 +378,9 @@ export async function spawnClaude(
     return {
       exitCode,
       stdout: e.stdout ?? '',
-      stderr: e.stderr ?? 'Failed to spawn claude CLI process',
+      stderr:
+        e.stderr ??
+        'Failed to spawn claude CLI process. Is the Claude CLI installed and available on your PATH?',
     };
   }
 }

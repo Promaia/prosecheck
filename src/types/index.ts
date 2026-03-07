@@ -73,6 +73,10 @@ export interface RunContext {
   projectRoot: string;
   /** Git comparison ref */
   comparisonRef: string;
+  /** Hash-check mode: compare file hashes only, no agents */
+  hashCheck?: boolean | undefined;
+  /** Hash-check-write mode: update stored hashes without running agents */
+  hashCheckWrite?: boolean | undefined;
   /** Optional progress callback for interactive UI */
   onProgress?: OnProgress | undefined;
 }

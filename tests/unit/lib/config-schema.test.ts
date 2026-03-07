@@ -53,7 +53,7 @@ describe('ConfigSchema', () => {
       baseBranch: 'develop',
       timeout: 600,
       warnAsError: true,
-      lastRun: { read: true, write: false },
+      lastRun: { read: true, write: false, files: false },
       claudeCode: { claudeToRuleShape: 'one-to-many-teams' },
       ruleCalculators: [
         { name: 'rules-md', enabled: true },

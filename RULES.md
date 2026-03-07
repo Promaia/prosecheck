@@ -14,6 +14,10 @@ All relative imports must include the `.js` extension (e.g., `import { foo } fro
 
 Prefer named exports over default exports. Named exports provide better refactoring support and consistent import names across the codebase.
 
+# New features must have tests
+
+Any new feature must include corresponding test coverage. Test files belong in the matching `tests/` subdirectory (unit, integration, e2e).
+
 # Architecture docs reflect implemented state
 
-Files in `docs/architecture/` must accurately describe the current codebase. Status markers (`[STUB]`, `[IMPLEMENTED]`, `[PLANNED]`) must match reality. Do not describe features that don't exist without a status marker.
+Files in `docs/architecture/` must accurately describe the current codebase. Status markers (`[STUB]`, `[IMPLEMENTED]`, `[PLANNED]`) must match reality. Do not describe features that don't exist without a status marker. Compare against the working tree, not just committed code — uncommitted changes count as the current state.
