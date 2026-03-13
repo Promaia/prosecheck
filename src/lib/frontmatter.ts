@@ -71,6 +71,7 @@ export function extractGroupFromFrontmatter(data: Record<string, unknown>): {
 
 export interface RuleMetadata {
   group: string | undefined;
+  model: string | undefined;
   frontmatter: Record<string, unknown> | undefined;
   description: string;
 }
@@ -102,15 +103,18 @@ export function extractRuleMetadata(
   if (Object.keys(data).length === 0) {
     return {
       group: undefined,
+      model: undefined,
       frontmatter: undefined,
       description: descriptionLines.join('\n').trim(),
     };
   }
 
   const { group, rest } = extractGroupFromFrontmatter(data);
+  const { model, ...remaining } = rest;
   return {
     group,
-    frontmatter: Object.keys(rest).length > 0 ? rest : undefined,
+    model: typeof model === 'string' ? model : undefined,
+    frontmatter: Object.keys(remaining).length > 0 ? remaining : undefined,
     description: body.trim(),
   };
 }

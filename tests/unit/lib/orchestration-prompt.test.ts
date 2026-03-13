@@ -100,4 +100,54 @@ describe('buildOrchestrationPrompt', () => {
 
     expect(result).toContain('lint agent');
   });
+
+  it('agent teams mode annotates rules with model when model is set', () => {
+    const promptPaths = new Map<string, string>();
+    promptPaths.set('rule-a', '/project/.prosecheck/working/prompts/rule-a.md');
+
+    const rule = makeRule('rule-a', 'No Console Log');
+    rule.model = 'haiku';
+
+    const result = buildOrchestrationPrompt({
+      projectRoot: '/project',
+      promptPaths,
+      rules: [rule],
+      agentTeams: true,
+    });
+
+    expect(result).toContain('(use haiku)');
+    expect(result).toContain('No Console Log (use haiku)');
+  });
+
+  it('agent teams mode does not annotate when model is undefined', () => {
+    const promptPaths = new Map<string, string>();
+    promptPaths.set('rule-a', '/project/.prosecheck/working/prompts/rule-a.md');
+
+    const result = buildOrchestrationPrompt({
+      projectRoot: '/project',
+      promptPaths,
+      rules: [makeRule('rule-a', 'No Console Log')],
+      agentTeams: true,
+    });
+
+    expect(result).not.toContain('(use ');
+  });
+
+  it('includes model selection instruction section when annotations present', () => {
+    const promptPaths = new Map<string, string>();
+    promptPaths.set('rule-a', '/project/.prosecheck/working/prompts/rule-a.md');
+
+    const rule = makeRule('rule-a', 'No Console Log');
+    rule.model = 'opus';
+
+    const result = buildOrchestrationPrompt({
+      projectRoot: '/project',
+      promptPaths,
+      rules: [rule],
+      agentTeams: true,
+    });
+
+    expect(result).toContain('## Model selection');
+    expect(result).toContain('use that model for the teammate');
+  });
 });

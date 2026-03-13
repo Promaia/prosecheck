@@ -118,6 +118,7 @@ export function parseRulesMd(content: string, source: string): Rule[] {
         rules.push(
           createRule(currentName, meta.description, inclusions, source, {
             group: meta.group,
+            model: meta.model,
             frontmatter: meta.frontmatter,
           }),
         );
@@ -137,6 +138,7 @@ export function parseRulesMd(content: string, source: string): Rule[] {
     rules.push(
       createRule(currentName, meta.description, inclusions, source, {
         group: meta.group,
+        model: meta.model,
         frontmatter: meta.frontmatter,
       }),
     );

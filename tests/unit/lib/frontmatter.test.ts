@@ -162,4 +162,33 @@ describe('extractRuleMetadata', () => {
     expect(result.frontmatter).toBeUndefined();
     expect(result.description).toBe('');
   });
+
+  it('extracts model from frontmatter', () => {
+    const lines = ['---', 'model: haiku', '---', 'Description.'];
+    const result = extractRuleMetadata(lines);
+    expect(result.model).toBe('haiku');
+    expect(result.description).toBe('Description.');
+  });
+
+  it('does not include model in the passthrough frontmatter bag', () => {
+    const lines = [
+      '---',
+      'group: perf',
+      'model: opus',
+      'severity: warn',
+      '---',
+      'Desc.',
+    ];
+    const result = extractRuleMetadata(lines);
+    expect(result.group).toBe('perf');
+    expect(result.model).toBe('opus');
+    expect(result.frontmatter).toEqual({ severity: 'warn' });
+    expect(result.frontmatter).not.toHaveProperty('model');
+  });
+
+  it('returns undefined model when not present', () => {
+    const lines = ['---', 'group: style', '---', 'Desc.'];
+    const result = extractRuleMetadata(lines);
+    expect(result.model).toBeUndefined();
+  });
 });

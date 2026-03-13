@@ -105,6 +105,24 @@ export const ClaudeCodeSchema = z
       .array(z.string())
       .default([])
       .describe('Additional CLI arguments passed to each claude invocation.'),
+    defaultModel: z
+      .string()
+      .default('sonnet')
+      .describe(
+        'Default Claude model for rule evaluation. Per-rule frontmatter overrides this.',
+      ),
+    teamsOrchestratorModel: z
+      .string()
+      .optional()
+      .describe(
+        'Model for the orchestrator process in one-to-many-teams mode. Defaults to defaultModel.',
+      ),
+    validModels: z
+      .array(z.string())
+      .default(['opus', 'sonnet', 'haiku'])
+      .describe(
+        'Accepted model names for per-rule frontmatter. Unrecognised values fall back to defaultModel.',
+      ),
   })
   .describe('Claude Code Headless mode settings');
 
@@ -144,6 +162,9 @@ export const EnvironmentOverrideSchema = z
         maxTurns: z.number().int().positive().optional(),
         allowedTools: z.array(z.string()).optional(),
         additionalArgs: z.array(z.string()).optional(),
+        defaultModel: z.string().optional(),
+        teamsOrchestratorModel: z.string().optional(),
+        validModels: z.array(z.string()).optional(),
       })
       .optional(),
     postRun: z.array(z.string()).optional(),
@@ -201,6 +222,8 @@ export const ConfigSchema = z
       allowedTools: DEFAULT_ALLOWED_TOOLS,
       tools: DEFAULT_TOOLS,
       additionalArgs: [],
+      defaultModel: 'sonnet',
+      validModels: ['opus', 'sonnet', 'haiku'],
     })),
     postRun: z
       .array(z.string())

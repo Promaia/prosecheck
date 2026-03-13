@@ -3,7 +3,7 @@ import { buildExecutionPlan } from '../../../src/lib/execution-plan.js';
 import type { Invocation } from '../../../src/lib/execution-plan.js';
 import type { Rule } from '../../../src/types/index.js';
 
-function makeRule(name: string, group?: string): Rule {
+function makeRule(name: string, group?: string, model?: string): Rule {
   return {
     id: name.toLowerCase().replace(/\s+/g, '-'),
     name,
@@ -11,6 +11,7 @@ function makeRule(name: string, group?: string): Rule {
     inclusions: [],
     source: 'RULES.md',
     ...(group ? { group } : {}),
+    ...(model ? { model } : {}),
   };
 }
 
@@ -248,6 +249,101 @@ describe('buildExecutionPlan', () => {
       expect(inv(batch(plan, 0), 0).rules).toHaveLength(3);
       expect(inv(batch(plan, 1), 0).rules).toHaveLength(3);
       expect(inv(batch(plan, 2), 0).rules).toHaveLength(1);
+    });
+  });
+
+  describe('model partitioning', () => {
+    it('one-to-many-single with mixed models creates separate invocations per model', () => {
+      const rules = [
+        makeRule('A', undefined, 'haiku'),
+        makeRule('B', undefined, 'opus'),
+        makeRule('C', undefined, 'haiku'),
+      ];
+      const plan = buildExecutionPlan({
+        rules,
+        claudeToRuleShape: 'one-to-many-single',
+        maxConcurrentAgents: 0,
+      });
+      expect(plan).toHaveLength(1);
+      const b0 = batch(plan, 0);
+      // Two invocations: one for haiku, one for opus
+      expect(b0).toHaveLength(2);
+      const haikuInv = b0.find((i) => i.model === 'haiku');
+      const opusInv = b0.find((i) => i.model === 'opus');
+      expect(haikuInv?.rules).toHaveLength(2);
+      expect(opusInv?.rules).toHaveLength(1);
+    });
+
+    it('one-to-many-single with uniform models creates one invocation', () => {
+      const rules = [
+        makeRule('A', undefined, 'sonnet'),
+        makeRule('B', undefined, 'sonnet'),
+      ];
+      const plan = buildExecutionPlan({
+        rules,
+        claudeToRuleShape: 'one-to-many-single',
+        maxConcurrentAgents: 0,
+      });
+      expect(plan).toHaveLength(1);
+      const b0 = batch(plan, 0);
+      expect(b0).toHaveLength(1);
+      expect(inv(b0, 0).model).toBe('sonnet');
+      expect(inv(b0, 0).rules).toHaveLength(2);
+    });
+
+    it('groups with mixed models split into separate invocations per (group, model)', () => {
+      const rules = [
+        makeRule('A', 'perf', 'haiku'),
+        makeRule('B', 'perf', 'opus'),
+        makeRule('C', 'perf', 'haiku'),
+      ];
+      const plan = buildExecutionPlan({
+        rules,
+        claudeToRuleShape: 'one-to-one',
+        maxConcurrentAgents: 0,
+      });
+      expect(plan).toHaveLength(1);
+      const b0 = batch(plan, 0);
+      // Two invocations: perf/haiku and perf/opus
+      expect(b0).toHaveLength(2);
+      const haikuInv = b0.find((i) => i.model === 'haiku');
+      const opusInv = b0.find((i) => i.model === 'opus');
+      expect(haikuInv?.rules).toHaveLength(2);
+      expect(opusInv?.rules).toHaveLength(1);
+    });
+
+    it('one-to-one sets model on each invocation from the rule', () => {
+      const rules = [
+        makeRule('A', undefined, 'haiku'),
+        makeRule('B', undefined, 'opus'),
+      ];
+      const plan = buildExecutionPlan({
+        rules,
+        claudeToRuleShape: 'one-to-one',
+        maxConcurrentAgents: 0,
+      });
+      expect(plan).toHaveLength(1);
+      const b0 = batch(plan, 0);
+      expect(b0).toHaveLength(2);
+      expect(inv(b0, 0).model).toBe('haiku');
+      expect(inv(b0, 1).model).toBe('opus');
+    });
+
+    it('one-to-many-teams sets model to teamsOrchestratorModel', () => {
+      const rules = [
+        makeRule('A', undefined, 'haiku'),
+        makeRule('B', undefined, 'opus'),
+      ];
+      const plan = buildExecutionPlan({
+        rules,
+        claudeToRuleShape: 'one-to-many-teams',
+        maxConcurrentAgents: 0,
+        teamsOrchestratorModel: 'sonnet',
+      });
+      expect(plan).toHaveLength(1);
+      const b0 = batch(plan, 0);
+      expect(b0).toHaveLength(1);
+      expect(inv(b0, 0).model).toBe('sonnet');
     });
   });
 });
