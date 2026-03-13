@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { RunContext } from '../../../src/types/index.js';
 import type { Config } from '../../../src/lib/config-schema.js';
+import type { Rule } from '../../../src/types/index.js';
 
 // Mock all subsystems
 const mockRunCalculators = vi.fn();
@@ -72,7 +73,9 @@ vi.mock('../../../src/formatters/sarif.js', () => ({
   formatSarif: mockFormatSarif,
 }));
 
-const { runEngine } = await import('../../../src/lib/engine.js');
+const { runEngine, filterRulesByNameOrId } = await import(
+  '../../../src/lib/engine.js'
+);
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -783,5 +786,119 @@ describe('runEngine', () => {
         }),
       );
     });
+  });
+
+  describe('--rules filter', () => {
+    it('filters rules to only matching names', async () => {
+      const ruleA = {
+        id: 'rule-a',
+        name: 'Rule A',
+        description: 'D',
+        inclusions: ['src/'],
+        source: 'RULES.md',
+      };
+      const ruleB = {
+        id: 'rule-b',
+        name: 'Rule B',
+        description: 'D',
+        inclusions: ['src/'],
+        source: 'RULES.md',
+      };
+      mockRunCalculators.mockResolvedValue([ruleA, ruleB]);
+      mockDetectChanges.mockResolvedValue({
+        comparisonRef: 'abc123',
+        triggeredRules: [ruleA],
+        changedFiles: ['src/foo.ts'],
+        changedFilesByRule: new Map([['rule-a', ['src/foo.ts']]]),
+      });
+
+      const context = makeContext({ ruleFilter: ['Rule A'] });
+      await runEngine(context);
+
+      // Change detection should only see rule A
+      expect(mockDetectChanges).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rules: [expect.objectContaining({ id: 'rule-a' })],
+        }),
+      );
+    });
+
+    it('suppresses last-run-hash write when ruleFilter is active', async () => {
+      const commitFn = vi.fn().mockResolvedValue(undefined);
+      mockDetectChanges.mockResolvedValue({
+        comparisonRef: 'abc123',
+        triggeredRules: [
+          {
+            id: 'rule-a',
+            name: 'Rule A',
+            description: 'D',
+            inclusions: ['src/'],
+            source: 'RULES.md',
+          },
+        ],
+        changedFiles: ['src/foo.ts'],
+        changedFilesByRule: new Map([['rule-a', ['src/foo.ts']]]),
+        commitLastRunHash: commitFn,
+      });
+
+      const context = makeContext({
+        config: makeConfig({ lastRun: { read: false, write: true, files: false } }),
+        ruleFilter: ['Rule A'],
+      });
+      await runEngine(context);
+
+      expect(commitFn).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('filterRulesByNameOrId', () => {
+  const rules: Rule[] = [
+    {
+      id: 'rules-md--no-console-log',
+      name: 'No console.log',
+      description: 'D',
+      inclusions: [],
+      source: 'RULES.md',
+    },
+    {
+      id: 'rules-md--use-strict',
+      name: 'Use strict mode',
+      description: 'D',
+      inclusions: [],
+      source: 'RULES.md',
+    },
+    {
+      id: 'src-rules-md--no-any',
+      name: 'No any types',
+      description: 'D',
+      inclusions: ['src/'],
+      source: 'src/RULES.md',
+    },
+  ];
+
+  it('matches by exact name (case-insensitive)', () => {
+    const result = filterRulesByNameOrId(rules, ['no console.log']);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.id).toBe('rules-md--no-console-log');
+  });
+
+  it('matches by exact ID', () => {
+    const result = filterRulesByNameOrId(rules, ['src-rules-md--no-any']);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.name).toBe('No any types');
+  });
+
+  it('matches multiple rules with mixed name and ID', () => {
+    const result = filterRulesByNameOrId(rules, [
+      'No console.log',
+      'src-rules-md--no-any',
+    ]);
+    expect(result).toHaveLength(2);
+  });
+
+  it('returns empty array when nothing matches', () => {
+    const result = filterRulesByNameOrId(rules, ['nonexistent']);
+    expect(result).toEqual([]);
   });
 });

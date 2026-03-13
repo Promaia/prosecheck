@@ -60,7 +60,13 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
 
   // 2-filter. If --rules was specified, filter to matching rules only
   if (context.ruleFilter) {
+    const allRuleNames = rules.map((r) => r.name);
     rules = filterRulesByNameOrId(rules, context.ruleFilter);
+    if (rules.length === 0) {
+      console.error(
+        `[prosecheck] Warning: --rules filter matched no rules. Available rules: ${allRuleNames.join(', ')}`,
+      );
+    }
     // Partial runs must never update last-run hash
     config = { ...config, lastRun: { ...config.lastRun, write: false } };
   }
@@ -252,8 +258,8 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     });
   }
 
-  // 9. Persist last-run hash if applicable
-  if (changeResult.commitLastRunHash) {
+  // 9. Persist last-run hash if applicable (skipped when --rules filter is active)
+  if (changeResult.commitLastRunHash && !context.ruleFilter) {
     await changeResult.commitLastRunHash();
   }
 
@@ -605,7 +611,7 @@ function hashCheckResult(
  * Filter rules to only those matching the given names or IDs.
  * Matches case-insensitively on rule name, and exactly on rule ID.
  */
-function filterRulesByNameOrId(rules: Rule[], filter: string[]): Rule[] {
+export function filterRulesByNameOrId(rules: Rule[], filter: string[]): Rule[] {
   const lowerFilter = filter.map((f) => f.toLowerCase());
   return rules.filter(
     (rule) =>
