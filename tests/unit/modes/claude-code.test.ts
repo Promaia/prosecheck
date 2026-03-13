@@ -57,6 +57,7 @@ function makeOptions(
     allowedTools: ['Read', 'Grep', 'Glob'],
     tools: [],
     additionalArgs: [],
+    defaultModel: 'sonnet',
     rules: [],
     ...overrides,
   };

@@ -28,10 +28,12 @@ export function buildOrchestrationPrompt(
 ): string {
   const { projectRoot, promptPaths, rules, agentTeams } = options;
 
-  // Build rule name lookup
+  // Build rule lookups
   const ruleNames = new Map<string, string>();
+  const ruleModels = new Map<string, string | undefined>();
   for (const rule of rules) {
     ruleNames.set(rule.id, rule.name);
+    ruleModels.set(rule.id, rule.model);
   }
 
   // Build the rule list entries — sort by rule ID for deterministic output
@@ -44,13 +46,24 @@ export function buildOrchestrationPrompt(
     const relativePath = path
       .relative(projectRoot, promptPath)
       .replaceAll('\\', '/');
-    ruleEntries.push(`* ${name}: ${relativePath}`);
+    const model = agentTeams ? ruleModels.get(ruleId) : undefined;
+    const modelAnnotation = model ? ` (use ${model})` : '';
+    ruleEntries.push(`* ${name}${modelAnnotation}: ${relativePath}`);
   }
 
   const ruleList = ruleEntries.join('\n');
 
   if (agentTeams) {
-    return buildAgentTeamsPrompt(ruleList, projectRoot, promptPaths, ruleNames);
+    const hasModelAnnotations = [...ruleModels.values()].some(
+      (m) => m !== undefined,
+    );
+    return buildAgentTeamsPrompt(
+      ruleList,
+      projectRoot,
+      promptPaths,
+      ruleNames,
+      hasModelAnnotations,
+    );
   }
   return buildSequentialPrompt(ruleList, projectRoot, promptPaths, ruleNames);
 }
@@ -60,6 +73,7 @@ function buildAgentTeamsPrompt(
   projectRoot: string,
   promptPaths: Map<string, string>,
   ruleNames: Map<string, string>,
+  hasModelAnnotations: boolean,
 ): string {
   // Build output path list so the orchestrator knows where to validate
   const sortedIds = [...promptPaths.keys()].sort();
@@ -89,6 +103,14 @@ function buildAgentTeamsPrompt(
     '',
     ...outputEntries,
     '',
+    ...(hasModelAnnotations
+      ? [
+          '## Model selection',
+          '',
+          'When a rule specifies a model (e.g., "use haiku"), use that model for the teammate evaluating that rule. Rules without a model annotation use the default model.',
+          '',
+        ]
+      : []),
     '## Validation pass',
     '',
     'After all sub-agents complete, read every output file listed above and verify each one matches the required schema. If any file is missing the "status" field, uses wrong field names, or has any other schema violation, rewrite it to conform exactly. Do not skip this step.',

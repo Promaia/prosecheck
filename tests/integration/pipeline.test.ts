@@ -133,6 +133,8 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
       allowedTools: [],
       tools: [],
       additionalArgs: [],
+      defaultModel: 'sonnet',
+      validModels: ['opus', 'sonnet', 'haiku'],
     },
     postRun: [],
     environments: {},
@@ -208,6 +210,8 @@ describe('Integration: multi-instance mode full pipeline', () => {
           allowedTools: [],
           tools: [],
           additionalArgs: [],
+          defaultModel: 'sonnet',
+          validModels: ['opus', 'sonnet', 'haiku'],
         },
       }),
     });
@@ -283,6 +287,8 @@ describe('Integration: single-instance mode with agent teams', () => {
           allowedTools: [],
           tools: [],
           additionalArgs: [],
+          defaultModel: 'sonnet',
+          validModels: ['opus', 'sonnet', 'haiku'],
         },
       }),
     });
@@ -480,6 +486,8 @@ describe('Integration: grouped rules with one-to-one shape', () => {
           allowedTools: [],
           tools: [],
           additionalArgs: [],
+          defaultModel: 'sonnet',
+          validModels: ['opus', 'sonnet', 'haiku'],
         },
       }),
     });
@@ -516,6 +524,81 @@ describe('Integration: grouped rules with one-to-one shape', () => {
       ),
     );
     expect(hasSpecific).toBe(true);
+  }, 30_000);
+});
+
+describe('Integration: per-rule model selection', () => {
+  it('passes correct --model args for rules with different models', async () => {
+    const repo = await createTestRepo();
+    repos.push(repo);
+
+    await mkdir(path.join(repo.dir, '.prosecheck'), { recursive: true });
+    await writeFile(
+      path.join(repo.dir, '.prosecheck/config.json'),
+      JSON.stringify({ baseBranch: 'main' }),
+      'utf-8',
+    );
+
+    // RULES.md with two rules using different models
+    await writeFile(
+      path.join(repo.dir, 'RULES.md'),
+      [
+        '# Simple check',
+        '---',
+        'model: haiku',
+        '---',
+        'A simple lint check.',
+        '',
+        '# Complex check',
+        '---',
+        'model: opus',
+        '---',
+        'A complex architectural check.',
+      ].join('\n') + '\n',
+      'utf-8',
+    );
+
+    await gitCommit(repo.dir, 'Add rules with models');
+
+    await execaFn('git', ['checkout', '-b', 'feature'], { cwd: repo.dir });
+    await mkdir(path.join(repo.dir, 'src'), { recursive: true });
+    await writeFile(
+      path.join(repo.dir, 'src/foo.ts'),
+      'export const x = 1;\n',
+      'utf-8',
+    );
+    await gitCommit(repo.dir, 'Add source file');
+
+    shared.fakeClaudeEnv = { FAKE_CLAUDE_STATUS: 'pass' };
+
+    const context = makeContext(repo.dir, {
+      config: makeConfig({
+        claudeCode: {
+          claudeToRuleShape: 'one-to-one',
+          maxConcurrentAgents: 0,
+          maxTurns: 30,
+          allowedTools: [],
+          tools: [],
+          additionalArgs: [],
+          defaultModel: 'sonnet',
+          validModels: ['opus', 'sonnet', 'haiku'],
+        },
+      }),
+    });
+    const result = await runEngine(context);
+
+    expect(result.results.results).toHaveLength(2);
+    expect(result.overallStatus).toBe('pass');
+    expect(shared.claudeCallCount).toBe(2);
+
+    // Each call should have --model with the correct per-rule model
+    const modelArgs = shared.lastClaudeArgs.map((args) => {
+      const idx = args.indexOf('--model');
+      return idx >= 0 ? (args[idx + 1] as string) : undefined;
+    });
+
+    expect(modelArgs).toContain('haiku');
+    expect(modelArgs).toContain('opus');
   }, 30_000);
 });
 

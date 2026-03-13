@@ -57,6 +57,20 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
   // 2. Discover rules via calculators
   const rules = await runCalculators(projectRoot, config);
 
+  // 2a. Resolve per-rule model — stamp defaultModel onto rules without an explicit model
+  const { defaultModel, validModels } = config.claudeCode;
+  for (const rule of rules) {
+    if (rule.model && !validModels.includes(rule.model)) {
+      console.error(
+        `[prosecheck] Warning: unknown model "${rule.model}" on rule "${rule.name}" in ${rule.source} (valid: ${validModels.join(', ')}). Falling back to "${defaultModel}".`,
+      );
+      rule.model = defaultModel;
+    }
+    if (!rule.model) {
+      rule.model = defaultModel;
+    }
+  }
+
   if (rules.length === 0) {
     const emptyResults: CollectResultsOutput = {
       results: [],
@@ -277,6 +291,8 @@ async function dispatchMode(
         allowedTools: config.claudeCode.allowedTools,
         tools: config.claudeCode.tools,
         additionalArgs: config.claudeCode.additionalArgs,
+        defaultModel: config.claudeCode.defaultModel,
+        teamsOrchestratorModel: config.claudeCode.teamsOrchestratorModel,
         systemPrompt: globalPrompt,
         rules: triggeredRules,
         signal,
