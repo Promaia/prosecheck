@@ -62,6 +62,8 @@ beforeEach(async () => {
         allowedTools: [],
         tools: [],
         additionalArgs: [],
+        defaultModel: 'sonnet',
+        validModels: ['opus', 'sonnet', 'haiku'],
       },
     },
     environment: 'default',

@@ -9,7 +9,8 @@
     "tests/fixtures/"
   ],
   "claudeCode": {
-    "additionalArgs": ["--model", "sonnet"]
+    "defaultModel": "sonnet",
+    "teamsOrchestratorModel": "sonnet"
   },
   "environments": {
     "interactive": {

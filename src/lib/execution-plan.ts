@@ -15,6 +15,8 @@ export interface Invocation {
   type: InvocationType;
   /** Rules assigned to this invocation */
   rules: Rule[];
+  /** Model to use for this invocation's Claude process */
+  model?: string | undefined;
 }
 
 /** A set of invocations that run in parallel */
@@ -29,6 +31,8 @@ export interface BuildExecutionPlanOptions {
   rules: Rule[];
   claudeToRuleShape: ClaudeToRuleShape;
   maxConcurrentAgents: number;
+  /** Model for the orchestrator in one-to-many-teams mode */
+  teamsOrchestratorModel?: string | undefined;
 }
 
 /**
@@ -36,8 +40,13 @@ export interface BuildExecutionPlanOptions {
  *
  * 1. Separate rules into ungrouped and grouped (keyed by group name).
  * 2. Build invocations for ungrouped rules based on `claudeToRuleShape`.
- * 3. Create one `one-to-many-single` invocation per group.
+ *    For `one-to-many-single`, partition by model first.
+ * 3. Create one `one-to-many-single` invocation per (group, model) pair.
  * 4. Insert all invocations into batches respecting `maxConcurrentAgents`.
+ *
+ * Rules are expected to have `model` already resolved (via early assignment
+ * in the engine). For `one-to-many-teams`, per-rule models are handled via
+ * the orchestration prompt, not process-level partitioning.
  */
 export function buildExecutionPlan(
   options: BuildExecutionPlanOptions,
@@ -66,12 +75,20 @@ export function buildExecutionPlan(
     ungrouped,
     claudeToRuleShape,
     max,
+    options.teamsOrchestratorModel,
   );
 
-  // Build group invocations (one-to-many-single each)
+  // Build group invocations — partition each group by model
   const groupInvocations: Invocation[] = [];
   for (const [, groupRules] of groups) {
-    groupInvocations.push({ type: 'one-to-many-single', rules: groupRules });
+    const byModel = partitionByModel(groupRules);
+    for (const [model, modelRules] of byModel) {
+      groupInvocations.push({
+        type: 'one-to-many-single',
+        rules: modelRules,
+        model,
+      });
+    }
   }
 
   // Insert all invocations into batches
@@ -90,10 +107,29 @@ export function buildExecutionPlan(
   return batches;
 }
 
+/**
+ * Partition rules by their model field. Rules without a model are
+ * grouped under the key `undefined`.
+ */
+function partitionByModel(rules: Rule[]): Map<string | undefined, Rule[]> {
+  const map = new Map<string | undefined, Rule[]>();
+  for (const rule of rules) {
+    const key = rule.model;
+    const existing = map.get(key);
+    if (existing) {
+      existing.push(rule);
+    } else {
+      map.set(key, [rule]);
+    }
+  }
+  return map;
+}
+
 function buildUngroupedInvocations(
   rules: Rule[],
   shape: ClaudeToRuleShape,
   max: number,
+  teamsOrchestratorModel?: string,
 ): Invocation[] {
   if (rules.length === 0) return [];
 
@@ -102,20 +138,37 @@ function buildUngroupedInvocations(
       return rules.map((rule) => ({
         type: 'one-to-one' as const,
         rules: [rule],
+        model: rule.model,
       }));
 
     case 'one-to-many-teams': {
-      // Pack rules into team invocations of up to `max` rules each
+      // Pack rules into team invocations of up to `max` rules each.
+      // Mixed models within a team are fine — handled via orchestration prompt.
       const invocations: Invocation[] = [];
       for (let i = 0; i < rules.length; i += max) {
         const chunk = rules.slice(i, i + max);
-        invocations.push({ type: 'one-to-many-teams', rules: chunk });
+        invocations.push({
+          type: 'one-to-many-teams',
+          rules: chunk,
+          model: teamsOrchestratorModel,
+        });
       }
       return invocations;
     }
 
-    case 'one-to-many-single':
-      return [{ type: 'one-to-many-single', rules }];
+    case 'one-to-many-single': {
+      // Partition by model — each model gets its own invocation
+      const byModel = partitionByModel(rules);
+      const invocations: Invocation[] = [];
+      for (const [model, modelRules] of byModel) {
+        invocations.push({
+          type: 'one-to-many-single',
+          rules: modelRules,
+          model,
+        });
+      }
+      return invocations;
+    }
   }
 }
 
@@ -159,6 +212,7 @@ function insertInvocation(
 
   // Teams can be split across batches
   let remaining = inv.rules;
+  const { model } = inv;
 
   while (remaining.length > 0) {
     // Find or create a batch with space
@@ -172,7 +226,7 @@ function insertInvocation(
 
       if (remaining.length <= available) {
         // Whole team fits
-        batch.push({ type: 'one-to-many-teams', rules: remaining });
+        batch.push({ type: 'one-to-many-teams', rules: remaining, model });
         remaining = [];
         inserted = true;
         break;
@@ -180,7 +234,7 @@ function insertInvocation(
         // Split: fill this batch, continue with remainder
         const fit = remaining.slice(0, available);
         remaining = remaining.slice(available);
-        batch.push({ type: 'one-to-many-teams', rules: fit });
+        batch.push({ type: 'one-to-many-teams', rules: fit, model });
         inserted = true;
         // Don't break — need to process remaining in next iteration
         break;
@@ -190,12 +244,12 @@ function insertInvocation(
     if (!inserted) {
       // No batch had space — start a new one
       if (remaining.length <= max) {
-        batches.push([{ type: 'one-to-many-teams', rules: remaining }]);
+        batches.push([{ type: 'one-to-many-teams', rules: remaining, model }]);
         remaining = [];
       } else {
         const fit = remaining.slice(0, max);
         remaining = remaining.slice(max);
-        batches.push([{ type: 'one-to-many-teams', rules: fit }]);
+        batches.push([{ type: 'one-to-many-teams', rules: fit, model }]);
       }
     }
   }
