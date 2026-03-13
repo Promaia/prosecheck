@@ -1,6 +1,6 @@
 {
   "name": "prosecheck",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "LLM-powered code linter with natural-language rules",
   "license": "Apache-2.0",
   "author": "Promaia",
