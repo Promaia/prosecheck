@@ -66,10 +66,7 @@ export async function calculateAdr(
  *
  * ADR-derived rules apply project-wide (empty inclusions).
  */
-export function parseAdr(
-  content: string,
-  source: string,
-): Rule[] | undefined {
+export function parseAdr(content: string, source: string): Rule[] | undefined {
   const lines = content.split('\n');
 
   // Extract title from the first `# ` heading
