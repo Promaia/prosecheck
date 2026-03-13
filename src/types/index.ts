@@ -20,6 +20,8 @@ export interface Rule {
   source: string;
   /** Optional rule group — rules in the same group run under one agent sequentially */
   group?: string | undefined;
+  /** Optional model override — which Claude model evaluates this rule */
+  model?: string | undefined;
   /** Passthrough bag for unrecognized frontmatter fields (for future use) */
   frontmatter?: Record<string, unknown> | undefined;
 }

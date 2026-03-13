@@ -34,6 +34,10 @@ export interface ClaudeCodeModeOptions {
   tools: string[];
   /** Additional CLI arguments passed to each claude invocation */
   additionalArgs: string[];
+  /** Default model for rule evaluation */
+  defaultModel: string;
+  /** Model for the orchestrator in one-to-many-teams mode */
+  teamsOrchestratorModel?: string | undefined;
   /** Global system prompt from .prosecheck/prompt.md, if present */
   systemPrompt?: string | undefined;
   /** Triggered rules (needed for orchestration prompt rule names) */
@@ -55,6 +59,8 @@ export interface SpawnClaudeOptions {
   allowedTools?: string[] | undefined;
   tools?: string[] | undefined;
   additionalArgs?: string[] | undefined;
+  /** Claude model to use (e.g., 'sonnet', 'opus', 'haiku'). Passed as --model. */
+  model?: string | undefined;
   systemPrompt?: string | undefined;
   appendSystemPrompt?: string | undefined;
   signal?: AbortSignal | undefined;
@@ -77,6 +83,7 @@ export async function runClaudeCode(
     rules,
     claudeToRuleShape,
     maxConcurrentAgents,
+    teamsOrchestratorModel: options.teamsOrchestratorModel,
   });
 
   if (verbose) {
@@ -161,6 +168,7 @@ async function executeInvocation(
         allowedTools: ruleAllowedTools,
         tools,
         additionalArgs,
+        model: invocation.model,
         systemPrompt,
         appendSystemPrompt: SCHEMA_SYSTEM_PROMPT,
         signal,
@@ -198,6 +206,7 @@ async function executeInvocation(
         allowedTools: teamAllowedTools,
         tools,
         additionalArgs,
+        model: invocation.model,
         systemPrompt,
         appendSystemPrompt: SCHEMA_SYSTEM_PROMPT,
         signal,
@@ -230,6 +239,7 @@ async function executeInvocation(
         allowedTools: singleAllowedTools,
         tools,
         additionalArgs,
+        model: invocation.model,
         systemPrompt,
         appendSystemPrompt: SCHEMA_SYSTEM_PROMPT,
         signal,
@@ -289,6 +299,11 @@ export async function spawnClaude(
     args.push('--verbose');
   }
 
+  // Model
+  if (options.model) {
+    args.push('--model', options.model);
+  }
+
   // Max turns
   if (options.maxTurns !== undefined) {
     args.push('--max-turns', String(options.maxTurns));
@@ -314,9 +329,20 @@ export async function spawnClaude(
     args.push('--append-system-prompt', options.appendSystemPrompt);
   }
 
-  // Additional user-configured args
+  // Additional user-configured args (filter --model if we already set one)
   if (options.additionalArgs && options.additionalArgs.length > 0) {
-    args.push(...options.additionalArgs);
+    let filtered = options.additionalArgs;
+    if (options.model) {
+      filtered = [];
+      for (let i = 0; i < options.additionalArgs.length; i++) {
+        if (options.additionalArgs[i] === '--model') {
+          i++; // skip the value too
+        } else {
+          filtered.push(options.additionalArgs[i] as string);
+        }
+      }
+    }
+    args.push(...filtered);
   }
 
   if (verbose) {

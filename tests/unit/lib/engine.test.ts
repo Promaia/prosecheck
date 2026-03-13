@@ -91,6 +91,8 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
       allowedTools: [],
       tools: [],
       additionalArgs: [],
+      defaultModel: 'sonnet',
+      validModels: ['opus', 'sonnet', 'haiku'],
     },
     postRun: [],
     environments: {},

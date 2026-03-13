@@ -79,6 +79,13 @@ describe('ConfigSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('defaults model-related settings', () => {
+    const result = ConfigSchema.parse({});
+    expect(result.claudeCode.defaultModel).toBe('sonnet');
+    expect(result.claudeCode.validModels).toEqual(['opus', 'sonnet', 'haiku']);
+    expect(result.claudeCode.teamsOrchestratorModel).toBeUndefined();
+  });
+
   it('has descriptions on top-level fields', () => {
     // Verify .describe() metadata is present on key fields
     expect(ConfigSchema.description).toBe('Prosecheck configuration');
