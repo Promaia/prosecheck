@@ -6,3 +6,4 @@ dist/
 .prosecheck/config.local.json
 coverage/
 .claude/settings.local.json
+.npmrc
