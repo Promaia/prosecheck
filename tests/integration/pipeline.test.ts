@@ -423,19 +423,20 @@ describe('Integration: grouped rules with one-to-one shape', () => {
       'utf-8',
     );
 
-    // RULES.md with frontmatter grouping two rules, plus one ungrouped
+    // RULES.md with per-rule frontmatter grouping two rules, plus one ungrouped
     await writeFile(
       path.join(repo.dir, 'RULES.md'),
       [
+        '# No console.log',
         '---',
         'group: perf',
         '---',
-        '# No console.log',
-        '',
         'Do not use console.log in source files.',
         '',
         '# Keep functions short',
-        '',
+        '---',
+        'group: perf',
+        '---',
         'Functions should be under 50 lines.',
       ].join('\n') + '\n',
       'utf-8',

@@ -16,7 +16,10 @@ const FRONTMATTER_RE = /^---[ \t]*\r?\n([\s\S]*?)---[ \t]*\r?\n?/;
  * delimiter is found, returns an empty data object and the full content
  * as the body.
  */
-export function parseFrontmatter(content: string): FrontmatterResult {
+export function parseFrontmatter(
+  content: string,
+  source?: string,
+): FrontmatterResult {
   const match = FRONTMATTER_RE.exec(content);
 
   if (!match) {
@@ -29,8 +32,12 @@ export function parseFrontmatter(content: string): FrontmatterResult {
   let data: unknown;
   try {
     data = parseYaml(yamlStr);
-  } catch {
-    // Invalid YAML — treat as no frontmatter
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const where = source ? ` in ${source}` : '';
+    console.error(
+      `[prosecheck] Warning: invalid YAML frontmatter${where} (ignored): ${msg}`,
+    );
     return { data: {}, body: content };
   }
 
@@ -59,5 +66,51 @@ export function extractGroupFromFrontmatter(data: Record<string, unknown>): {
   return {
     group: typeof group === 'string' ? group : undefined,
     rest,
+  };
+}
+
+export interface RuleMetadata {
+  group: string | undefined;
+  frontmatter: Record<string, unknown> | undefined;
+  description: string;
+}
+
+/**
+ * Extract per-rule frontmatter from a rule's description lines.
+ *
+ * If the lines (after skipping leading blanks) start with a `---` fenced
+ * YAML block, the block is parsed and removed from the description.
+ * The `group` field is extracted separately; remaining fields are returned
+ * as `frontmatter`.
+ */
+export function extractRuleMetadata(
+  descriptionLines: string[],
+  source?: string,
+): RuleMetadata {
+  // Skip leading empty lines to find potential frontmatter
+  let startIdx = 0;
+  while (
+    startIdx < descriptionLines.length &&
+    descriptionLines[startIdx]?.trim() === ''
+  ) {
+    startIdx++;
+  }
+
+  const content = descriptionLines.slice(startIdx).join('\n');
+  const { data, body } = parseFrontmatter(content, source);
+
+  if (Object.keys(data).length === 0) {
+    return {
+      group: undefined,
+      frontmatter: undefined,
+      description: descriptionLines.join('\n').trim(),
+    };
+  }
+
+  const { group, rest } = extractGroupFromFrontmatter(data);
+  return {
+    group,
+    frontmatter: Object.keys(rest).length > 0 ? rest : undefined,
+    description: body.trim(),
   };
 }
