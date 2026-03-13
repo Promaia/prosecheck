@@ -459,7 +459,7 @@ function debug(msg: string): void {
  * via `AbortSignal.any()` and passed to `spawnClaude()` so the process is
  * killed as soon as all results are in.
  */
-function watchForEarlyExit(
+export function watchForEarlyExit(
   projectRoot: string,
   ruleIds: string[],
 ): { controller: AbortController; stop: () => void } {
