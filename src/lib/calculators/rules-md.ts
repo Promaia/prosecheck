@@ -3,10 +3,7 @@ import path from 'node:path';
 import { glob } from 'glob';
 import { createRule } from '../rule.js';
 import type { Rule } from '../../types/index.js';
-import {
-  parseFrontmatter,
-  extractGroupFromFrontmatter,
-} from '../frontmatter.js';
+import { extractRuleMetadata } from '../frontmatter.js';
 
 export interface RulesMdOptions {
   // Glob pattern for RULES.md files. Defaults to all RULES.md files recursively.
@@ -21,6 +18,10 @@ export interface RulesMdOptions {
  * Each top-level `#` heading becomes a rule name. Content between headings
  * (including subheadings) becomes the rule description. The file's directory
  * becomes the rule's inclusion scope.
+ *
+ * Per-rule frontmatter (a `---` fenced YAML block immediately after the
+ * heading) is supported. The `group` field controls execution grouping;
+ * remaining fields are passed through as `frontmatter`.
  */
 export async function calculateRulesMd(
   projectRoot: string,
@@ -46,22 +47,11 @@ export async function calculateRulesMd(
   for (const file of files) {
     const absolutePath = path.join(projectRoot, file);
     const rawContent = await readFile(absolutePath, 'utf-8');
-    const { data: frontmatterData, body } = parseFrontmatter(rawContent);
-    const { group: fileGroup, rest: fileRest } =
-      extractGroupFromFrontmatter(frontmatterData);
-    const parsed = parseRulesMd(body, file, {
-      group: fileGroup,
-      frontmatter: fileRest,
-    });
+    const parsed = parseRulesMd(rawContent, file);
     rules.push(...parsed);
   }
 
   return rules;
-}
-
-interface FileMetadata {
-  group?: string | undefined;
-  frontmatter?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -97,14 +87,11 @@ function detectHeadingLevel(lines: string[]): { level: 1 | 2; skip: number } {
  * Content before the first rule heading is ignored. Deeper subheadings are
  * part of the description.
  *
- * File-level frontmatter metadata (group, extra fields) is applied to all
- * rules in the file.
+ * Each rule may have its own YAML frontmatter block immediately after its
+ * heading. The `group` field controls execution grouping; other fields are
+ * passed through as `frontmatter`.
  */
-export function parseRulesMd(
-  content: string,
-  source: string,
-  metadata?: FileMetadata,
-): Rule[] {
+export function parseRulesMd(content: string, source: string): Rule[] {
   const lines = content.split('\n');
   const rules: Rule[] = [];
 
@@ -117,11 +104,6 @@ export function parseRulesMd(
   // Use the directory as inclusion scope — root means everything
   const inclusions = dir === '.' ? [] : [`${dir}/`];
 
-  const ruleOptions = {
-    group: metadata?.group,
-    frontmatter: metadata?.frontmatter,
-  };
-
   for (let i = 0; i < lines.length; i++) {
     if (i === skip) continue; // skip the `# Rules` line in section mode
 
@@ -132,14 +114,12 @@ export function parseRulesMd(
     if (headingText !== undefined) {
       // Flush previous rule
       if (currentName !== undefined) {
+        const meta = extractRuleMetadata(descriptionLines, source);
         rules.push(
-          createRule(
-            currentName,
-            descriptionLines.join('\n').trim(),
-            inclusions,
-            source,
-            ruleOptions,
-          ),
+          createRule(currentName, meta.description, inclusions, source, {
+            group: meta.group,
+            frontmatter: meta.frontmatter,
+          }),
         );
       }
 
@@ -153,14 +133,12 @@ export function parseRulesMd(
 
   // Flush final rule
   if (currentName !== undefined) {
+    const meta = extractRuleMetadata(descriptionLines, source);
     rules.push(
-      createRule(
-        currentName,
-        descriptionLines.join('\n').trim(),
-        inclusions,
-        source,
-        ruleOptions,
-      ),
+      createRule(currentName, meta.description, inclusions, source, {
+        group: meta.group,
+        frontmatter: meta.frontmatter,
+      }),
     );
   }
 

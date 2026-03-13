@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   parseFrontmatter,
   extractGroupFromFrontmatter,
+  extractRuleMetadata,
 } from '../../../src/lib/frontmatter.js';
 
 describe('parseFrontmatter', () => {
@@ -46,11 +47,16 @@ describe('parseFrontmatter', () => {
     expect(result.body).toBe('Body');
   });
 
-  it('returns empty data on invalid YAML', () => {
+  it('returns empty data on invalid YAML and warns with source', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const content = '---\n: : invalid: yaml: [[\n---\n# My Rule';
-    const result = parseFrontmatter(content);
+    const result = parseFrontmatter(content, 'src/RULES.md');
     expect(result.data).toEqual({});
     expect(result.body).toBe(content);
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('invalid YAML frontmatter in src/RULES.md'),
+    );
+    spy.mockRestore();
   });
 
   it('handles YAML that parses to a non-object (string)', () => {
@@ -108,5 +114,52 @@ describe('extractGroupFromFrontmatter', () => {
     const result = extractGroupFromFrontmatter({});
     expect(result.group).toBeUndefined();
     expect(result.rest).toEqual({});
+  });
+});
+
+describe('extractRuleMetadata', () => {
+  it('returns plain description when no frontmatter present', () => {
+    const lines = ['', 'Some description.', 'More text.'];
+    const result = extractRuleMetadata(lines);
+    expect(result.group).toBeUndefined();
+    expect(result.frontmatter).toBeUndefined();
+    expect(result.description).toBe('Some description.\nMore text.');
+  });
+
+  it('extracts group from frontmatter block', () => {
+    const lines = ['---', 'group: perf', '---', 'Description.'];
+    const result = extractRuleMetadata(lines);
+    expect(result.group).toBe('perf');
+    expect(result.frontmatter).toBeUndefined();
+    expect(result.description).toBe('Description.');
+  });
+
+  it('extracts group and passthrough fields', () => {
+    const lines = ['---', 'group: perf', 'severity: warn', '---', 'Desc.'];
+    const result = extractRuleMetadata(lines);
+    expect(result.group).toBe('perf');
+    expect(result.frontmatter).toEqual({ severity: 'warn' });
+    expect(result.description).toBe('Desc.');
+  });
+
+  it('skips leading blank lines before frontmatter', () => {
+    const lines = ['', '', '---', 'group: style', '---', 'Desc.'];
+    const result = extractRuleMetadata(lines);
+    expect(result.group).toBe('style');
+    expect(result.description).toBe('Desc.');
+  });
+
+  it('returns empty description for frontmatter-only content', () => {
+    const lines = ['---', 'group: perf', '---'];
+    const result = extractRuleMetadata(lines);
+    expect(result.group).toBe('perf');
+    expect(result.description).toBe('');
+  });
+
+  it('handles empty lines array', () => {
+    const result = extractRuleMetadata([]);
+    expect(result.group).toBeUndefined();
+    expect(result.frontmatter).toBeUndefined();
+    expect(result.description).toBe('');
   });
 });

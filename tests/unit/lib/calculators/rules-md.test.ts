@@ -102,6 +102,100 @@ describe('parseRulesMd', () => {
     expect(rules[0]?.id).toBe('src-rules-md--no-console-log');
   });
 
+  describe('per-rule frontmatter', () => {
+    it('extracts group from rule frontmatter', () => {
+      const content = [
+        '# No console.log',
+        '---',
+        'group: perf',
+        '---',
+        'Remove all console.log statements.',
+      ].join('\n');
+
+      const rules = parseRulesMd(content, 'RULES.md');
+      expect(rules).toHaveLength(1);
+      expect(rules[0]?.group).toBe('perf');
+      expect(rules[0]?.description).toBe('Remove all console.log statements.');
+    });
+
+    it('extracts group independently per rule', () => {
+      const content = [
+        '# Rule One',
+        '---',
+        'group: perf',
+        '---',
+        'Description one.',
+        '',
+        '# Rule Two',
+        '',
+        'Description two.',
+        '',
+        '# Rule Three',
+        '---',
+        'group: style',
+        '---',
+        'Description three.',
+      ].join('\n');
+
+      const rules = parseRulesMd(content, 'RULES.md');
+      expect(rules).toHaveLength(3);
+      expect(rules[0]?.group).toBe('perf');
+      expect(rules[1]?.group).toBeUndefined();
+      expect(rules[2]?.group).toBe('style');
+    });
+
+    it('passes through extra frontmatter fields', () => {
+      const content = [
+        '# My Rule',
+        '---',
+        'group: perf',
+        'severity: warn',
+        '---',
+        'Description.',
+      ].join('\n');
+
+      const rules = parseRulesMd(content, 'RULES.md');
+      expect(rules[0]?.group).toBe('perf');
+      expect(rules[0]?.frontmatter).toEqual({ severity: 'warn' });
+    });
+
+    it('handles frontmatter after a blank line following the heading', () => {
+      const content = [
+        '# My Rule',
+        '',
+        '---',
+        'group: perf',
+        '---',
+        'Description.',
+      ].join('\n');
+
+      const rules = parseRulesMd(content, 'RULES.md');
+      expect(rules[0]?.group).toBe('perf');
+      expect(rules[0]?.description).toBe('Description.');
+    });
+
+    it('works in section mode with ## headings', () => {
+      const content = [
+        '# Rules',
+        '',
+        '## Rule One',
+        '---',
+        'group: perf',
+        '---',
+        'Description one.',
+        '',
+        '## Rule Two',
+        '',
+        'Description two.',
+      ].join('\n');
+
+      const rules = parseRulesMd(content, 'RULES.md');
+      expect(rules).toHaveLength(2);
+      expect(rules[0]?.group).toBe('perf');
+      expect(rules[1]?.group).toBeUndefined();
+    });
+  });
+
   describe('section mode (# Rules header)', () => {
     it('uses ## headings as rule delimiters when first heading is # Rules', () => {
       const content = [

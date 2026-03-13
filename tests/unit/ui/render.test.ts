@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+// Import once at the suite level. shouldUseInteractiveUI reads
+// process.stdout.isTTY at call time, not import time, so a single
+// import is fine. Dynamic per-test import caused flaky timeouts
+// because the first cold-start load of ink/React is slow.
+import { shouldUseInteractiveUI } from '../../../src/ui/render.js';
+
 describe('shouldUseInteractiveUI', () => {
   let originalIsTTY: boolean | undefined;
 
@@ -16,31 +22,23 @@ describe('shouldUseInteractiveUI', () => {
     }
   });
 
-  it('returns true for stylish format on TTY', async () => {
+  it('returns true for stylish format on TTY', () => {
     process.stdout.isTTY = true;
-    const { shouldUseInteractiveUI } =
-      await import('../../../src/ui/render.js');
     expect(shouldUseInteractiveUI('stylish')).toBe(true);
   });
 
-  it('returns false for json format on TTY', async () => {
+  it('returns false for json format on TTY', () => {
     process.stdout.isTTY = true;
-    const { shouldUseInteractiveUI } =
-      await import('../../../src/ui/render.js');
     expect(shouldUseInteractiveUI('json')).toBe(false);
   });
 
-  it('returns false for sarif format on TTY', async () => {
+  it('returns false for sarif format on TTY', () => {
     process.stdout.isTTY = true;
-    const { shouldUseInteractiveUI } =
-      await import('../../../src/ui/render.js');
     expect(shouldUseInteractiveUI('sarif')).toBe(false);
   });
 
-  it('returns false for stylish format when not TTY', async () => {
+  it('returns false for stylish format when not TTY', () => {
     (process.stdout as unknown as Record<string, unknown>)['isTTY'] = undefined;
-    const { shouldUseInteractiveUI } =
-      await import('../../../src/ui/render.js');
     expect(shouldUseInteractiveUI('stylish')).toBeFalsy();
   });
 });

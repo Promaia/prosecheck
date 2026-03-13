@@ -154,7 +154,7 @@ Type definitions and factory functions for rules. Each rule has: name, descripti
 
 ### `frontmatter.ts` — Frontmatter Parser [IMPLEMENTED]
 
-Extracts YAML frontmatter from markdown files. Returns parsed data object + remaining body. Handles missing frontmatter gracefully (returns empty data, full body). Invalid YAML is treated as no frontmatter. `extractGroupFromFrontmatter()` separates the `group` field from the rest, returning unknown fields as a passthrough bag. Used by both `rules-md` and `adr` calculators.
+Extracts YAML frontmatter from markdown files. Returns parsed data object + remaining body. Handles missing frontmatter gracefully (returns empty data, full body). Invalid YAML is treated as no frontmatter (a warning is logged to stderr). `extractGroupFromFrontmatter()` separates the `group` field from the rest, returning unknown fields as a passthrough bag. `extractRuleMetadata()` is the primary API used by calculators: given a rule's description lines, it skips leading blanks, parses any inline `---` YAML block, and returns `{ group, frontmatter, description }`.
 
 ### `execution-plan.ts` — Execution Plan Builder [IMPLEMENTED]
 
@@ -202,11 +202,11 @@ Dispatches to named calculators based on config. Supports `enabled: false` to di
 
 ### `rules-md.ts` — RULES.md Calculator [IMPLEMENTED]
 
-Discovers `RULES.md` files throughout the project tree using `glob`. Supports an `ignore` option for excluding paths. Parses YAML frontmatter (if present) to extract `group` and preserve unknown fields. Supports two heading modes auto-detected by `detectHeadingLevel()`: if the first heading is `# Rules`, `##` headings delimit rules (section mode); otherwise `#` headings delimit rules (original mode). Content between headings is the rule description; deeper subheadings are part of the description. Text before the first rule heading is ignored. The file's directory becomes the rule's inclusion scope (empty for root-level files). File-level frontmatter applies to all rules in the file.
+Discovers `RULES.md` files throughout the project tree using `glob`. Supports an `ignore` option for excluding paths. Supports two heading modes auto-detected by `detectHeadingLevel()`: if the first heading is `# Rules`, `##` headings delimit rules (section mode); otherwise `#` headings delimit rules (original mode). Content between headings is the rule description; deeper subheadings are part of the description. Text before the first rule heading is ignored. The file's directory becomes the rule's inclusion scope (empty for root-level files). Each rule may have its own inline YAML frontmatter block (a `---` fenced block immediately after its heading) to set `group` and other fields independently per rule.
 
 ### `adr.ts` — ADR Calculator [IMPLEMENTED]
 
-Reads Architecture Decision Records from a configured path (default `docs/adr/`). Parses YAML frontmatter (if present) to extract `group` and preserve unknown fields. Only ADRs containing an explicit `## Rules` heading produce prosecheck rules — ADRs without this heading are documentation-only and skipped. If the `## Rules` section contains `### Sub-rule` headings, each becomes a separate rule (like RULES.md but with `###` instead of `#`); text before the first `###` is ignored as preamble. If there are no `###` headings, the entire section is one rule named after the ADR title. ADR-derived rules apply project-wide (empty inclusions). Gracefully handles missing ADR directory.
+Reads Architecture Decision Records from a configured path (default `docs/adr/`). Only ADRs containing an explicit `## Rules` heading produce prosecheck rules — ADRs without this heading are documentation-only and skipped. If the `## Rules` section contains `### Sub-rule` headings, each becomes a separate rule (like RULES.md but with `###` instead of `#`); text before the first `###` is ignored as preamble. If there are no `###` headings, the entire section is one rule named after the ADR title. Each rule or sub-rule may have its own inline YAML frontmatter block (a `---` fenced block immediately after its heading or at the start of the `## Rules` section) to set `group` and other fields independently. ADR-derived rules apply project-wide (empty inclusions). Gracefully handles missing ADR directory.
 
 ---
 
