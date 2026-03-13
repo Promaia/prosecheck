@@ -30,6 +30,8 @@ After making changes to the codebase, you MUST:
 
 After completing each milestone (or any significant set of changes), run `npm run ci` and `npm run prosecheck:self` to verify everything passes. This runs typecheck, lint, test, format:check, and build in sequence. Do not move to the next milestone until CI passes cleanly. Read `.prosecheck/output.log` for prosecheck output. If CI fails, fix the issue before proceeding. If formatting fails, even for files you didn't modify, run the formatter. Iterate until CI passes.
 
+`.prosecheck/last-user-run` should be committed — it tracks the last-run hash so CI can verify someone ran prosecheck locally. After prosecheck passes, commit the updated hash file alongside your changes.
+
 ## Self-review
 
 After completing implementation work, consult `docs/self-review.md` for the self-review checklist — criteria and severity levels for evaluating changes before presenting findings.
