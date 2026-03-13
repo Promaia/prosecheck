@@ -168,30 +168,56 @@ describe('parseAdr', () => {
       expect(rules?.[0]?.description).toBe('Never trust user input.');
     });
 
-    it('preserves frontmatter metadata on sub-rules', () => {
+    it('extracts per-subrule frontmatter', () => {
       const content = [
         '# 9. Performance',
         '',
         '## Rules',
         '',
         '### No N+1 queries',
-        '',
+        '---',
+        'group: perf',
+        'severity: warn',
+        '---',
         'Batch database queries.',
         '',
         '### Cache expensive calls',
-        '',
+        '---',
+        'group: perf',
+        'severity: warn',
+        '---',
         'Use memoization.',
       ].join('\n');
 
-      const rules = parseAdr(content, 'docs/adr/009-perf.md', {
-        group: 'perf',
-        frontmatter: { severity: 'warn' },
-      });
+      const rules = parseAdr(content, 'docs/adr/009-perf.md');
       expect(rules).toHaveLength(2);
       for (const rule of rules ?? []) {
         expect(rule.group).toBe('perf');
         expect(rule.frontmatter).toEqual({ severity: 'warn' });
       }
+    });
+
+    it('supports mixed frontmatter and no-frontmatter subrules', () => {
+      const content = [
+        '# 10. Mixed',
+        '',
+        '## Rules',
+        '',
+        '### Grouped rule',
+        '---',
+        'group: style',
+        '---',
+        'Description.',
+        '',
+        '### Ungrouped rule',
+        '',
+        'No frontmatter here.',
+      ].join('\n');
+
+      const rules = parseAdr(content, 'docs/adr/010-mixed.md');
+      expect(rules).toHaveLength(2);
+      expect(rules?.[0]?.group).toBe('style');
+      expect(rules?.[1]?.group).toBeUndefined();
     });
   });
 });
