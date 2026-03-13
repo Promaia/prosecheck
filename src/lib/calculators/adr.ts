@@ -2,10 +2,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { createRule } from '../rule.js';
 import type { Rule } from '../../types/index.js';
-import {
-  parseFrontmatter,
-  extractGroupFromFrontmatter,
-} from '../frontmatter.js';
+import { extractRuleMetadata } from '../frontmatter.js';
 
 export interface AdrOptions {
   /** Directory containing ADR markdown files. Defaults to 'docs/adr' */
@@ -41,24 +38,17 @@ export async function calculateAdr(
   for (const file of mdFiles) {
     const absolutePath = path.join(absoluteDir, file);
     const rawContent = await readFile(absolutePath, 'utf-8');
-    const { data: frontmatterData, body } = parseFrontmatter(rawContent);
-    const { group, rest } = extractGroupFromFrontmatter(frontmatterData);
     // Use posix join for the source path so rule IDs are consistent across
     // platforms (forward slashes always), while absolutePath uses OS-native
     // separators for actual filesystem access.
     const relativePath = path.posix.join(adrDir, file);
-    const parsed = parseAdr(body, relativePath, { group, frontmatter: rest });
+    const parsed = parseAdr(rawContent, relativePath);
     if (parsed) {
       rules.push(...parsed);
     }
   }
 
   return rules;
-}
-
-interface AdrMetadata {
-  group?: string | undefined;
-  frontmatter?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -69,13 +59,14 @@ interface AdrMetadata {
  * a separate rule (like RULES.md but with ### instead of #). If there are
  * no ### headings, the entire section is one rule named after the ADR title.
  *
+ * Each rule (or subrule) may have its own YAML frontmatter block immediately
+ * after its heading (or at the start of the `## Rules` section for
+ * single-rule ADRs). The `group` field controls execution grouping; other
+ * fields are passed through as `frontmatter`.
+ *
  * ADR-derived rules apply project-wide (empty inclusions).
  */
-export function parseAdr(
-  content: string,
-  source: string,
-  metadata?: AdrMetadata,
-): Rule[] | undefined {
+export function parseAdr(content: string, source: string): Rule[] | undefined {
   const lines = content.split('\n');
 
   // Extract title from the first `# ` heading
@@ -104,15 +95,15 @@ export function parseAdr(
     /^### .+$/.test(line),
   );
 
-  const ruleOptions = {
-    group: metadata?.group,
-    frontmatter: metadata?.frontmatter,
-  };
-
   if (!hasSubHeadings) {
     // Single rule: entire section as description, ADR title as name
-    const description = rulesSectionLines.join('\n').trim();
-    return [createRule(title, description, [], source, ruleOptions)];
+    const meta = extractRuleMetadata(rulesSectionLines, source);
+    return [
+      createRule(title, meta.description, [], source, {
+        group: meta.group,
+        frontmatter: meta.frontmatter,
+      }),
+    ];
   }
 
   // Multiple sub-rules: each ### heading is a rule
@@ -127,14 +118,12 @@ export function parseAdr(
     if (subText !== undefined) {
       // Flush previous sub-rule
       if (currentName !== undefined) {
+        const meta = extractRuleMetadata(descriptionLines, source);
         rules.push(
-          createRule(
-            currentName,
-            descriptionLines.join('\n').trim(),
-            [],
-            source,
-            ruleOptions,
-          ),
+          createRule(currentName, meta.description, [], source, {
+            group: meta.group,
+            frontmatter: meta.frontmatter,
+          }),
         );
       }
       currentName = subText.trim();
@@ -147,14 +136,12 @@ export function parseAdr(
 
   // Flush final sub-rule
   if (currentName !== undefined) {
+    const meta = extractRuleMetadata(descriptionLines, source);
     rules.push(
-      createRule(
-        currentName,
-        descriptionLines.join('\n').trim(),
-        [],
-        source,
-        ruleOptions,
-      ),
+      createRule(currentName, meta.description, [], source, {
+        group: meta.group,
+        frontmatter: meta.frontmatter,
+      }),
     );
   }
 
