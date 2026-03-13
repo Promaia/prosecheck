@@ -82,6 +82,10 @@ program
     'Comma-separated list of allowed tools for Claude',
   )
   .option('--output <file>', 'Write output to a file (in addition to stdout)')
+  .option(
+    '--rules <rules>',
+    'Comma-separated list of rule names or IDs to run (disables last-run-hash write)',
+  )
   .action(
     async (options: {
       env?: string;
@@ -101,6 +105,7 @@ program
       maxTurns?: number;
       allowedTools?: string;
       output?: string;
+      rules?: string;
     }) => {
       await lint({
         projectRoot: process.cwd(),
@@ -121,6 +126,7 @@ program
         maxTurns: options.maxTurns,
         allowedTools: options.allowedTools,
         output: options.output,
+        rules: options.rules,
       });
     },
   );
