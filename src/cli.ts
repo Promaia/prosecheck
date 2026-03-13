@@ -1,7 +1,11 @@
+import { createRequire } from 'node:module';
 import { Command, InvalidArgumentError } from 'commander';
 import { lint } from './commands/lint.js';
 import { init } from './commands/init.js';
 import { config } from './commands/config.js';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { version: string };
 
 function parseBool(value: string): boolean {
   if (value === '1' || value === 'true') return true;
@@ -16,7 +20,7 @@ program
   .description(
     'LLM-powered code linter with natural-language rules.\n♥ by the Promaia team',
   )
-  .version('0.0.1');
+  .version(pkg.version);
 
 program
   .command('lint')

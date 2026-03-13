@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { execFile } from 'node:child_process';
+import { createRequire } from 'node:module';
 import path from 'node:path';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../../package.json') as { version: string };
 
 const CLI_SOURCE = path.resolve('src/cli.ts');
 
@@ -41,7 +45,7 @@ describe('CLI', () => {
     const result = await runCli(['--version']);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('0.0.1');
+    expect(result.stdout.trim()).toBe(pkg.version);
   });
 
   it('shows lint help with lint --help', async () => {
