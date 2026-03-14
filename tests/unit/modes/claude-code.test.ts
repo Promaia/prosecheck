@@ -54,6 +54,7 @@ function makeOptions(
     claudeToRuleShape: 'one-to-one',
     maxConcurrentAgents: 0,
     maxTurns: 30,
+    invocationTimeout: 120,
     allowedTools: ['Read', 'Grep', 'Glob'],
     tools: [],
     additionalArgs: [],

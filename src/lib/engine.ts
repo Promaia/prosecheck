@@ -302,6 +302,7 @@ async function dispatchMode(
         claudeToRuleShape: config.claudeCode.claudeToRuleShape,
         maxConcurrentAgents: config.claudeCode.maxConcurrentAgents,
         maxTurns: config.claudeCode.maxTurns,
+        invocationTimeout: config.claudeCode.invocationTimeout,
         allowedTools: config.claudeCode.allowedTools,
         tools: config.claudeCode.tools,
         additionalArgs: config.claudeCode.additionalArgs,
