@@ -59,6 +59,7 @@ beforeEach(async () => {
         claudeToRuleShape: 'one-to-one' as const,
         maxConcurrentAgents: 0,
         maxTurns: 10,
+        invocationTimeout: 120,
         allowedTools: [],
         tools: [],
         additionalArgs: [],

@@ -30,6 +30,8 @@ export interface ClaudeCodeModeOptions {
   maxConcurrentAgents: number;
   /** Maximum agentic turns per Claude CLI invocation */
   maxTurns: number;
+  /** Per-invocation timeout in seconds */
+  invocationTimeout: number;
   /** Tools the Claude CLI agent is allowed to use (permission scoping) */
   allowedTools: string[];
   /** Tools available to the Claude CLI agent */
@@ -133,12 +135,19 @@ async function executeInvocation(
     projectRoot,
     promptPaths,
     maxTurns,
+    invocationTimeout,
     allowedTools,
     tools,
     additionalArgs,
     systemPrompt,
-    signal,
+    signal: runSignal,
   } = options;
+
+  // Per-invocation timeout, combined with the run-level signal
+  const invocationSignal = AbortSignal.timeout(invocationTimeout * 1000);
+  const signal = runSignal
+    ? AbortSignal.any([runSignal, invocationSignal])
+    : invocationSignal;
 
   switch (invocation.type) {
     case 'one-to-one': {

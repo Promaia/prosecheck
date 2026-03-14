@@ -101,6 +101,13 @@ export const ClaudeCodeSchema = z
       .describe(
         'Tools available to the Claude CLI agent. Passed as --tools. Controls which tools the agent can see and invoke.',
       ),
+    invocationTimeout: z
+      .number()
+      .positive()
+      .default(120)
+      .describe(
+        'Per-invocation timeout in seconds. Timed-out rules are treated as dropped and retried if retryDropped is enabled.',
+      ),
     additionalArgs: z
       .array(z.string())
       .default([])
@@ -161,6 +168,7 @@ export const EnvironmentOverrideSchema = z
         maxConcurrentAgents: z.number().int().nonnegative().optional(),
         maxTurns: z.number().int().positive().optional(),
         allowedTools: z.array(z.string()).optional(),
+        invocationTimeout: z.number().positive().optional(),
         additionalArgs: z.array(z.string()).optional(),
         defaultModel: z.string().optional(),
         teamsOrchestratorModel: z.string().optional(),
@@ -221,6 +229,7 @@ export const ConfigSchema = z
       maxTurns: 30,
       allowedTools: DEFAULT_ALLOWED_TOOLS,
       tools: DEFAULT_TOOLS,
+      invocationTimeout: 120,
       additionalArgs: [],
       defaultModel: 'sonnet',
       validModels: ['opus', 'sonnet', 'haiku'],
