@@ -49,7 +49,7 @@ Programmatic entry point for use as a library dependency. Exports: core types (`
 
 ### `src/commands/lint.ts` — Lint Command [IMPLEMENTED]
 
-Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, lastRunFiles, timeout, claudeToRuleShape, maxConcurrentAgents, maxTurns, allowedTools, output, hashCheck, hashCheckWrite), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). When stdout is a TTY and format is `stylish`, lazy-imports the Ink UI (`src/ui/render.ts`) for interactive progress display instead of plain text output. Supports `--output <file>` to write results to a file (in addition to stdout) for environments where stdout capture is unreliable. `--hash-check` runs in lightweight mode (no agents, no API key) comparing content hashes only. `--hash-check-write` updates stored hashes without running agents. Key function: `lint(options: LintOptions)`.
+Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, lastRunFiles, timeout, claudeToRuleShape, maxConcurrentAgents, maxTurns, allowedTools, output, hashCheck, hashCheckWrite, rules), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). When stdout is a TTY and format is `stylish`, lazy-imports the Ink UI (`src/ui/render.ts`) for interactive progress display instead of plain text output. Supports `--output <file>` to write results to a file (in addition to stdout) for environments where stdout capture is unreliable. `--hash-check` runs in lightweight mode (no agents, no API key) comparing content hashes only. `--hash-check-write` updates stored hashes without running agents. Key function: `lint(options: LintOptions)`.
 
 ### `src/commands/init.ts` — Init Command [IMPLEMENTED]
 
@@ -104,6 +104,7 @@ Central coordinator that drives the lint pipeline:
 
 1. Cleanup `.prosecheck/working/`
 2. Run rule calculators → collect all rules (early return if none)
+2-filter. If `--rules` is set, filter to matching rules by name (case-insensitive) or ID, warn if nothing matches, and force `lastRun.write = false` (partial runs never update the stored hash)
 2a. Resolve per-rule models — validate each rule's `model` against `validModels` (warning on unknown values), then stamp `defaultModel` onto rules without an explicit model
 2b. If `--hash-check` is set, run hash-check mode (compare content hashes, pass/fail without agents) and return early
 2c. If `--hash-check-write` is set, compute and write current hashes without running agents and return early
@@ -226,7 +227,7 @@ Builds an execution plan via `buildExecutionPlan()` from `execution-plan.ts`, th
 - **`one-to-many-teams`**: builds an orchestration prompt via `buildAgentTeamsPrompt()`, sets `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
 - **`one-to-many-single`**: builds an orchestration prompt via `buildSequentialPrompt()` for sequential rule processing.
 
-Each invocation passes its `model` to `spawnClaude()` as `--model`, with conflict filtering to strip any `--model` from `additionalArgs`. Configured by `claudeToRuleShape`, `maxConcurrentAgents`, `maxTurns`, `allowedTools`, `tools`, `additionalArgs`, `defaultModel`, `teamsOrchestratorModel`, `systemPrompt`, and `signal` (abort). Key functions: `runClaudeCode()`, `spawnClaude()`.
+Each invocation passes its `model` to `spawnClaude()` as `--model`, with conflict filtering to strip any `--model` from `additionalArgs`. For multi-rule invocations (`one-to-many-teams`, `one-to-many-single`), `watchForEarlyExit()` monitors the outputs directory and kills the Claude process via `AbortSignal` as soon as all expected output files exist and validate against the result schema — avoiding unnecessary post-processing by orchestrator agents. Configured by `claudeToRuleShape`, `maxConcurrentAgents`, `maxTurns`, `allowedTools`, `tools`, `additionalArgs`, `defaultModel`, `teamsOrchestratorModel`, `systemPrompt`, and `signal` (abort). Key functions: `runClaudeCode()`, `spawnClaude()`.
 
 ### Claude Agents SDK Mode **[PLANNED]**
 

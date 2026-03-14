@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { watch } from 'node:fs';
 import path from 'node:path';
 import { execa } from 'execa';
 import type { Rule } from '../types/index.js';
@@ -9,6 +10,7 @@ import {
   type Invocation,
 } from '../lib/execution-plan.js';
 import { buildOrchestrationPrompt } from '../lib/orchestration-prompt.js';
+import { parseResultFile } from '../lib/results.js';
 import { RESULT_SCHEMA } from '../lib/prompt.js';
 
 const SCHEMA_SYSTEM_PROMPT = `All lint rule output files MUST use this exact JSON schema. The "status" field is required and must be "pass", "warn", or "fail". Never use alternative formats.
@@ -200,6 +202,15 @@ async function executeInvocation(
 
       const env = { ...process.env, CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' };
 
+      const earlyExit = watchForEarlyExit(
+        projectRoot,
+        invocation.rules.map((r) => r.id),
+      );
+      const combinedSignal = combineSignals(
+        signal,
+        earlyExit.controller.signal,
+      );
+
       const result = await spawnClaude(orchestrationPrompt, projectRoot, {
         env,
         maxTurns,
@@ -209,8 +220,9 @@ async function executeInvocation(
         model: invocation.model,
         systemPrompt,
         appendSystemPrompt: SCHEMA_SYSTEM_PROMPT,
-        signal,
+        signal: combinedSignal,
       });
+      earlyExit.stop();
 
       return invocation.rules.map((r) => ({
         ruleId: r.id,
@@ -234,6 +246,15 @@ async function executeInvocation(
         agentTeams: false,
       });
 
+      const earlyExit = watchForEarlyExit(
+        projectRoot,
+        invocation.rules.map((r) => r.id),
+      );
+      const combinedSignal = combineSignals(
+        signal,
+        earlyExit.controller.signal,
+      );
+
       const result = await spawnClaude(orchestrationPrompt, projectRoot, {
         maxTurns,
         allowedTools: singleAllowedTools,
@@ -242,8 +263,9 @@ async function executeInvocation(
         model: invocation.model,
         systemPrompt,
         appendSystemPrompt: SCHEMA_SYSTEM_PROMPT,
-        signal,
+        signal: combinedSignal,
       });
+      earlyExit.stop();
 
       return invocation.rules.map((r) => ({
         ruleId: r.id,
@@ -411,7 +433,78 @@ export async function spawnClaude(
   }
 }
 
+/**
+ * Combine an optional external signal (e.g., timeout) with an early-exit signal.
+ * Returns a signal that fires when either fires first.
+ */
+function combineSignals(
+  external: AbortSignal | undefined,
+  earlyExit: AbortSignal,
+): AbortSignal {
+  if (!external) return earlyExit;
+  return AbortSignal.any([external, earlyExit]);
+}
+
 function debug(msg: string): void {
   // console.error is captured by vitest and displayed in the stderr block after test completion
   console.error(`[prosecheck:debug] ${msg}`);
+}
+
+/**
+ * Watch for all expected output files to exist and be valid JSON.
+ * Returns an AbortController whose signal fires when all outputs are ready,
+ * plus a stop function to clean up the watcher.
+ *
+ * The returned signal can be combined with an external signal (e.g., timeout)
+ * via `AbortSignal.any()` and passed to `spawnClaude()` so the process is
+ * killed as soon as all results are in.
+ */
+export function watchForEarlyExit(
+  projectRoot: string,
+  ruleIds: string[],
+): { controller: AbortController; stop: () => void } {
+  const controller = new AbortController();
+  const outputsDir = path.join(projectRoot, OUTPUTS_DIR);
+  const pending = new Set(ruleIds);
+
+  const checkFile = (ruleId: string): void => {
+    if (!pending.has(ruleId)) return;
+    const filePath = path.join(outputsDir, `${ruleId}.json`);
+    void readFile(filePath, 'utf-8')
+      .then((content) => {
+        const parsed = parseResultFile(content, ruleId);
+        if (parsed.ok) {
+          pending.delete(ruleId);
+          if (pending.size === 0) {
+            debug('all outputs valid — aborting claude process');
+            controller.abort();
+          }
+        }
+      })
+      .catch(() => {
+        // File not ready yet — ignore
+      });
+  };
+
+  let watcher: ReturnType<typeof watch> | undefined;
+  try {
+    watcher = watch(outputsDir, (_, filename) => {
+      if (!filename || !filename.endsWith('.json')) return;
+      const ruleId = filename.slice(0, -5);
+      checkFile(ruleId);
+    });
+  } catch {
+    // Directory may not exist yet — watcher won't fire, that's fine
+  }
+
+  // Also check files that may already exist (written before watcher started)
+  for (const ruleId of ruleIds) {
+    checkFile(ruleId);
+  }
+
+  const stop = (): void => {
+    watcher?.close();
+  };
+
+  return { controller, stop };
 }

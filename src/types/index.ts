@@ -79,6 +79,8 @@ export interface RunContext {
   hashCheck?: boolean | undefined;
   /** Hash-check-write mode: update stored hashes without running agents */
   hashCheckWrite?: boolean | undefined;
+  /** Optional rule name/ID filter — only run matching rules (disables last-run-hash write) */
+  ruleFilter?: string[] | undefined;
   /** Optional progress callback for interactive UI */
   onProgress?: OnProgress | undefined;
 }

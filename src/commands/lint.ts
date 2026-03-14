@@ -42,6 +42,8 @@ export interface LintOptions {
   allowedTools?: string | undefined;
   /** Write output to a file instead of (in addition to) stdout */
   output?: string | undefined;
+  /** Comma-separated rule names or IDs to filter to (disables last-run-hash write) */
+  rules?: string | undefined;
 }
 
 /**
@@ -141,6 +143,12 @@ export async function lint(options: LintOptions): Promise<void> {
       comparisonRef: options.ref ?? '',
       hashCheck: options.hashCheck,
       hashCheckWrite: options.hashCheckWrite,
+      ruleFilter: options.rules
+        ? options.rules
+            .split(',')
+            .map((r) => r.trim())
+            .filter(Boolean)
+        : undefined,
       onProgress: interactiveUI?.onProgress,
     };
 

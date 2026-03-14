@@ -300,3 +300,74 @@ describe('claude-code mode', () => {
     expect(args).not.toContain('--system-prompt');
   });
 });
+
+describe('watchForEarlyExit', () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = path.join(
+      os.tmpdir(),
+      `prosecheck-early-exit-${String(Date.now())}`,
+    );
+    await mkdir(path.join(tmpDir, '.prosecheck/working/outputs'), {
+      recursive: true,
+    });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('aborts when all expected output files are valid', async () => {
+    // Lazy import to get the real (non-mocked) watchForEarlyExit
+    const { watchForEarlyExit } =
+      await import('../../../src/modes/claude-code.js');
+
+    const earlyExit = watchForEarlyExit(tmpDir, ['rule-a']);
+
+    // Write a valid output file
+    const outputPath = path.join(
+      tmpDir,
+      '.prosecheck/working/outputs/rule-a.json',
+    );
+    await writeFile(
+      outputPath,
+      JSON.stringify({
+        status: 'pass',
+        rule: 'Rule A',
+        source: 'RULES.md',
+      }),
+    );
+
+    // Wait for the watcher to detect and validate
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(earlyExit.controller.signal.aborted).toBe(true);
+    earlyExit.stop();
+  });
+
+  it('does not abort when only some outputs exist', async () => {
+    const { watchForEarlyExit } =
+      await import('../../../src/modes/claude-code.js');
+
+    const earlyExit = watchForEarlyExit(tmpDir, ['rule-a', 'rule-b']);
+
+    const outputPath = path.join(
+      tmpDir,
+      '.prosecheck/working/outputs/rule-a.json',
+    );
+    await writeFile(
+      outputPath,
+      JSON.stringify({
+        status: 'pass',
+        rule: 'Rule A',
+        source: 'RULES.md',
+      }),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(earlyExit.controller.signal.aborted).toBe(false);
+    earlyExit.stop();
+  });
+});

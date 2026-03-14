@@ -47,7 +47,8 @@ export interface EngineResult {
  * 9. Optionally persist last-run hash
  */
 export async function runEngine(context: RunContext): Promise<EngineResult> {
-  const { config, projectRoot, mode, format } = context;
+  let { config } = context;
+  const { projectRoot, mode, format } = context;
 
   // 1. Clean working directory
   const workingDir = path.join(projectRoot, WORKING_DIR);
@@ -55,7 +56,20 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
   await mkdir(path.join(workingDir, 'outputs'), { recursive: true });
 
   // 2. Discover rules via calculators
-  const rules = await runCalculators(projectRoot, config);
+  let rules = await runCalculators(projectRoot, config);
+
+  // 2-filter. If --rules was specified, filter to matching rules only
+  if (context.ruleFilter) {
+    const allRuleNames = rules.map((r) => r.name);
+    rules = filterRulesByNameOrId(rules, context.ruleFilter);
+    if (rules.length === 0) {
+      console.error(
+        `[prosecheck] Warning: --rules filter matched no rules. Available rules: ${allRuleNames.join(', ')}`,
+      );
+    }
+    // Partial runs must never update last-run hash
+    config = { ...config, lastRun: { ...config.lastRun, write: false } };
+  }
 
   // 2a. Resolve per-rule model — stamp defaultModel onto rules without an explicit model
   const { defaultModel, validModels } = config.claudeCode;
@@ -244,8 +258,8 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     });
   }
 
-  // 9. Persist last-run hash if applicable
-  if (changeResult.commitLastRunHash) {
+  // 9. Persist last-run hash if applicable (skipped when --rules filter is active)
+  if (changeResult.commitLastRunHash && !context.ruleFilter) {
     await changeResult.commitLastRunHash();
   }
 
@@ -591,4 +605,16 @@ function hashCheckResult(
   // For structured formats, use the standard formatter so output is valid JSON/SARIF
   const output = format === 'stylish' ? message : formatOutput(results, format);
   return { output, overallStatus, results };
+}
+
+/**
+ * Filter rules to only those matching the given names or IDs.
+ * Matches case-insensitively on rule name, and exactly on rule ID.
+ */
+export function filterRulesByNameOrId(rules: Rule[], filter: string[]): Rule[] {
+  const lowerFilter = filter.map((f) => f.toLowerCase());
+  return rules.filter(
+    (rule) =>
+      lowerFilter.includes(rule.name.toLowerCase()) || filter.includes(rule.id),
+  );
 }
