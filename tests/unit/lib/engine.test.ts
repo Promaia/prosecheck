@@ -73,9 +73,8 @@ vi.mock('../../../src/formatters/sarif.js', () => ({
   formatSarif: mockFormatSarif,
 }));
 
-const { runEngine, filterRulesByNameOrId } = await import(
-  '../../../src/lib/engine.js'
-);
+const { runEngine, filterRulesByNameOrId } =
+  await import('../../../src/lib/engine.js');
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -842,7 +841,9 @@ describe('runEngine', () => {
       });
 
       const context = makeContext({
-        config: makeConfig({ lastRun: { read: false, write: true, files: false } }),
+        config: makeConfig({
+          lastRun: { read: false, write: true, files: false },
+        }),
         ruleFilter: ['Rule A'],
       });
       await runEngine(context);

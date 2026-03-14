@@ -305,7 +305,10 @@ describe('watchForEarlyExit', () => {
   let tmpDir: string;
 
   beforeEach(async () => {
-    tmpDir = path.join(os.tmpdir(), `prosecheck-early-exit-${Date.now()}`);
+    tmpDir = path.join(
+      os.tmpdir(),
+      `prosecheck-early-exit-${String(Date.now())}`,
+    );
     await mkdir(path.join(tmpDir, '.prosecheck/working/outputs'), {
       recursive: true,
     });
@@ -317,9 +320,8 @@ describe('watchForEarlyExit', () => {
 
   it('aborts when all expected output files are valid', async () => {
     // Lazy import to get the real (non-mocked) watchForEarlyExit
-    const { watchForEarlyExit } = await import(
-      '../../../src/modes/claude-code.js'
-    );
+    const { watchForEarlyExit } =
+      await import('../../../src/modes/claude-code.js');
 
     const earlyExit = watchForEarlyExit(tmpDir, ['rule-a']);
 
@@ -345,9 +347,8 @@ describe('watchForEarlyExit', () => {
   });
 
   it('does not abort when only some outputs exist', async () => {
-    const { watchForEarlyExit } = await import(
-      '../../../src/modes/claude-code.js'
-    );
+    const { watchForEarlyExit } =
+      await import('../../../src/modes/claude-code.js');
 
     const earlyExit = watchForEarlyExit(tmpDir, ['rule-a', 'rule-b']);
 
