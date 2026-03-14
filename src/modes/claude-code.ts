@@ -476,7 +476,9 @@ export function watchForEarlyExit(
         if (parsed.ok) {
           pending.delete(ruleId);
           if (pending.size === 0) {
-            debug('all outputs valid — aborting claude process');
+            if (process.env['PROSECHECK_VERBOSE']) {
+              debug('all outputs valid — aborting claude process');
+            }
             controller.abort();
           }
         }
