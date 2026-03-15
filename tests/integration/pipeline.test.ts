@@ -607,6 +607,49 @@ describe('Integration: per-rule model selection', () => {
   }, 30_000);
 });
 
+describe('Integration: per-invocation timeout', () => {
+  it('treats timed-out invocation rules as dropped', async () => {
+    const repo = await createTestRepo();
+    repos.push(repo);
+
+    await setupFixtureProject(repo.dir);
+    await gitCommit(repo.dir, 'Add rules and config');
+
+    await execaFn('git', ['checkout', '-b', 'feature'], { cwd: repo.dir });
+    await mkdir(path.join(repo.dir, 'src'), { recursive: true });
+    await writeFile(
+      path.join(repo.dir, 'src/foo.ts'),
+      'console.log("hello");\n',
+      'utf-8',
+    );
+    await gitCommit(repo.dir, 'Add source file');
+
+    // Fake claude sleeps 5s — invocation timeout is 1s
+    shared.fakeClaudeEnv = { FAKE_CLAUDE_TIMEOUT_MS: '5000' };
+
+    const context = makeContext(repo.dir, {
+      config: makeConfig({
+        claudeCode: {
+          claudeToRuleShape: 'one-to-one',
+          maxConcurrentAgents: 0,
+          maxTurns: 30,
+          invocationTimeout: 1,
+          allowedTools: [],
+          tools: [],
+          additionalArgs: [],
+          defaultModel: 'sonnet',
+          validModels: ['opus', 'sonnet', 'haiku'],
+        },
+      }),
+    });
+    const result = await runEngine(context);
+
+    // Rules should be dropped (no output files written before timeout)
+    expect(result.results.dropped.length).toBeGreaterThan(0);
+    expect(result.overallStatus).toBe('dropped');
+  }, 30_000);
+});
+
 describe('Integration: hash-check mode', () => {
   it('passes when files unchanged, fails after modification', async () => {
     const repo = await createTestRepo();

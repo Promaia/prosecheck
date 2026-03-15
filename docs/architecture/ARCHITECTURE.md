@@ -81,7 +81,7 @@ Single source of truth for configuration shape, types, defaults, and documentati
 - **`Config` type** — `z.infer<typeof ConfigSchema>`, the TypeScript type used throughout the codebase. No separate type definition.
 - **`RuleResultSchema`** — discriminated union (`pass | warn | fail`) for agent output JSON validation.
 
-The schema serves four roles: TypeScript type inference, runtime validation with actionable error messages, default value declaration, and runtime introspection for the config editor command. `ClaudeCodeSchema` includes model-related fields: `defaultModel` (default `'sonnet'`), `teamsOrchestratorModel` (optional, for the orchestrator in one-to-many-teams mode), and `validModels` (accepted model names for per-rule frontmatter validation).
+The schema serves four roles: TypeScript type inference, runtime validation with actionable error messages, default value declaration, and runtime introspection for the config editor command. `ClaudeCodeSchema` includes model-related fields: `defaultModel` (default `'sonnet'`), `teamsOrchestratorModel` (optional, for the orchestrator in one-to-many-teams mode), and `validModels` (accepted model names for per-rule frontmatter validation). Also includes `invocationTimeout` (default 120s) for per-invocation timeouts.
 
 ### `config.ts` — Configuration Loading [IMPLEMENTED]
 
@@ -227,7 +227,7 @@ Builds an execution plan via `buildExecutionPlan()` from `execution-plan.ts`, th
 - **`one-to-many-teams`**: builds an orchestration prompt via `buildAgentTeamsPrompt()`, sets `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
 - **`one-to-many-single`**: builds an orchestration prompt via `buildSequentialPrompt()` for sequential rule processing.
 
-Each invocation passes its `model` to `spawnClaude()` as `--model`, with conflict filtering to strip any `--model` from `additionalArgs`. For multi-rule invocations (`one-to-many-teams`, `one-to-many-single`), `watchForEarlyExit()` monitors the outputs directory and kills the Claude process via `AbortSignal` as soon as all expected output files exist and validate against the result schema — avoiding unnecessary post-processing by orchestrator agents. Configured by `claudeToRuleShape`, `maxConcurrentAgents`, `maxTurns`, `allowedTools`, `tools`, `additionalArgs`, `defaultModel`, `teamsOrchestratorModel`, `systemPrompt`, and `signal` (abort). Key functions: `runClaudeCode()`, `spawnClaude()`.
+Each invocation passes its `model` to `spawnClaude()` as `--model`, with conflict filtering to strip any `--model` from `additionalArgs`. Each invocation gets its own timeout (`invocationTimeout`, default 120s) via `AbortSignal.timeout()` combined with the run-level signal via `AbortSignal.any()`. Timed-out invocations produce no output files — their rules are detected as dropped and retried if `retryDropped` is enabled. For multi-rule invocations (`one-to-many-teams`, `one-to-many-single`), `watchForEarlyExit()` monitors the outputs directory and kills the Claude process via `AbortSignal` as soon as all expected output files exist and validate against the result schema — avoiding unnecessary post-processing by orchestrator agents. Configured by `claudeToRuleShape`, `maxConcurrentAgents`, `maxTurns`, `invocationTimeout`, `allowedTools`, `tools`, `additionalArgs`, `defaultModel`, `teamsOrchestratorModel`, `systemPrompt`, and `signal` (abort). Key functions: `runClaudeCode()`, `spawnClaude()`.
 
 ### Claude Agents SDK Mode **[PLANNED]**
 
