@@ -101,14 +101,14 @@ describe('parseResultFile', () => {
     }
   });
 
-  it('rejects result with invalid schema', () => {
+  it('accepts result with missing rule/source (injected from context)', () => {
     const json = JSON.stringify({ status: 'pass' }); // missing "rule" and "source"
 
     const result = parseResultFile(json, 'test-rule');
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.message).toContain('failed schema validation');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.result.rule).toBe('test-rule');
     }
   });
 
@@ -124,7 +124,7 @@ describe('parseResultFile', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('rejects warn/fail without comments', () => {
+  it('downgrades warn with empty comments to pass', () => {
     const json = JSON.stringify({
       status: 'warn',
       rule: 'test',
@@ -135,9 +135,9 @@ describe('parseResultFile', () => {
 
     const result = parseResultFile(json, 'test-rule');
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.message).toContain('failed schema validation');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.result.status).toBe('pass');
     }
   });
 });
@@ -185,9 +185,24 @@ describe('collectResults', () => {
     expect(output.overallStatus).toBe('dropped');
   });
 
-  it('reports malformed output as errors', async () => {
+  it('normalizes malformed output and succeeds', async () => {
     const rule = createRule('Bad rule', 'Desc', ['src/'], 'src/RULES.md');
-    await writeOutput(rule.id, { status: 'pass' }); // missing fields
+    await writeOutput(rule.id, { status: 'pass' }); // missing fields — injected by normalization
+
+    const output = await collectResults({
+      projectRoot: tmpDir,
+      expectedRules: [rule],
+    });
+
+    expect(output.results).toHaveLength(1);
+    expect(output.errors).toHaveLength(0);
+    expect(output.overallStatus).toBe('pass');
+  });
+
+  it('reports truly malformed output as errors', async () => {
+    const rule = createRule('Bad rule', 'Desc', ['src/'], 'src/RULES.md');
+    // No status at all — normalization can't fix this
+    await writeOutput(rule.id, { foo: 'bar' });
 
     const output = await collectResults({
       projectRoot: tmpDir,
@@ -196,11 +211,7 @@ describe('collectResults', () => {
 
     expect(output.results).toHaveLength(0);
     expect(output.errors).toHaveLength(1);
-    const firstError = output.errors[0];
-    expect(firstError).toBeDefined();
-    if (!firstError) return;
-    expect(firstError.ruleId).toBe(rule.id);
-    expect(output.overallStatus).toBe('fail'); // errors treated as fail
+    expect(output.overallStatus).toBe('fail');
   });
 
   it('handles mixed results correctly', async () => {

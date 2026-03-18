@@ -100,28 +100,27 @@ describe('parseResultFile — sanitization (should parse successfully)', () => {
   });
 });
 
-describe('parseResultFile — malformed inputs (should fail with clear errors)', () => {
-  it('rejects trailing commas', () => {
+describe('parseResultFile — lenient JSON parsing (now accepted)', () => {
+  it('accepts trailing commas', () => {
     const input = '{"status": "pass", "rule": "r", "source": "s",}';
     const result = parseResultFile(input, 'r1');
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.message).toContain('not valid JSON');
-    }
+    expect(result.ok).toBe(true);
   });
 
-  it('rejects comments in JSON', () => {
+  it('accepts comments in JSON', () => {
     const input = '{"status": "pass", // comment\n"rule": "r", "source": "s"}';
     const result = parseResultFile(input, 'r1');
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
   });
 
-  it('rejects single-quoted strings', () => {
+  it('accepts single-quoted strings', () => {
     const input = "{'status': 'pass', 'rule': 'r', 'source': 's'}";
     const result = parseResultFile(input, 'r1');
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
   });
+});
 
+describe('parseResultFile — malformed inputs (should fail with clear errors)', () => {
   it('rejects unquoted keys', () => {
     const input = '{status: "pass", rule: "r", source: "s"}';
     const result = parseResultFile(input, 'r1');
@@ -158,20 +157,20 @@ describe('parseResultFile — malformed inputs (should fail with clear errors)',
 });
 
 describe('parseResultFile — Zod validation edge cases', () => {
-  it('rejects wrong-case status (PASS)', () => {
+  it('accepts wrong-case status (PASS) via normalization', () => {
     const input = JSON.stringify({
       status: 'PASS',
       rule: 'r',
       source: 's',
     });
     const result = parseResultFile(input, 'r1');
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.message).toContain('schema validation');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.result.status).toBe('pass');
     }
   });
 
-  it('rejects line: 0', () => {
+  it('accepts line: 0 (clamped to 1)', () => {
     const input = JSON.stringify({
       status: 'warn',
       rule: 'r',
@@ -180,10 +179,15 @@ describe('parseResultFile — Zod validation edge cases', () => {
       comments: [{ message: 'm', file: 'f.ts', line: 0 }],
     });
     const result = parseResultFile(input, 'r1');
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    if (result.ok && result.result.status === 'warn') {
+      const firstComment = result.result.comments[0];
+      expect(firstComment).toBeDefined();
+      expect(firstComment?.line).toBe(1);
+    }
   });
 
-  it('rejects line: -5', () => {
+  it('accepts line: -5 (clamped to 1)', () => {
     const input = JSON.stringify({
       status: 'warn',
       rule: 'r',
@@ -192,10 +196,15 @@ describe('parseResultFile — Zod validation edge cases', () => {
       comments: [{ message: 'm', file: 'f.ts', line: -5 }],
     });
     const result = parseResultFile(input, 'r1');
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    if (result.ok && result.result.status === 'warn') {
+      const firstComment = result.result.comments[0];
+      expect(firstComment).toBeDefined();
+      expect(firstComment?.line).toBe(1);
+    }
   });
 
-  it('rejects line: 1.5 (non-integer)', () => {
+  it('accepts line: 1.5 (floored to 1)', () => {
     const input = JSON.stringify({
       status: 'warn',
       rule: 'r',
@@ -204,10 +213,15 @@ describe('parseResultFile — Zod validation edge cases', () => {
       comments: [{ message: 'm', file: 'f.ts', line: 1.5 }],
     });
     const result = parseResultFile(input, 'r1');
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    if (result.ok && result.result.status === 'warn') {
+      const firstComment = result.result.comments[0];
+      expect(firstComment).toBeDefined();
+      expect(firstComment?.line).toBe(1);
+    }
   });
 
-  it('rejects empty comments array on warn', () => {
+  it('downgrades warn with empty comments to pass', () => {
     const input = JSON.stringify({
       status: 'warn',
       rule: 'r',
@@ -216,7 +230,10 @@ describe('parseResultFile — Zod validation edge cases', () => {
       comments: [],
     });
     const result = parseResultFile(input, 'r1');
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.result.status).toBe('pass');
+    }
   });
 
   it('rejects empty comments array on fail', () => {
@@ -243,15 +260,18 @@ describe('parseResultFile — Zod validation edge cases', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('rejects missing headline on warn', () => {
+  it('accepts missing headline on warn (synthesized from first comment)', () => {
     const input = JSON.stringify({
       status: 'warn',
       rule: 'r',
       source: 's',
-      comments: [{ message: 'm' }],
+      comments: [{ message: 'some concern' }],
     });
     const result = parseResultFile(input, 'r1');
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    if (result.ok && result.result.status === 'warn') {
+      expect(result.result.headline).toBe('some concern');
+    }
   });
 
   it('rejects missing comments on fail', () => {
@@ -298,12 +318,13 @@ describe('parseResultFile — error message quality', () => {
   });
 
   it('Zod errors include field path', () => {
+    // Use a truly invalid structure that normalization can't fix
     const input = JSON.stringify({
-      status: 'warn',
+      status: 'fail',
       rule: 'r',
       source: 's',
       headline: 'h',
-      comments: [{ message: 'm', line: -1 }],
+      comments: [{ message: 123 }], // message must be string
     });
     const result = parseResultFile(input, 'r1');
     expect(result.ok).toBe(false);

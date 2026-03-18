@@ -1,8 +1,10 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { RuleResultSchema } from './config-schema.js';
 import type { RuleResult } from './config-schema.js';
 import type { Rule, RuleStatus } from '../types/index.js';
+import { normalizeResult } from './normalize-result.js';
+import type { NormalizeContext } from './normalize-result.js';
 
 const OUTPUTS_DIR = '.prosecheck/working/outputs';
 
@@ -45,8 +47,9 @@ export interface ResultError {
 
 /**
  * Sanitize common LLM output quirks before JSON parsing.
- * Non-lossy transforms: BOM removal, markdown fence extraction,
- * trailing text truncation, whitespace trimming.
+ * Transforms: BOM removal, markdown fence extraction,
+ * trailing text truncation, comment stripping, trailing comma
+ * removal, single-quote fixing, whitespace trimming.
  */
 export function sanitizeAgentOutput(content: string): string {
   // Strip UTF-8 BOM
@@ -64,17 +67,92 @@ export function sanitizeAgentOutput(content: string): string {
     cleaned = cleaned.slice(0, lastBrace + 1);
   }
 
+  // Strip single-line comments (// ...) — but not inside strings
+  cleaned = stripJsonComments(cleaned);
+
+  // Strip trailing commas before } or ]
+  cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
+
+  // Fix single-quoted strings → double-quoted
+  cleaned = fixSingleQuotes(cleaned);
+
   // Trim whitespace
   return cleaned.trim();
 }
 
 /**
+ * Strip // and /* comments from JSON-like text, preserving string contents.
+ */
+function stripJsonComments(input: string): string {
+  let result = '';
+  let i = 0;
+  while (i < input.length) {
+    const ch = input.charAt(i);
+    const next = input.charAt(i + 1);
+    // String literal — pass through unchanged
+    if (ch === '"') {
+      result += '"';
+      i++;
+      while (i < input.length && input.charAt(i) !== '"') {
+        if (input.charAt(i) === '\\') {
+          result += input.charAt(i) + input.charAt(i + 1);
+          i += 2;
+        } else {
+          result += input.charAt(i);
+          i++;
+        }
+      }
+      if (i < input.length) {
+        result += '"';
+        i++;
+      }
+    }
+    // Single-line comment
+    else if (ch === '/' && next === '/') {
+      // Skip to end of line
+      while (i < input.length && input.charAt(i) !== '\n') i++;
+    }
+    // Block comment
+    else if (ch === '/' && next === '*') {
+      i += 2;
+      while (
+        i < input.length &&
+        !(input.charAt(i) === '*' && input.charAt(i + 1) === '/')
+      )
+        i++;
+      i += 2; // skip */
+    }
+    // Normal character
+    else {
+      result += ch;
+      i++;
+    }
+  }
+  return result;
+}
+
+/**
+ * Replace single-quoted JSON strings with double-quoted.
+ * Only applies when the input looks like it uses single quotes for all keys/values.
+ */
+function fixSingleQuotes(input: string): string {
+  // Only attempt if there are single quotes and no double quotes around values
+  // (to avoid breaking apostrophes in normal double-quoted JSON)
+  if (input.includes('"')) return input;
+
+  // Replace single quotes with double quotes
+  return input.replace(/'/g, '"');
+}
+
+/**
  * Parse and validate a single output file.
+ * Applies sanitization, normalization, then Zod validation.
  * Returns the validated RuleResult or an error message.
  */
 export function parseResultFile(
   content: string,
   ruleId: string,
+  context?: NormalizeContext,
 ): { ok: true; result: RuleResult } | { ok: false; message: string } {
   const sanitized = sanitizeAgentOutput(content);
   let parsed: unknown;
@@ -88,7 +166,12 @@ export function parseResultFile(
     };
   }
 
-  const validation = RuleResultSchema.safeParse(parsed);
+  // Normalize common AI mistakes before schema validation
+  const normalized = context
+    ? normalizeResult(parsed, context)
+    : normalizeResult(parsed, { ruleId, ruleSource: '' });
+
+  const validation = RuleResultSchema.safeParse(normalized);
   if (!validation.success) {
     const issues = validation.error.issues
       .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
@@ -135,9 +218,20 @@ export async function collectResults(
 
     const filePath = path.join(outputsDir, outputFile);
     const content = await readFile(filePath, 'utf-8');
-    const parsed = parseResultFile(content, rule.id);
+    const context: NormalizeContext = {
+      ruleId: rule.id,
+      ruleSource: rule.source,
+      projectRoot,
+    };
+    const parsed = parseResultFile(content, rule.id, context);
 
     if (parsed.ok) {
+      // Write normalized JSON back so external tools see a consistent shape
+      await writeFile(
+        filePath,
+        JSON.stringify(parsed.result, null, 2) + '\n',
+        'utf-8',
+      );
       results.push({ ruleId: rule.id, result: parsed.result });
     } else {
       errors.push({
