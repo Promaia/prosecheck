@@ -13,6 +13,7 @@ import {
 import { buildOrchestrationPrompt } from '../lib/orchestration-prompt.js';
 import { parseResultFile } from '../lib/results.js';
 import { RESULT_SCHEMA } from '../lib/prompt.js';
+import type { TimingTracker } from '../lib/timing.js';
 
 const SCHEMA_SYSTEM_PROMPT = `All lint rule output files MUST use this exact JSON schema. The "status" field is required and must be "pass", "warn", or "fail". Never use alternative formats.
 
@@ -53,6 +54,8 @@ export interface ClaudeCodeModeOptions {
   signal?: AbortSignal | undefined;
   /** Enable per-agent log streaming to .prosecheck/working/logs/ */
   debug?: boolean | undefined;
+  /** Timing tracker for per-rule duration measurement */
+  timingTracker?: TimingTracker | undefined;
 }
 
 export interface ClaudeCodeResult {
@@ -181,6 +184,9 @@ async function executeInvocation(
         ];
       }
 
+      // Mark start for timing (programmatic — no agent marker needed)
+      options.timingTracker?.markStart(rule.id);
+
       const outputFile = path
         .join(projectRoot, OUTPUTS_DIR, `${rule.id}.json`)
         .replaceAll('\\', '/');
@@ -217,7 +223,14 @@ async function executeInvocation(
       const absOutputsDir = path
         .join(projectRoot, OUTPUTS_DIR)
         .replaceAll('\\', '/');
-      const teamAllowedTools = [...allowedTools, `Write(${absOutputsDir}/*)`];
+      const absTimingDir = path
+        .join(projectRoot, '.prosecheck/working/timing')
+        .replaceAll('\\', '/');
+      const teamAllowedTools = [
+        ...allowedTools,
+        `Write(${absOutputsDir}/*)`,
+        `Write(${absTimingDir}/*)`,
+      ];
 
       const orchestrationPrompt = buildOrchestrationPrompt({
         projectRoot,
@@ -271,7 +284,14 @@ async function executeInvocation(
       const absOutputsDir = path
         .join(projectRoot, OUTPUTS_DIR)
         .replaceAll('\\', '/');
-      const singleAllowedTools = [...allowedTools, `Write(${absOutputsDir}/*)`];
+      const absTimingDir2 = path
+        .join(projectRoot, '.prosecheck/working/timing')
+        .replaceAll('\\', '/');
+      const singleAllowedTools = [
+        ...allowedTools,
+        `Write(${absOutputsDir}/*)`,
+        `Write(${absTimingDir2}/*)`,
+      ];
 
       const orchestrationPrompt = buildOrchestrationPrompt({
         projectRoot,

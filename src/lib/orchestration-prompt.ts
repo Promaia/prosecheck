@@ -3,6 +3,7 @@ import type { Rule } from '../types/index.js';
 import { RESULT_SCHEMA } from './prompt.js';
 
 const OUTPUTS_DIR = '.prosecheck/working/outputs';
+const TIMING_DIR = '.prosecheck/working/timing';
 
 export interface OrchestrationPromptOptions {
   /** Project root directory */
@@ -80,12 +81,17 @@ function buildAgentTeamsPrompt(
     .filter((id) => ruleNames.has(id))
     .sort();
   const outputEntries: string[] = [];
+  const timingEntries: string[] = [];
   for (const ruleId of sortedIds) {
     const name = ruleNames.get(ruleId) ?? ruleId;
     const outputPath = path
       .join(projectRoot, OUTPUTS_DIR, `${ruleId}.json`)
       .replaceAll('\\', '/');
+    const timingPath = path
+      .join(projectRoot, TIMING_DIR, `${ruleId}.started`)
+      .replaceAll('\\', '/');
     outputEntries.push(`  - ${name}: \`${outputPath}\``);
+    timingEntries.push(`  - ${name}: \`${timingPath}\``);
   }
 
   return [
@@ -100,6 +106,13 @@ function buildAgentTeamsPrompt(
     RESULT_SCHEMA,
     '',
     'The "status" field is REQUIRED and must be exactly "pass", "warn", or "fail". The "rule" field must be a string. Do not use alternative field names like "violations", "pass", "ruleId", or "ruleName".',
+    '',
+    '## Progress tracking',
+    '',
+    'Before each sub-agent begins evaluating its rule, it MUST write an empty file to mark the start. Include this instruction in every message you send to sub-agents:',
+    ...timingEntries,
+    '',
+    'Each marker must be written immediately before starting work on that rule. Do not batch them.',
     '',
     '## Output file paths',
     '',
@@ -127,6 +140,7 @@ function buildSequentialPrompt(
 ): string {
   // Build output path list — only include rules assigned to this invocation
   const outputEntries: string[] = [];
+  const timingEntries: string[] = [];
   const sortedIds = [...promptPaths.keys()]
     .filter((id) => ruleNames.has(id))
     .sort();
@@ -135,7 +149,11 @@ function buildSequentialPrompt(
     const outputPath = path
       .join(projectRoot, OUTPUTS_DIR, `${ruleId}.json`)
       .replaceAll('\\', '/');
+    const timingPath = path
+      .join(projectRoot, TIMING_DIR, `${ruleId}.started`)
+      .replaceAll('\\', '/');
     outputEntries.push(`  - ${name}: \`${outputPath}\``);
+    timingEntries.push(`  - ${name}: \`${timingPath}\``);
   }
 
   return [
@@ -146,10 +164,12 @@ function buildSequentialPrompt(
     '## Instructions',
     '',
     '1. Read each prompt file listed above.',
-    '2. Evaluate the codebase against each rule as described in the prompt.',
-    '3. Write your JSON result for each rule to its output path:',
+    '2. Before evaluating each rule, write an empty file to mark the start:',
+    ...timingEntries,
+    '3. Evaluate the codebase against each rule as described in the prompt.',
+    '4. Write your JSON result for each rule to its output path:',
     ...outputEntries,
-    '4. Each output file must conform to the JSON schema described in the prompt.',
-    '5. Process all rules — do not skip any.',
+    '5. Each output file must conform to the JSON schema described in the prompt.',
+    '6. Process all rules — do not skip any.',
   ].join('\n');
 }

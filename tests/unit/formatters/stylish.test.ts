@@ -130,6 +130,71 @@ describe('stylish formatter', () => {
     expect(text).toContain('1 errors');
   });
 
+  it('includes timing duration for results', () => {
+    const timing = new Map([
+      [
+        'test-rule',
+        {
+          ruleId: 'test-rule',
+          startedAt: 1000,
+          completedAt: 46200,
+          durationMs: 45200,
+        },
+      ],
+    ]);
+    const output = makeOutput({
+      results: [
+        {
+          ruleId: 'test-rule',
+          result: {
+            status: 'pass',
+            rule: 'No console.log',
+            source: 'src/RULES.md',
+          },
+        },
+      ],
+      timing,
+    });
+
+    const text = formatStylish(output);
+    expect(text).toContain('45.2s');
+  });
+
+  it('shows "never started" for dropped rules with no start marker', () => {
+    const rule = createRule('Missing', 'Desc', ['src/'], 'src/RULES.md');
+    const output = makeOutput({
+      overallStatus: 'dropped',
+      dropped: [{ rule, attempt: 1 }],
+      timing: new Map(),
+    });
+
+    const text = formatStylish(output);
+    expect(text).toContain('never started');
+  });
+
+  it('shows "started but timed out" for dropped rules with start marker', () => {
+    const rule = createRule('Slow Rule', 'Desc', ['src/'], 'src/RULES.md');
+    const timing = new Map([
+      [
+        rule.id,
+        {
+          ruleId: rule.id,
+          startedAt: 1000,
+          completedAt: undefined,
+          durationMs: undefined,
+        },
+      ],
+    ]);
+    const output = makeOutput({
+      overallStatus: 'dropped',
+      dropped: [{ rule, attempt: 1 }],
+      timing,
+    });
+
+    const text = formatStylish(output);
+    expect(text).toContain('started but timed out');
+  });
+
   it('formats mixed results with summary', () => {
     const rule = createRule('Dropped', 'D', [], 'r.md');
     const output = makeOutput({

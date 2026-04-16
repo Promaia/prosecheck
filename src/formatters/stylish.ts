@@ -11,8 +11,13 @@ export function formatStylish(output: CollectResultsOutput): string {
 
   for (const { ruleId, result } of output.results) {
     const statusLabel = formatStatus(result.status);
+    const timing = output.timing?.get(ruleId);
+    const timingLabel =
+      timing?.durationMs !== undefined
+        ? ` ${pc.dim(formatDuration(timing.durationMs))}`
+        : '';
     lines.push(
-      `${statusLabel} ${pc.bold(result.rule)} ${pc.dim(`(${ruleId})`)}`,
+      `${statusLabel} ${pc.bold(result.rule)} ${pc.dim(`(${ruleId})`)}${timingLabel}`,
     );
     lines.push(`  ${pc.dim('source:')} ${result.source}`);
 
@@ -33,11 +38,13 @@ export function formatStylish(output: CollectResultsOutput): string {
 
   for (const { rule } of output.dropped) {
     const statusLabel = formatStatus('dropped');
+    const timing = output.timing?.get(rule.id);
+    const droppedDetail = formatDroppedDetail(timing);
     lines.push(
       `${statusLabel} ${pc.bold(rule.name)} ${pc.dim(`(${rule.id})`)}`,
     );
     lines.push(`  ${pc.dim('source:')} ${rule.source}`);
-    lines.push(`  No output produced by agent`);
+    lines.push(`  ${droppedDetail}`);
     lines.push('');
   }
 
@@ -77,6 +84,27 @@ function formatLocation(file?: string, line?: number): string {
   if (!file) return '';
   const loc = line ? `${file}:${String(line)}` : file;
   return pc.cyan(loc) + ' ';
+}
+
+function formatDuration(ms: number): string {
+  const seconds = ms / 1000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${String(minutes)}m${remainingSeconds.toFixed(0)}s`;
+}
+
+function formatDroppedDetail(
+  timing:
+    | { startedAt?: number | undefined; durationMs?: number | undefined }
+    | undefined,
+): string {
+  if (!timing?.startedAt) {
+    return 'No output produced by agent (never started)';
+  }
+  return 'No output produced by agent (started but timed out)';
 }
 
 function buildSummary(output: CollectResultsOutput): string {

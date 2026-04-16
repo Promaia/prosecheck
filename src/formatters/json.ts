@@ -19,12 +19,16 @@ export interface JsonResultEntry {
     file?: string | undefined;
     line?: number | undefined;
   }>;
+  /** Duration in seconds, if timing data is available */
+  durationSeconds?: number;
 }
 
 export interface JsonDroppedEntry {
   ruleId: string;
   ruleName: string;
   source: string;
+  /** Whether the agent started processing this rule before timing out */
+  started?: boolean;
 }
 
 export interface JsonErrorEntry {
@@ -56,13 +60,22 @@ export function formatJson(output: CollectResultsOutput): string {
         entry.comments = result.comments;
       }
 
+      const timing = output.timing?.get(ruleId);
+      if (timing?.durationMs !== undefined) {
+        entry.durationSeconds = Math.round(timing.durationMs / 100) / 10;
+      }
+
       return entry;
     }),
-    dropped: output.dropped.map(({ rule }) => ({
-      ruleId: rule.id,
-      ruleName: rule.name,
-      source: rule.source,
-    })),
+    dropped: output.dropped.map(({ rule }) => {
+      const timing = output.timing?.get(rule.id);
+      return {
+        ruleId: rule.id,
+        ruleName: rule.name,
+        source: rule.source,
+        ...(timing?.startedAt !== undefined ? { started: true } : {}),
+      };
+    }),
     errors: output.errors.map((e) => ({
       ruleId: e.ruleId,
       ruleName: e.ruleName,

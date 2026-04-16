@@ -19,6 +19,7 @@ import { executePostRun } from './post-run.js';
 import { buildUserPrompt, watchForOutputs } from '../modes/user-prompt.js';
 import { runClaudeCode } from '../modes/claude-code.js';
 import { buildExecutionPlan, computeRunTimeout } from './execution-plan.js';
+import { TimingTracker } from './timing.js';
 import { formatStylish } from '../formatters/stylish.js';
 import { formatJson } from '../formatters/json.js';
 import { formatSarif } from '../formatters/sarif.js';
@@ -55,6 +56,7 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
   const workingDir = path.join(projectRoot, WORKING_DIR);
   await rm(workingDir, { recursive: true, force: true });
   await mkdir(path.join(workingDir, 'outputs'), { recursive: true });
+  await mkdir(path.join(workingDir, 'timing'), { recursive: true });
   if (context.debug) {
     await mkdir(path.join(workingDir, 'logs'), { recursive: true });
   }
@@ -200,6 +202,9 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     });
   }
 
+  // Start timing tracker
+  const timingTracker = new TimingTracker(projectRoot);
+
   // Compute dynamic run timeout from execution plan
   const plan = buildExecutionPlan({
     rules: changeResult.triggeredRules,
@@ -229,6 +234,7 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
       globalPrompt,
       signal,
       context.debug,
+      timingTracker,
     );
   } catch (error: unknown) {
     if (isTimeoutError(error)) {
@@ -239,12 +245,16 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
   }
 
   stopWatcher?.();
+  timingTracker.stop();
 
   // 6. Collect results
   const collected = await collectResults({
     projectRoot,
     expectedRules: changeResult.triggeredRules,
   });
+
+  // Attach timing data
+  collected.timing = timingTracker.getTimings();
 
   // 6b. Retry dropped rules if configured
   if (config.retryDropped && collected.dropped.length > 0) {
@@ -297,6 +307,7 @@ async function dispatchMode(
   globalPrompt: string | undefined,
   signal?: AbortSignal,
   debug?: boolean,
+  timingTracker?: TimingTracker,
 ): Promise<void> {
   const expectedRuleIds = triggeredRules.map((r) => r.id);
 
@@ -336,6 +347,7 @@ async function dispatchMode(
         rules: triggeredRules,
         signal,
         debug,
+        timingTracker,
       });
       break;
     }

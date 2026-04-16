@@ -5,6 +5,7 @@ import type { RuleResult } from './config-schema.js';
 import type { Rule, RuleStatus } from '../types/index.js';
 import { normalizeResult } from './normalize-result.js';
 import type { NormalizeContext } from './normalize-result.js';
+import type { RuleTiming } from './timing.js';
 
 const OUTPUTS_DIR = '.prosecheck/working/outputs';
 
@@ -32,6 +33,8 @@ export interface CollectResultsOutput {
   errors: ResultError[];
   /** Overall worst status across all results and dropped rules */
   overallStatus: RuleStatus;
+  /** Per-rule timing data (keyed by rule ID) */
+  timing?: Map<string, RuleTiming> | undefined;
 }
 
 export interface RuleResultWithId {
