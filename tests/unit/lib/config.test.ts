@@ -58,7 +58,8 @@ describe('loadConfig', () => {
 
     const { config } = await loadConfig({ projectRoot: tmpDir });
     expect(config.baseBranch).toBe('main');
-    expect(config.timeout).toBe(300);
+    expect(config.addtlOverheadTimeout).toBe(60);
+    expect(config.hardTotalTimeout).toBeNull();
     expect(config.lastRun.read).toBe(false);
     expect(config.lastRun.write).toBe(false);
   });
@@ -71,12 +72,15 @@ describe('loadConfig', () => {
   });
 
   it('merges config.local.json on top of config.json', async () => {
-    await writeConfig(tmpDir, { baseBranch: 'main', timeout: 300 });
-    await writeLocalConfig(tmpDir, { timeout: 600 });
+    await writeConfig(tmpDir, {
+      baseBranch: 'main',
+      addtlOverheadTimeout: 60,
+    });
+    await writeLocalConfig(tmpDir, { addtlOverheadTimeout: 120 });
 
     const { config } = await loadConfig({ projectRoot: tmpDir });
     expect(config.baseBranch).toBe('main');
-    expect(config.timeout).toBe(600);
+    expect(config.addtlOverheadTimeout).toBe(120);
   });
 
   it('applies environment overrides', async () => {
@@ -109,22 +113,22 @@ describe('loadConfig', () => {
   });
 
   it('CLI flags override everything', async () => {
-    await writeConfig(tmpDir, { timeout: 300 });
+    await writeConfig(tmpDir, { hardTotalTimeout: 300 });
 
     const { config } = await loadConfig({
       projectRoot: tmpDir,
-      cliOverrides: { timeout: 60 },
+      cliOverrides: { hardTotalTimeout: 60 },
     });
-    expect(config.timeout).toBe(60);
+    expect(config.hardTotalTimeout).toBe(60);
   });
 
   it('full layering: base → local → env → cli', async () => {
     await writeConfig(tmpDir, {
       baseBranch: 'main',
-      timeout: 300,
+      addtlOverheadTimeout: 60,
       warnAsError: false,
       environments: {
-        ci: { warnAsError: true, timeout: 600 },
+        ci: { warnAsError: true, hardTotalTimeout: 600 },
       },
     });
     await writeLocalConfig(tmpDir, { baseBranch: 'develop' });
@@ -132,16 +136,16 @@ describe('loadConfig', () => {
     const { config } = await loadConfig({
       projectRoot: tmpDir,
       env: 'ci',
-      cliOverrides: { timeout: 60 },
+      cliOverrides: { hardTotalTimeout: 120 },
     });
 
     expect(config.baseBranch).toBe('develop'); // from local
     expect(config.warnAsError).toBe(true); // from env override
-    expect(config.timeout).toBe(60); // from CLI
+    expect(config.hardTotalTimeout).toBe(120); // from CLI
   });
 
   it('throws ConfigError for invalid config', async () => {
-    await writeConfig(tmpDir, { timeout: 'not a number' });
+    await writeConfig(tmpDir, { addtlOverheadTimeout: 'not a number' });
 
     await expect(loadConfig({ projectRoot: tmpDir })).rejects.toThrow(
       ConfigError,
@@ -149,7 +153,7 @@ describe('loadConfig', () => {
   });
 
   it('throws ConfigError with issue details', async () => {
-    await writeConfig(tmpDir, { timeout: -1 });
+    await writeConfig(tmpDir, { hardTotalTimeout: -1 });
 
     try {
       await loadConfig({ projectRoot: tmpDir });

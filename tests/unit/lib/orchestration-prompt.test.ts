@@ -76,18 +76,28 @@ describe('buildOrchestrationPrompt', () => {
     );
   });
 
-  it('falls back to rule ID when rule name not found', () => {
+  it('excludes rules not in the rules array', () => {
     const promptPaths = new Map<string, string>();
-    promptPaths.set('unknown-rule', '/project/prompts/unknown-rule.md');
+    promptPaths.set('assigned-rule', '/project/prompts/assigned-rule.md');
+    promptPaths.set('extra-rule', '/project/prompts/extra-rule.md');
 
     const result = buildOrchestrationPrompt({
       projectRoot: '/project',
       promptPaths,
-      rules: [], // no matching rule
+      rules: [
+        {
+          id: 'assigned-rule',
+          name: 'Assigned Rule',
+          description: '',
+          inclusions: [],
+          source: 'test',
+        },
+      ],
       agentTeams: false,
     });
 
-    expect(result).toContain('unknown-rule');
+    expect(result).toContain('Assigned Rule');
+    expect(result).not.toContain('extra-rule');
   });
 
   it('handles empty prompt paths', () => {

@@ -22,6 +22,8 @@ export interface Rule {
   group?: string | undefined;
   /** Optional model override — which Claude model evaluates this rule */
   model?: string | undefined;
+  /** Optional per-rule timeout in seconds — overrides the default timeoutPerRule for this rule */
+  timeout?: number | undefined;
   /** Passthrough bag for unrecognized frontmatter fields (for future use) */
   frontmatter?: Record<string, unknown> | undefined;
 }
@@ -83,4 +85,6 @@ export interface RunContext {
   ruleFilter?: string[] | undefined;
   /** Optional progress callback for interactive UI */
   onProgress?: OnProgress | undefined;
+  /** Enable per-agent log streaming to .prosecheck/working/logs/ */
+  debug?: boolean | undefined;
 }

@@ -36,10 +36,10 @@ export function buildOrchestrationPrompt(
     ruleModels.set(rule.id, rule.model);
   }
 
-  // Build the rule list entries — sort by rule ID for deterministic output
-  const sortedEntries = [...promptPaths.entries()].sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
+  // Build the rule list entries — only include rules assigned to this invocation
+  const sortedEntries = [...promptPaths.entries()]
+    .filter(([ruleId]) => ruleNames.has(ruleId))
+    .sort(([a], [b]) => a.localeCompare(b));
   const ruleEntries: string[] = [];
   for (const [ruleId, promptPath] of sortedEntries) {
     const name = ruleNames.get(ruleId) ?? ruleId;
@@ -75,8 +75,10 @@ function buildAgentTeamsPrompt(
   ruleNames: Map<string, string>,
   hasModelAnnotations: boolean,
 ): string {
-  // Build output path list so the orchestrator knows where to validate
-  const sortedIds = [...promptPaths.keys()].sort();
+  // Build output path list — only include rules assigned to this invocation
+  const sortedIds = [...promptPaths.keys()]
+    .filter((id) => ruleNames.has(id))
+    .sort();
   const outputEntries: string[] = [];
   for (const ruleId of sortedIds) {
     const name = ruleNames.get(ruleId) ?? ruleId;
@@ -123,9 +125,11 @@ function buildSequentialPrompt(
   promptPaths: Map<string, string>,
   ruleNames: Map<string, string>,
 ): string {
-  // Build output path list for instructions — same sort as rule list
+  // Build output path list — only include rules assigned to this invocation
   const outputEntries: string[] = [];
-  const sortedIds = [...promptPaths.keys()].sort();
+  const sortedIds = [...promptPaths.keys()]
+    .filter((id) => ruleNames.has(id))
+    .sort();
   for (const ruleId of sortedIds) {
     const name = ruleNames.get(ruleId) ?? ruleId;
     const outputPath = path

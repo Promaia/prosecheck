@@ -13,7 +13,8 @@ describe('ConfigSchema', () => {
     const result = ConfigSchema.parse({});
 
     expect(result.baseBranch).toBe('main');
-    expect(result.timeout).toBe(300);
+    expect(result.addtlOverheadTimeout).toBe(60);
+    expect(result.hardTotalTimeout).toBeNull();
     expect(result.warnAsError).toBe(false);
     expect(result.retryDropped).toBe(false);
     expect(result.retryDroppedMaxAttempts).toBe(1);
@@ -51,7 +52,8 @@ describe('ConfigSchema', () => {
   it('accepts valid full config', () => {
     const result = ConfigSchema.safeParse({
       baseBranch: 'develop',
-      timeout: 600,
+      addtlOverheadTimeout: 30,
+      hardTotalTimeout: 900,
       warnAsError: true,
       lastRun: { read: true, write: false, files: false },
       claudeCode: { claudeToRuleShape: 'one-to-many-teams' },
@@ -64,18 +66,21 @@ describe('ConfigSchema', () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.baseBranch).toBe('develop');
-      expect(result.data.timeout).toBe(600);
+      expect(result.data.addtlOverheadTimeout).toBe(30);
+      expect(result.data.hardTotalTimeout).toBe(900);
       expect(result.data.ruleCalculators).toHaveLength(2);
     }
   });
 
   it('rejects invalid types', () => {
-    const result = ConfigSchema.safeParse({ timeout: 'not a number' });
+    const result = ConfigSchema.safeParse({
+      addtlOverheadTimeout: 'not a number',
+    });
     expect(result.success).toBe(false);
   });
 
-  it('rejects negative timeout', () => {
-    const result = ConfigSchema.safeParse({ timeout: -1 });
+  it('rejects negative hardTotalTimeout', () => {
+    const result = ConfigSchema.safeParse({ hardTotalTimeout: -1 });
     expect(result.success).toBe(false);
   });
 

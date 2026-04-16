@@ -44,6 +44,8 @@ export interface LintOptions {
   output?: string | undefined;
   /** Comma-separated rule names or IDs to filter to (disables last-run-hash write) */
   rules?: string | undefined;
+  /** Enable per-agent log streaming to .prosecheck/working/logs/ */
+  debug?: boolean | undefined;
 }
 
 /**
@@ -69,7 +71,7 @@ export async function lint(options: LintOptions): Promise<void> {
       cliOverrides['retryDropped'] = options.retryDropped;
     }
     if (options.timeout !== undefined) {
-      cliOverrides['timeout'] = options.timeout;
+      cliOverrides['hardTotalTimeout'] = options.timeout;
     }
     if (
       options.lastRunRead !== undefined ||
@@ -150,6 +152,7 @@ export async function lint(options: LintOptions): Promise<void> {
             .filter(Boolean)
         : undefined,
       onProgress: interactiveUI?.onProgress,
+      debug: options.debug,
     };
 
     // Run the engine

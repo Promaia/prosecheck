@@ -78,7 +78,7 @@ describe('extractFields', () => {
 
     const paths = fields.map((f) => f.path);
     expect(paths).toContain('baseBranch');
-    expect(paths).toContain('timeout');
+    expect(paths).toContain('addtlOverheadTimeout');
     expect(paths).toContain('warnAsError');
   });
 
@@ -114,8 +114,8 @@ describe('extractFields', () => {
     >;
     const fields = extractFields(ConfigSchema, defaults, defaults);
 
-    const timeout = fields.find((f) => f.path === 'timeout');
-    expect(timeout?.defaultValue).toBe(300);
+    const overhead = fields.find((f) => f.path === 'addtlOverheadTimeout');
+    expect(overhead?.defaultValue).toBe(60);
   });
 });
 
@@ -195,7 +195,7 @@ describe('config list', () => {
     await config({ projectRoot: tmpDir, action: 'list', args: [] });
 
     expect(stdoutData).toContain('baseBranch');
-    expect(stdoutData).toContain('timeout');
+    expect(stdoutData).toContain('addtlOverheadTimeout');
     expect(stdoutData).toContain('default');
   });
 
@@ -240,11 +240,11 @@ describe('config set', () => {
     await config({
       projectRoot: tmpDir,
       action: 'set',
-      args: ['timeout=600'],
+      args: ['addtlOverheadTimeout=120'],
     });
 
     const saved = await readConfig(tmpDir);
-    expect(saved['timeout']).toBe(600);
+    expect(saved['addtlOverheadTimeout']).toBe(120);
   });
 
   it('sets a nested value via dot path', async () => {
@@ -260,7 +260,10 @@ describe('config set', () => {
   });
 
   it('removes value when set to default', async () => {
-    await writeConfig(tmpDir, { baseBranch: 'develop', timeout: 600 });
+    await writeConfig(tmpDir, {
+      baseBranch: 'develop',
+      addtlOverheadTimeout: 120,
+    });
     await config({
       projectRoot: tmpDir,
       action: 'set',
@@ -270,8 +273,8 @@ describe('config set', () => {
     const saved = await readConfig(tmpDir);
     // baseBranch should be removed since 'main' is the default
     expect(saved['baseBranch']).toBeUndefined();
-    // timeout should remain
-    expect(saved['timeout']).toBe(600);
+    // addtlOverheadTimeout should remain
+    expect(saved['addtlOverheadTimeout']).toBe(120);
   });
 
   it('sets multiple values at once', async () => {
@@ -279,12 +282,12 @@ describe('config set', () => {
     await config({
       projectRoot: tmpDir,
       action: 'set',
-      args: ['baseBranch=develop', 'timeout=600'],
+      args: ['baseBranch=develop', 'addtlOverheadTimeout=120'],
     });
 
     const saved = await readConfig(tmpDir);
     expect(saved['baseBranch']).toBe('develop');
-    expect(saved['timeout']).toBe(600);
+    expect(saved['addtlOverheadTimeout']).toBe(120);
   });
 
   it('rejects unknown keys', async () => {

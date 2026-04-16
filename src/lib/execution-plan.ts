@@ -274,3 +274,32 @@ function insertNoSplit(
   // No batch has space
   batches.push([inv]);
 }
+
+/**
+ * Compute the dynamic run timeout from an execution plan.
+ *
+ * Batches run sequentially, invocations within a batch run in parallel.
+ * The total is the sum of the slowest invocation per batch.
+ */
+export function computeRunTimeout(
+  plan: ExecutionPlan,
+  invocationTimeout: number,
+  timeoutPerRule: number,
+): number {
+  let total = 0;
+  for (const batch of plan) {
+    let batchMax = 0;
+    for (const inv of batch) {
+      const rulesTimeout = inv.rules.reduce(
+        (sum, r) => sum + (r.timeout ?? timeoutPerRule),
+        0,
+      );
+      const invTotal = invocationTimeout + rulesTimeout;
+      if (invTotal > batchMax) {
+        batchMax = invTotal;
+      }
+    }
+    total += batchMax;
+  }
+  return total;
+}

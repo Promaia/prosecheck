@@ -102,6 +102,7 @@ export function parseAdr(content: string, source: string): Rule[] | undefined {
       createRule(title, meta.description, [], source, {
         group: meta.group,
         model: meta.model,
+        timeout: meta.timeout,
         frontmatter: meta.frontmatter,
       }),
     ];
@@ -143,6 +144,7 @@ export function parseAdr(content: string, source: string): Rule[] | undefined {
       createRule(currentName, meta.description, [], source, {
         group: meta.group,
         model: meta.model,
+        timeout: meta.timeout,
         frontmatter: meta.frontmatter,
       }),
     );

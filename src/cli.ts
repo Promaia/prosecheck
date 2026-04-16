@@ -29,7 +29,11 @@ program
   .option('--mode <mode>', 'Operating mode (claude-code, user-prompt)')
   .option('--format <format>', 'Output format (stylish, json, sarif)')
   .option('--ref <ref>', 'Git comparison ref override')
-  .option('--timeout <seconds>', 'Timeout in seconds', parseFloat)
+  .option(
+    '--timeout <seconds>',
+    'Hard total timeout in seconds (caps the dynamic run timeout)',
+    parseFloat,
+  )
   .option(
     '--warn-as-error <bool>',
     'Treat warnings as errors (0 or 1)',
@@ -86,6 +90,10 @@ program
     '--rules <rules>',
     'Comma-separated list of rule names or IDs to run (disables last-run-hash write)',
   )
+  .option(
+    '--debug',
+    'Stream per-agent stdout/stderr to .prosecheck/working/logs/ for debugging',
+  )
   .action(
     async (options: {
       env?: string;
@@ -106,6 +114,7 @@ program
       allowedTools?: string;
       output?: string;
       rules?: string;
+      debug?: boolean;
     }) => {
       await lint({
         projectRoot: process.cwd(),
@@ -127,6 +136,7 @@ program
         allowedTools: options.allowedTools,
         output: options.output,
         rules: options.rules,
+        debug: options.debug,
       });
     },
   );

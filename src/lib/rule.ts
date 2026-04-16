@@ -23,6 +23,7 @@ export function makeRuleId(name: string, source: string): string {
 export interface CreateRuleOptions {
   group?: string | undefined;
   model?: string | undefined;
+  timeout?: number | undefined;
   frontmatter?: Record<string, unknown> | undefined;
 }
 
@@ -44,6 +45,7 @@ export function createRule(
     source,
     ...(options?.group !== undefined ? { group: options.group } : {}),
     ...(options?.model !== undefined ? { model: options.model } : {}),
+    ...(options?.timeout !== undefined ? { timeout: options.timeout } : {}),
     ...(options?.frontmatter && Object.keys(options.frontmatter).length > 0
       ? { frontmatter: options.frontmatter }
       : {}),

@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
 import { watch } from 'node:fs';
 import path from 'node:path';
 import { execa } from 'execa';
@@ -30,8 +31,10 @@ export interface ClaudeCodeModeOptions {
   maxConcurrentAgents: number;
   /** Maximum agentic turns per Claude CLI invocation */
   maxTurns: number;
-  /** Per-invocation timeout in seconds */
+  /** Base per-invocation timeout in seconds */
   invocationTimeout: number;
+  /** Additional timeout in seconds per rule in a multi-rule invocation */
+  timeoutPerRule: number;
   /** Tools the Claude CLI agent is allowed to use (permission scoping) */
   allowedTools: string[];
   /** Tools available to the Claude CLI agent */
@@ -48,6 +51,8 @@ export interface ClaudeCodeModeOptions {
   rules: Rule[];
   /** Abort signal for timeout enforcement */
   signal?: AbortSignal | undefined;
+  /** Enable per-agent log streaming to .prosecheck/working/logs/ */
+  debug?: boolean | undefined;
 }
 
 export interface ClaudeCodeResult {
@@ -68,6 +73,8 @@ export interface SpawnClaudeOptions {
   systemPrompt?: string | undefined;
   appendSystemPrompt?: string | undefined;
   signal?: AbortSignal | undefined;
+  /** Path to log file for streaming debug output */
+  logFile?: string | undefined;
 }
 
 /**
@@ -136,6 +143,7 @@ async function executeInvocation(
     promptPaths,
     maxTurns,
     invocationTimeout,
+    timeoutPerRule,
     allowedTools,
     tools,
     additionalArgs,
@@ -143,8 +151,13 @@ async function executeInvocation(
     signal: runSignal,
   } = options;
 
-  // Per-invocation timeout, combined with the run-level signal
-  const invocationSignal = AbortSignal.timeout(invocationTimeout * 1000);
+  // Compute per-invocation timeout: base + sum of per-rule timeouts
+  const rulesTimeout = invocation.rules.reduce(
+    (sum, r) => sum + (r.timeout ?? timeoutPerRule),
+    0,
+  );
+  const totalTimeout = invocationTimeout + rulesTimeout;
+  const invocationSignal = AbortSignal.timeout(totalTimeout * 1000);
   const signal = runSignal
     ? AbortSignal.any([runSignal, invocationSignal])
     : invocationSignal;
@@ -174,6 +187,9 @@ async function executeInvocation(
       const ruleAllowedTools = [...allowedTools, `Write(${outputFile})`];
 
       const promptContent = await readFile(promptPath, 'utf-8');
+      const logFile = options.debug
+        ? path.join(projectRoot, '.prosecheck/working/logs', `${rule.id}.log`)
+        : undefined;
       const result = await spawnClaude(promptContent, projectRoot, {
         maxTurns,
         allowedTools: ruleAllowedTools,
@@ -183,6 +199,7 @@ async function executeInvocation(
         systemPrompt,
         appendSystemPrompt: SCHEMA_SYSTEM_PROMPT,
         signal,
+        logFile,
       });
 
       return [
@@ -220,6 +237,13 @@ async function executeInvocation(
         earlyExit.controller.signal,
       );
 
+      const teamsLogFile = options.debug
+        ? path.join(
+            projectRoot,
+            '.prosecheck/working/logs',
+            `${invocation.rules[0]?.id ?? 'batch'}--teams.log`,
+          )
+        : undefined;
       const result = await spawnClaude(orchestrationPrompt, projectRoot, {
         env,
         maxTurns,
@@ -230,6 +254,7 @@ async function executeInvocation(
         systemPrompt,
         appendSystemPrompt: SCHEMA_SYSTEM_PROMPT,
         signal: combinedSignal,
+        logFile: teamsLogFile,
       });
       earlyExit.stop();
 
@@ -264,6 +289,13 @@ async function executeInvocation(
         earlyExit.controller.signal,
       );
 
+      const singleLogFile = options.debug
+        ? path.join(
+            projectRoot,
+            '.prosecheck/working/logs',
+            `${invocation.rules[0]?.id ?? 'batch'}--single.log`,
+          )
+        : undefined;
       const result = await spawnClaude(orchestrationPrompt, projectRoot, {
         maxTurns,
         allowedTools: singleAllowedTools,
@@ -273,6 +305,7 @@ async function executeInvocation(
         systemPrompt,
         appendSystemPrompt: SCHEMA_SYSTEM_PROMPT,
         signal: combinedSignal,
+        logFile: singleLogFile,
       });
       earlyExit.stop();
 
@@ -322,11 +355,15 @@ export async function spawnClaude(
     '--no-session-persistence',
   ];
 
-  // Output format: stream-json when verbose for live streaming, json otherwise
-  args.push('--output-format', verbose ? 'stream-json' : 'json');
+  // Output format: stream-json when verbose or debug logging (need streamed output
+  // so data flows through the .on('data') handlers into log files), json otherwise
+  args.push(
+    '--output-format',
+    verbose || options.logFile ? 'stream-json' : 'json',
+  );
 
-  // Verbose flags for debugging
-  if (verbose) {
+  // Verbose flags for debugging (also required when stream-json is used for debug logging)
+  if (verbose || options.logFile) {
     args.push('--verbose');
   }
 
@@ -395,15 +432,81 @@ export async function spawnClaude(
     }
   }
 
-  // In verbose mode, inherit stdout/stderr so claude's output goes directly to
-  // the terminal — bypasses vitest's capture for true live streaming. We don't
-  // use claude's stdout/stderr programmatically (results come from output files),
-  // so inheriting is safe.
-  const stdio = verbose ? (['pipe', 'inherit', 'inherit'] as const) : undefined;
+  // When debug logging is active, don't inherit stdio — we need the streams
+  // to tee to the log file. In verbose-only mode, inherit stdout/stderr so
+  // claude's output goes directly to the terminal.
+  const useInherit = verbose && !options.logFile;
+  const stdio = useInherit
+    ? (['pipe', 'inherit', 'inherit'] as const)
+    : undefined;
 
   // Clear CLAUDECODE env var so child Claude CLI doesn't think it's a nested
   // session and refuse to start (Claude CLI sets CLAUDECODE=1 and checks for it).
   const env = { ...process.env, ...options.env, CLAUDECODE: '' };
+
+  // When logFile is set, stream stdout/stderr to the file as data arrives
+  if (options.logFile) {
+    const logStream = createWriteStream(options.logFile, { flags: 'w' });
+
+    const subprocess = execa('claude', args, {
+      cwd,
+      input: prompt,
+      env,
+      ...(options.signal ? { cancelSignal: options.signal } : {}),
+      maxBuffer: 10 * 1024 * 1024,
+    });
+
+    // Tee stdout to log file (and terminal if verbose)
+    subprocess.stdout.on('data', (chunk: Buffer) => {
+      logStream.write(chunk);
+      if (verbose) {
+        process.stderr.write(chunk);
+      }
+    });
+
+    // Tee stderr to log file (and terminal if verbose)
+    subprocess.stderr.on('data', (chunk: Buffer) => {
+      logStream.write(chunk);
+      if (verbose) {
+        process.stderr.write(chunk);
+      }
+    });
+
+    try {
+      const result = await subprocess;
+      logStream.end();
+
+      if (verbose) {
+        debug(`--- claude exited (code 0) ---`);
+      }
+
+      return {
+        exitCode: 0,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      };
+    } catch (error: unknown) {
+      logStream.end();
+      const e = error as {
+        exitCode?: number;
+        stdout?: string;
+        stderr?: string;
+      };
+      const exitCode = e.exitCode ?? 1;
+
+      if (verbose) {
+        debug(`--- claude exited (code ${String(exitCode)}) ---`);
+      }
+
+      return {
+        exitCode,
+        stdout: e.stdout ?? '',
+        stderr:
+          e.stderr ??
+          'Failed to spawn claude CLI process. Is the Claude CLI installed and available on your PATH?',
+      };
+    }
+  }
 
   try {
     const result = await execa('claude', args, {

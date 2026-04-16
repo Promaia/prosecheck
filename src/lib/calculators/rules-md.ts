@@ -119,6 +119,7 @@ export function parseRulesMd(content: string, source: string): Rule[] {
           createRule(currentName, meta.description, inclusions, source, {
             group: meta.group,
             model: meta.model,
+            timeout: meta.timeout,
             frontmatter: meta.frontmatter,
           }),
         );

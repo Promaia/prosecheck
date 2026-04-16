@@ -106,7 +106,14 @@ export const ClaudeCodeSchema = z
       .positive()
       .default(120)
       .describe(
-        'Per-invocation timeout in seconds. Timed-out rules are treated as dropped and retried if retryDropped is enabled.',
+        'Base per-invocation timeout in seconds. The actual timeout is invocationTimeout + (number of rules × timeoutPerRule). Timed-out rules are treated as dropped and retried if retryDropped is enabled.',
+      ),
+    timeoutPerRule: z
+      .number()
+      .nonnegative()
+      .default(60)
+      .describe(
+        'Additional timeout in seconds added per rule in a multi-rule invocation. Individual rules can override this via frontmatter `timeout` field.',
       ),
     additionalArgs: z
       .array(z.string())
@@ -156,7 +163,8 @@ export const EnvironmentOverrideSchema = z
         files: z.boolean().optional(),
       })
       .optional(),
-    timeout: z.number().positive().optional(),
+    addtlOverheadTimeout: z.number().nonnegative().optional(),
+    hardTotalTimeout: z.number().positive().nullable().optional(),
     warnAsError: z.boolean().optional(),
     retryDropped: z.boolean().optional(),
     retryDroppedMaxAttempts: z.number().int().nonnegative().optional(),
@@ -169,6 +177,7 @@ export const EnvironmentOverrideSchema = z
         maxTurns: z.number().int().positive().optional(),
         allowedTools: z.array(z.string()).optional(),
         invocationTimeout: z.number().positive().optional(),
+        timeoutPerRule: z.number().nonnegative().optional(),
         additionalArgs: z.array(z.string()).optional(),
         defaultModel: z.string().optional(),
         teamsOrchestratorModel: z.string().optional(),
@@ -204,11 +213,21 @@ export const ConfigSchema = z
       write: false,
       files: false,
     })),
-    timeout: z
+    addtlOverheadTimeout: z
+      .number()
+      .nonnegative()
+      .default(60)
+      .describe(
+        'Extra seconds added to the dynamically computed run timeout. The run timeout is the sum of all invocation timeouts (base + per-rule) plus this overhead.',
+      ),
+    hardTotalTimeout: z
       .number()
       .positive()
-      .default(300)
-      .describe('Per-run timeout in seconds'),
+      .nullable()
+      .default(null)
+      .describe(
+        'Hard cap on total run time in seconds. When set, the run timeout is the minimum of the dynamic timeout and this value. Null means no hard cap.',
+      ),
     warnAsError: z
       .boolean()
       .default(false)
@@ -230,6 +249,7 @@ export const ConfigSchema = z
       allowedTools: DEFAULT_ALLOWED_TOOLS,
       tools: DEFAULT_TOOLS,
       invocationTimeout: 120,
+      timeoutPerRule: 60,
       additionalArgs: [],
       defaultModel: 'sonnet',
       validModels: ['opus', 'sonnet', 'haiku'],

@@ -18,6 +18,7 @@ import { collectResults, computeOverallStatus } from './results.js';
 import { executePostRun } from './post-run.js';
 import { buildUserPrompt, watchForOutputs } from '../modes/user-prompt.js';
 import { runClaudeCode } from '../modes/claude-code.js';
+import { buildExecutionPlan, computeRunTimeout } from './execution-plan.js';
 import { formatStylish } from '../formatters/stylish.js';
 import { formatJson } from '../formatters/json.js';
 import { formatSarif } from '../formatters/sarif.js';
@@ -54,6 +55,9 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
   const workingDir = path.join(projectRoot, WORKING_DIR);
   await rm(workingDir, { recursive: true, force: true });
   await mkdir(path.join(workingDir, 'outputs'), { recursive: true });
+  if (context.debug) {
+    await mkdir(path.join(workingDir, 'logs'), { recursive: true });
+  }
 
   // 2. Discover rules via calculators
   let rules = await runCalculators(projectRoot, config);
@@ -196,7 +200,23 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     });
   }
 
-  const timeoutMs = config.timeout * 1000;
+  // Compute dynamic run timeout from execution plan
+  const plan = buildExecutionPlan({
+    rules: changeResult.triggeredRules,
+    claudeToRuleShape: config.claudeCode.claudeToRuleShape,
+    maxConcurrentAgents: config.claudeCode.maxConcurrentAgents,
+    teamsOrchestratorModel: config.claudeCode.teamsOrchestratorModel,
+  });
+  const dynamicTimeout =
+    computeRunTimeout(
+      plan,
+      config.claudeCode.invocationTimeout,
+      config.claudeCode.timeoutPerRule,
+    ) + config.addtlOverheadTimeout;
+  const timeoutMs =
+    (config.hardTotalTimeout !== null
+      ? Math.min(dynamicTimeout, config.hardTotalTimeout)
+      : dynamicTimeout) * 1000;
   const signal = AbortSignal.timeout(timeoutMs);
 
   try {
@@ -208,6 +228,7 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
       config,
       globalPrompt,
       signal,
+      context.debug,
     );
   } catch (error: unknown) {
     if (isTimeoutError(error)) {
@@ -236,6 +257,7 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
       onProgress,
       globalPrompt,
       signal,
+      debug: context.debug,
     });
   }
 
@@ -274,6 +296,7 @@ async function dispatchMode(
   config: Config,
   globalPrompt: string | undefined,
   signal?: AbortSignal,
+  debug?: boolean,
 ): Promise<void> {
   const expectedRuleIds = triggeredRules.map((r) => r.id);
 
@@ -303,6 +326,7 @@ async function dispatchMode(
         maxConcurrentAgents: config.claudeCode.maxConcurrentAgents,
         maxTurns: config.claudeCode.maxTurns,
         invocationTimeout: config.claudeCode.invocationTimeout,
+        timeoutPerRule: config.claudeCode.timeoutPerRule,
         allowedTools: config.claudeCode.allowedTools,
         tools: config.claudeCode.tools,
         additionalArgs: config.claudeCode.additionalArgs,
@@ -311,6 +335,7 @@ async function dispatchMode(
         systemPrompt: globalPrompt,
         rules: triggeredRules,
         signal,
+        debug,
       });
       break;
     }
@@ -353,6 +378,7 @@ interface RetryDroppedOptions {
   onProgress: OnProgress | undefined;
   globalPrompt: string | undefined;
   signal?: AbortSignal | undefined;
+  debug?: boolean | undefined;
 }
 
 /**
@@ -405,6 +431,7 @@ async function retryDroppedRules(options: RetryDroppedOptions): Promise<void> {
       config,
       globalPrompt,
       signal,
+      options.debug,
     );
 
     // Collect results for retried rules only
