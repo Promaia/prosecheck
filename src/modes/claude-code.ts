@@ -373,6 +373,10 @@ export async function spawnClaude(
     '--strict-mcp-config',
     // Don't persist conversation to disk
     '--no-session-persistence',
+    // Skip user/project/local settings so user-configured hooks don't fire
+    // inside prosecheck's child claude invocations.
+    '--setting-sources',
+    '',
   ];
 
   // Output format: stream-json when verbose or debug logging (need streamed output
