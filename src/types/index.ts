@@ -5,7 +5,7 @@ export type { Config, RuleResult };
 
 // --- Rule types ---
 
-export type RuleStatus = 'pass' | 'warn' | 'fail' | 'dropped';
+export type RuleStatus = 'pass' | 'warn' | 'fail' | 'dropped' | 'cached';
 
 export interface Rule {
   /** Stable, filesystem-safe identifier (e.g., "src-rules-md--no-console-log") */
@@ -47,7 +47,7 @@ export interface PromptVariables {
 
 // --- Progress tracking ---
 
-export type ProgressPhase = 'discovered' | 'running' | 'result';
+export type ProgressPhase = 'discovered' | 'running' | 'result' | 'cached';
 
 export interface ProgressEvent {
   /** Which phase triggered this event */

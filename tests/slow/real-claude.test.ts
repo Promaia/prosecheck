@@ -21,7 +21,7 @@ const SCHEMA_DEFAULTS = ConfigSchema.parse({});
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
     ...SCHEMA_DEFAULTS,
-    lastRun: { read: false, write: false, files: false },
+    lastRun: { read: false, write: false },
     ruleCalculators: [{ name: 'rules-md', enabled: true, options: {} }],
     ...overrides,
   };

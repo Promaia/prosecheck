@@ -6,14 +6,13 @@ import type { ChangeDetectionResult } from './change-detection.js';
 import { runCalculators } from './calculators/index.js';
 import {
   detectChanges,
-  readLastRunData,
+  listAllFiles,
   writeLastRunData,
-  collectInScopeFiles,
-  getCurrentHead,
 } from './change-detection.js';
 import { computeFilesHash } from './content-hash.js';
-import { buildIgnoreFilter } from './ignore.js';
-import { generatePrompts, loadGlobalPrompt } from './prompt.js';
+import { buildIgnoreFilter, buildInclusionFilter } from './ignore.js';
+import { computeRuleFingerprint } from './fingerprint.js';
+import { generatePrompts, loadGlobalPrompt, loadTemplate } from './prompt.js';
 import { collectResults, computeOverallStatus } from './results.js';
 import { executePostRun } from './post-run.js';
 import { buildUserPrompt, watchForOutputs } from '../modes/user-prompt.js';
@@ -46,10 +45,10 @@ export interface EngineResult {
  * 6. Collect results (with dropped detection)
  * 7. Format and report
  * 8. Execute post-run tasks
- * 9. Optionally persist last-run hash
+ * 9. Optionally persist per-rule cache entries for passing rules
  */
 export async function runEngine(context: RunContext): Promise<EngineResult> {
-  let { config } = context;
+  const { config } = context;
   const { projectRoot, mode, format } = context;
 
   // 1. Clean working directory
@@ -73,8 +72,6 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
         `[prosecheck] Warning: --rules filter matched no rules. Available rules: ${allRuleNames.join(', ')}`,
       );
     }
-    // Partial runs must never update last-run hash
-    config = { ...config, lastRun: { ...config.lastRun, write: false } };
   }
 
   // 2a. Resolve per-rule model — stamp defaultModel onto rules without an explicit model
@@ -96,6 +93,7 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
       results: [],
       dropped: [],
       errors: [],
+      cached: [],
       overallStatus: 'pass',
     };
     return {
@@ -105,14 +103,33 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     };
   }
 
-  // 2b. Hash-check mode — compare content hashes without launching agents
+  // Load prompt template + global prompt early — needed for fingerprinting
+  const promptTemplate = await loadTemplate(projectRoot);
+  const globalPrompt = await loadGlobalPrompt(projectRoot);
+
+  // 2b. Hash-check mode — compare per-rule cache entries without launching agents
   if (context.hashCheck) {
-    return runHashCheck(projectRoot, config, rules, format);
+    return runHashCheck(
+      projectRoot,
+      config,
+      rules,
+      promptTemplate,
+      globalPrompt,
+      format,
+      context.comparisonRef,
+    );
   }
 
-  // 2c. Hash-check-write mode — update stored hashes without running agents
+  // 2c. Hash-check-write mode — update stored per-rule cache without running agents
   if (context.hashCheckWrite) {
-    return runHashCheckWrite(projectRoot, config, rules, format);
+    return runHashCheckWrite(
+      projectRoot,
+      config,
+      rules,
+      promptTemplate,
+      globalPrompt,
+      format,
+    );
   }
 
   // 3. Change detection — find triggered rules
@@ -120,23 +137,38 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     projectRoot,
     config,
     rules,
+    promptTemplate,
+    globalPrompt,
   };
   if (context.comparisonRef) {
     detectOptions.comparisonRef = context.comparisonRef;
   }
   const changeResult = await detectChanges(detectOptions);
 
+  // Emit 'cached' progress events for rules skipped via cache
+  const onProgressEarly = context.onProgress;
+  if (onProgressEarly) {
+    for (const rule of changeResult.cachedRules) {
+      onProgressEarly({
+        phase: 'cached',
+        ruleId: rule.id,
+        ruleName: rule.name,
+      });
+    }
+  }
+
   if (changeResult.triggeredRules.length === 0) {
-    const emptyResults: CollectResultsOutput = {
+    const results: CollectResultsOutput = {
       results: [],
       dropped: [],
       errors: [],
+      cached: changeResult.cachedRules,
       overallStatus: 'pass',
     };
     return {
-      output: formatOutput(emptyResults, format),
+      output: formatOutput(results, format),
       overallStatus: 'pass',
-      results: emptyResults,
+      results,
     };
   }
 
@@ -185,9 +217,6 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
       onProgress({ phase: 'running', ruleId: rule.id, ruleName: rule.name });
     }
   }
-
-  // 4b. Load global system prompt for claude-code mode
-  const globalPrompt = await loadGlobalPrompt(projectRoot);
 
   // 5. Dispatch to operating mode (with live output watching if progress callback)
   let stopWatcher: (() => void) | undefined;
@@ -271,6 +300,9 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     });
   }
 
+  // Attach cached rules to the results bundle
+  collected.cached = changeResult.cachedRules;
+
   // Apply warnAsError: promote overall status
   let overallStatus = collected.overallStatus;
   if (config.warnAsError && overallStatus === 'warn') {
@@ -290,9 +322,13 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
     });
   }
 
-  // 9. Persist last-run hash if applicable (skipped when --rules filter is active)
-  if (changeResult.commitLastRunHash && !context.ruleFilter) {
-    await changeResult.commitLastRunHash();
+  // 9. Persist per-rule cache entries for passing rules
+  if (changeResult.writeRuleCacheEntries) {
+    const passingIds = new Set<string>();
+    for (const { ruleId, result } of collected.results) {
+      if (result.status === 'pass') passingIds.add(ruleId);
+    }
+    await changeResult.writeRuleCacheEntries(passingIds);
   }
 
   return { output, overallStatus, results: collected };
@@ -500,108 +536,77 @@ async function retryDroppedRules(options: RetryDroppedOptions): Promise<void> {
 }
 
 /**
- * Hash-check mode: compare in-scope file content hashes against stored
- * last-run data. Passes if nothing changed, fails if files differ.
- * No agents are launched and no API key is needed.
+ * Hash-check mode: pass iff every rule has a current per-rule cache entry
+ * (fingerprint matches and no in-scope files have changed). No agents are
+ * launched and no API key is needed.
  */
 async function runHashCheck(
   projectRoot: string,
   config: Config,
   rules: Rule[],
+  promptTemplate: string,
+  globalPrompt: string | undefined,
   format: string,
+  comparisonRef?: string,
 ): Promise<EngineResult> {
-  const globalFilter = await buildIgnoreFilter(
-    projectRoot,
-    config.globalIgnore,
-    config.additionalIgnore,
-  );
+  // Force lastRun.read on for the duration of the check — we need cache-aware
+  // detection regardless of the user's config.
+  const readConfig: Config = {
+    ...config,
+    lastRun: { ...config.lastRun, read: true, write: false },
+  };
 
-  // Collect all in-scope files
-  const inScopeFiles = await collectInScopeFiles(
+  const detectOptions: Parameters<typeof detectChanges>[0] = {
     projectRoot,
+    config: readConfig,
     rules,
-    globalFilter,
-  );
+    promptTemplate,
+    globalPrompt,
+  };
+  if (comparisonRef) detectOptions.comparisonRef = comparisonRef;
+  const changeResult = await detectChanges(detectOptions);
 
-  // Compute current content hashes
-  const current = await computeFilesHash(projectRoot, inScopeFiles);
-
-  // Read stored last-run data
-  const lastRun = await readLastRunData(projectRoot);
-
-  const failResults: CollectResultsOutput = {
+  const emptyResults = (
+    status: 'pass' | 'fail',
+    cached: Rule[] = [],
+  ): CollectResultsOutput => ({
     results: [],
     dropped: [],
     errors: [],
-    overallStatus: 'fail',
-  };
+    cached,
+    overallStatus: status,
+  });
 
-  if (!lastRun) {
+  if (changeResult.triggeredRules.length === 0) {
     return hashCheckResult(
-      'Hash check failed: no last-run data found. Run prosecheck lint --last-run-write 1 first.',
-      'fail',
-      failResults,
-      format,
-    );
-  }
-
-  if (!lastRun.filesHash) {
-    return hashCheckResult(
-      'Hash check failed: last-run data has no filesHash. Re-run prosecheck lint --last-run-write 1 to generate content hashes.',
-      'fail',
-      failResults,
-      format,
-    );
-  }
-
-  if (current.filesHash === lastRun.filesHash) {
-    const passResults: CollectResultsOutput = {
-      results: [],
-      dropped: [],
-      errors: [],
-      overallStatus: 'pass',
-    };
-    return hashCheckResult(
-      `Hash check passed: ${String(inScopeFiles.length)} in-scope files unchanged since last run.`,
+      `Hash check passed: all ${String(rules.length)} rules have current cache entries.`,
       'pass',
-      passResults,
+      emptyResults('pass', changeResult.cachedRules),
       format,
     );
   }
 
-  // Digest mismatch — report which files changed if per-file detail is available
-  const changedFiles: string[] = [];
-  if (lastRun.files) {
-    for (const [filePath, hash] of Object.entries(current.files)) {
-      if (lastRun.files[filePath] !== hash) {
-        changedFiles.push(filePath);
-      }
-    }
-    for (const filePath of Object.keys(lastRun.files)) {
-      if (current.files[filePath] === undefined) {
-        changedFiles.push(filePath);
-      }
-    }
-  }
-
-  let msg = 'Hash check failed: in-scope files changed since last run.';
-  if (changedFiles.length > 0) {
-    msg += ' Changed files:\n' + changedFiles.map((f) => `  - ${f}`).join('\n');
-  }
-  msg += '\nRun prosecheck lint --last-run-write 1 to update.';
-
-  return hashCheckResult(msg, 'fail', failResults, format);
+  const triggeredNames = changeResult.triggeredRules
+    .map((r) => `  - ${r.name} (${r.id})`)
+    .join('\n');
+  const msg =
+    `Hash check failed: ${String(changeResult.triggeredRules.length)} of ${String(rules.length)} rule(s) have stale or missing cache entries.\n` +
+    `${triggeredNames}\n` +
+    `Run prosecheck lint --hash-check-write to update, or run a full lint.`;
+  return hashCheckResult(msg, 'fail', emptyResults('fail'), format);
 }
 
 /**
- * Hash-check-write mode: compute current content hashes and write them
- * to the last-run file without running any agents. Lets users manually
- * mark the current state as "checked" when they know changes are irrelevant.
+ * Hash-check-write mode: compute fingerprints and per-rule file hashes for
+ * every rule and persist them as pass entries. Marks the current state as
+ * "checked" without running any agents.
  */
 async function runHashCheckWrite(
   projectRoot: string,
   config: Config,
   rules: Rule[],
+  promptTemplate: string,
+  globalPrompt: string | undefined,
   format: string,
 ): Promise<EngineResult> {
   const globalFilter = await buildIgnoreFilter(
@@ -610,29 +615,53 @@ async function runHashCheckWrite(
     config.additionalIgnore,
   );
 
-  const inScopeFiles = await collectInScopeFiles(
-    projectRoot,
-    rules,
-    globalFilter,
-  );
+  const allFiles = await listAllFiles(projectRoot);
+  const unIgnored = allFiles.filter((f) => !globalFilter.ignores(f));
 
-  const current = await computeFilesHash(projectRoot, inScopeFiles);
-  const headHash = await getCurrentHead(projectRoot);
+  const inScope = new Set<string>();
+  const filesByRule = new Map<string, string[]>();
+  for (const rule of rules) {
+    const inclusion = buildInclusionFilter(rule.inclusions);
+    const scoped = unIgnored.filter(inclusion).sort();
+    filesByRule.set(rule.id, scoped);
+    for (const f of scoped) inScope.add(f);
+  }
 
-  await writeLastRunData(projectRoot, {
-    commitHash: headHash,
-    filesHash: current.filesHash,
-    files: config.lastRun.files ? current.files : undefined,
-  });
+  const { files: currentHashes } = await computeFilesHash(projectRoot, [
+    ...inScope,
+  ]);
+
+  const cacheRules: Record<
+    string,
+    { files: Record<string, string>; fingerprint: string; status: 'pass' }
+  > = {};
+  for (const rule of rules) {
+    const scoped: Record<string, string> = {};
+    for (const f of filesByRule.get(rule.id) ?? []) {
+      const h = currentHashes[f];
+      if (h !== undefined) scoped[f] = h;
+    }
+    cacheRules[rule.id] = {
+      files: scoped,
+      fingerprint: computeRuleFingerprint(rule, {
+        promptTemplate,
+        globalPrompt,
+      }),
+      status: 'pass',
+    };
+  }
+
+  await writeLastRunData(projectRoot, { rules: cacheRules });
 
   const passResults: CollectResultsOutput = {
     results: [],
     dropped: [],
     errors: [],
+    cached: [],
     overallStatus: 'pass',
   };
 
-  const msg = `Hash check write: updated last-run hashes for ${String(inScopeFiles.length)} in-scope files.`;
+  const msg = `Hash check write: updated cache entries for ${String(rules.length)} rule(s) (${String(inScope.size)} in-scope files).`;
   return hashCheckResult(msg, 'pass', passResults, format);
 }
 

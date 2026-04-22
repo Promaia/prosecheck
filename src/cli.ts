@@ -51,12 +51,7 @@ program
   )
   .option(
     '--last-run-write <bool>',
-    'Write current HEAD as last-run hash (0 or 1)',
-    parseBool,
-  )
-  .option(
-    '--last-run-files <bool>',
-    'Include per-file content hashes in last-run file (0 or 1)',
+    'Write per-rule cache entries after a run (0 or 1)',
     parseBool,
   )
   .option(
@@ -105,7 +100,6 @@ program
       retryDropped?: boolean;
       lastRunRead?: boolean;
       lastRunWrite?: boolean;
-      lastRunFiles?: boolean;
       hashCheck?: boolean;
       hashCheckWrite?: boolean;
       claudeToRuleShape?: string;
@@ -127,7 +121,6 @@ program
         retryDropped: options.retryDropped,
         lastRunRead: options.lastRunRead,
         lastRunWrite: options.lastRunWrite,
-        lastRunFiles: options.lastRunFiles,
         hashCheck: options.hashCheck,
         hashCheckWrite: options.hashCheckWrite,
         claudeToRuleShape: options.claudeToRuleShape,

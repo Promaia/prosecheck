@@ -4,7 +4,15 @@ export interface JsonOutput {
   overallStatus: string;
   results: JsonResultEntry[];
   dropped: JsonDroppedEntry[];
+  cached: JsonCachedEntry[];
   errors: JsonErrorEntry[];
+}
+
+export interface JsonCachedEntry {
+  ruleId: string;
+  ruleName: string;
+  source: string;
+  status: 'cached';
 }
 
 export interface JsonResultEntry {
@@ -76,6 +84,12 @@ export function formatJson(output: CollectResultsOutput): string {
         ...(timing?.startedAt !== undefined ? { started: true } : {}),
       };
     }),
+    cached: (output.cached ?? []).map((rule) => ({
+      ruleId: rule.id,
+      ruleName: rule.name,
+      source: rule.source,
+      status: 'cached' as const,
+    })),
     errors: output.errors.map((e) => ({
       ruleId: e.ruleId,
       ruleName: e.ruleName,

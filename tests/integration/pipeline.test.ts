@@ -121,7 +121,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     baseBranch: 'main',
     globalIgnore: ['node_modules/', 'dist/', '.prosecheck/'],
     additionalIgnore: [],
-    lastRun: { read: false, write: false, files: false },
+    lastRun: { read: false, write: false },
     addtlOverheadTimeout: 60,
     hardTotalTimeout: null,
     warnAsError: false,
@@ -613,6 +613,91 @@ describe('Integration: per-rule model selection', () => {
   }, 30_000);
 });
 
+describe('Integration: per-rule cache with --rules filter', () => {
+  it('partial --rules run caches only targeted rule; follow-up full run skips it and runs the others', async () => {
+    const repo = await createTestRepo();
+    repos.push(repo);
+
+    await setupFixtureProject(repo.dir);
+    await gitCommit(repo.dir, 'Add rules and config');
+
+    await execaFn('git', ['checkout', '-b', 'feature'], { cwd: repo.dir });
+    await mkdir(path.join(repo.dir, 'src'), { recursive: true });
+    await writeFile(
+      path.join(repo.dir, 'src/foo.ts'),
+      'export const x = 1;\n',
+      'utf-8',
+    );
+    await gitCommit(repo.dir, 'Add source file');
+
+    shared.fakeClaudeEnv = { FAKE_CLAUDE_STATUS: 'pass' };
+
+    // Run 1: partial run for only "No console.log"
+    const partialCtx = makeContext(repo.dir, {
+      config: makeConfig({
+        lastRun: { read: true, write: true },
+      }),
+      ruleFilter: ['No console.log'],
+    });
+    const partialResult = await runEngine(partialCtx);
+
+    expect(partialResult.overallStatus).toBe('pass');
+    expect(shared.claudeCallCount).toBe(1);
+    expect(partialResult.results.results).toHaveLength(1);
+    expect(partialResult.results.results[0]?.ruleId).toBe(
+      'rules-md--no-console-log',
+    );
+
+    // Cache should hold only the targeted rule's entry
+    const lastRunPath = path.join(repo.dir, '.prosecheck/last-user-run');
+    const cache1 = JSON.parse(
+      (await readFile(lastRunPath, 'utf-8')).trim(),
+    ) as { rules: Record<string, unknown> };
+    expect(Object.keys(cache1.rules)).toEqual(['rules-md--no-console-log']);
+
+    // Run 2: full run on unchanged files — only the un-cached rule should run
+    const callsBefore = shared.claudeCallCount;
+    const fullCtx = makeContext(repo.dir, {
+      config: makeConfig({
+        lastRun: { read: true, write: true },
+      }),
+    });
+    const fullResult = await runEngine(fullCtx);
+
+    expect(fullResult.overallStatus).toBe('pass');
+    expect(shared.claudeCallCount).toBe(callsBefore + 1);
+
+    const ranIds = fullResult.results.results.map((r) => r.ruleId);
+    expect(ranIds).toEqual(['rules-md--keep-functions-short']);
+
+    const cachedIds = (fullResult.results.cached ?? []).map((r) => r.id);
+    expect(cachedIds).toEqual(['rules-md--no-console-log']);
+
+    // Both rules should now be cached
+    const cache2 = JSON.parse(
+      (await readFile(lastRunPath, 'utf-8')).trim(),
+    ) as { rules: Record<string, unknown> };
+    expect(Object.keys(cache2.rules).sort()).toEqual([
+      'rules-md--keep-functions-short',
+      'rules-md--no-console-log',
+    ]);
+
+    // Run 3: another full run on unchanged files — nothing should run
+    const callsBeforeRun3 = shared.claudeCallCount;
+    const idempotentResult = await runEngine(
+      makeContext(repo.dir, {
+        config: makeConfig({
+          lastRun: { read: true, write: true },
+        }),
+      }),
+    );
+    expect(idempotentResult.overallStatus).toBe('pass');
+    expect(shared.claudeCallCount).toBe(callsBeforeRun3);
+    expect(idempotentResult.results.results).toHaveLength(0);
+    expect(idempotentResult.results.cached?.length).toBe(2);
+  }, 30_000);
+});
+
 describe('Integration: hash-check mode', () => {
   it('passes when files unchanged, fails after modification', async () => {
     const repo = await createTestRepo();
@@ -636,7 +721,7 @@ describe('Integration: hash-check mode', () => {
 
     const writeContext = makeContext(repo.dir, {
       config: makeConfig({
-        lastRun: { read: false, write: true, files: false },
+        lastRun: { read: false, write: true },
       }),
     });
     const writeResult = await runEngine(writeContext);
@@ -649,7 +734,7 @@ describe('Integration: hash-check mode', () => {
       string,
       unknown
     >;
-    expect(lastRunData['filesHash']).toBeDefined();
+    expect(lastRunData['rules']).toBeDefined();
 
     // Run 2: hash-check with no changes → should pass
     const passContext = makeContext(repo.dir, {

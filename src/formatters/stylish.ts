@@ -48,6 +48,16 @@ export function formatStylish(output: CollectResultsOutput): string {
     lines.push('');
   }
 
+  for (const rule of output.cached ?? []) {
+    const statusLabel = formatStatus('cached');
+    lines.push(
+      `${statusLabel} ${pc.bold(rule.name)} ${pc.dim(`(${rule.id})`)}`,
+    );
+    lines.push(`  ${pc.dim('source:')} ${rule.source}`);
+    lines.push(`  ${pc.dim('skipped (cache current)')}`);
+    lines.push('');
+  }
+
   for (const error of output.errors) {
     const statusLabel = formatStatus('error');
     lines.push(
@@ -73,6 +83,8 @@ function formatStatus(status: string): string {
       return pc.red('FAIL');
     case 'dropped':
       return pc.magenta('DROP');
+    case 'cached':
+      return pc.cyan('CACHED');
     case 'error':
       return pc.red('ERR ');
     default:
@@ -103,8 +115,12 @@ function formatDroppedDetail(
 }
 
 function buildSummary(output: CollectResultsOutput): string {
+  const cached = output.cached ?? [];
   const total =
-    output.results.length + output.dropped.length + output.errors.length;
+    output.results.length +
+    output.dropped.length +
+    output.errors.length +
+    cached.length;
   const passed = output.results.filter(
     (r) => r.result.status === 'pass',
   ).length;
@@ -116,6 +132,7 @@ function buildSummary(output: CollectResultsOutput): string {
   ).length;
   const droppedCount = output.dropped.length;
   const errorCount = output.errors.length;
+  const cachedCount = cached.length;
 
   const parts: string[] = [];
   if (passed > 0) parts.push(pc.green(`${String(passed)} passed`));
@@ -123,6 +140,7 @@ function buildSummary(output: CollectResultsOutput): string {
   if (failed > 0) parts.push(pc.red(`${String(failed)} failed`));
   if (droppedCount > 0)
     parts.push(pc.magenta(`${String(droppedCount)} dropped`));
+  if (cachedCount > 0) parts.push(pc.cyan(`${String(cachedCount)} cached`));
   if (errorCount > 0) parts.push(pc.red(`${String(errorCount)} errors`));
 
   return `${pc.bold(String(total) + ' rules')} | ${parts.join(' | ')}`;

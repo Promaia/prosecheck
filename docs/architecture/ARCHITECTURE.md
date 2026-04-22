@@ -49,7 +49,7 @@ Programmatic entry point for use as a library dependency. Exports: core types (`
 
 ### `src/commands/lint.ts` — Lint Command [IMPLEMENTED]
 
-Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, lastRunFiles, timeout, claudeToRuleShape, maxConcurrentAgents, maxTurns, allowedTools, output, hashCheck, hashCheckWrite, rules), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). When stdout is a TTY and format is `stylish`, lazy-imports the Ink UI (`src/ui/render.ts`) for interactive progress display instead of plain text output. Supports `--output <file>` to write results to a file (in addition to stdout) for environments where stdout capture is unreliable. `--hash-check` runs in lightweight mode (no agents, no API key) comparing content hashes only. `--hash-check-write` updates stored hashes without running agents. Key function: `lint(options: LintOptions)`.
+Parses lint-specific CLI flags (env, mode, format, ref, warnAsError, retryDropped, lastRunRead/Write, timeout, claudeToRuleShape, maxConcurrentAgents, maxTurns, allowedTools, output, hashCheck, hashCheckWrite, rules, debug), builds CLI overrides, loads config via `loadConfig()`, constructs `RunContext`, invokes `runEngine()`, writes output to stdout, and sets `process.exitCode` (0 for pass/warn, 1 for fail/dropped, 2 for config/unexpected errors). When stdout is a TTY and format is `stylish`, lazy-imports the Ink UI (`src/ui/render.ts`) for interactive progress display instead of plain text output. Supports `--output <file>` to write results to a file (in addition to stdout) for environments where stdout capture is unreliable. `--hash-check` runs in lightweight mode (no agents, no API key) comparing content hashes only. `--hash-check-write` updates stored hashes without running agents. `--debug` streams per-agent stdout/stderr to `.prosecheck/working/logs/<rule-id>.log` for troubleshooting dropped or misbehaving agents. Key function: `lint(options: LintOptions)`.
 
 ### `src/commands/init.ts` — Init Command [IMPLEMENTED]
 
@@ -104,7 +104,7 @@ Central coordinator that drives the lint pipeline:
 
 1. Cleanup `.prosecheck/working/`
 2. Run rule calculators → collect all rules (early return if none)
-2-filter. If `--rules` is set, filter to matching rules by name (case-insensitive) or ID, warn if nothing matches, and force `lastRun.write = false` (partial runs never update the stored hash)
+2-filter. If `--rules` is set, filter to matching rules by name (case-insensitive) or ID, warning if nothing matches. Partial runs still write cache entries — only the targeted rules' entries are updated, other rules' entries are preserved
 2a. Resolve per-rule models — validate each rule's `model` against `validModels` (warning on unknown values), then stamp `defaultModel` onto rules without an explicit model
 2b. If `--hash-check` is set, run hash-check mode (compare content hashes, pass/fail without agents) and return early
 2c. If `--hash-check-write` is set, compute and write current hashes without running agents and return early
@@ -112,39 +112,43 @@ Central coordinator that drives the lint pipeline:
 4. Fire `discovered` and `running` progress events (if `onProgress` callback set)
 5. Generate per-rule prompts
 6. Start output file watcher (if `onProgress` set) — lazy-imports `output-watcher.ts`
+6a. Start `TimingTracker` to record per-rule start/completion times
 7. Dispatch to operating mode (`claude-code` or `user-prompt`)
-8. Stop output watcher
-9. Collect results (with dropped detection)
+8. Stop output watcher and timing tracker
+9. Collect results (with dropped detection), attaching timing data
 10. Retry dropped rules if `retryDropped` enabled — re-generate prompts, re-dispatch, re-collect, up to `retryDroppedMaxAttempts` rounds. Stops early when all dropped rules resolve.
 11. Apply `warnAsError` promotion
 12. Format output (stylish/json/sarif)
 13. Execute post-run tasks
-14. Persist last-run hash if applicable
+14. Persist per-rule cache entries for passing triggered rules (if `lastRun.write` enabled)
 
 Key function: `runEngine(context: RunContext): Promise<EngineResult>`. Returns formatted output string, overall status, and raw results. Accepts optional `onProgress` callback on `RunContext` for real-time progress tracking.
 
-### `change-detection.ts` — Git Diff & File Filtering [IMPLEMENTED]
+### `change-detection.ts` — Per-Rule Cache & Rule Triggering [IMPLEMENTED]
 
-Detects changed files and determines which rules to trigger. Uses a tiered detection strategy when `lastRun.read` is enabled:
+Determines which rules trigger this run and which are cached. Implements the per-rule cache model from ADR-014.
 
-1. **Files-based** — If stored per-file content hashes exist, diff against current hashes to find exactly which files changed (added, modified, removed).
-2. **Digest-only** — If only a `filesHash` digest exists and matches current, skip all rules (nothing changed). On mismatch, fall through.
-3. **Git-based** — Use stored `commitHash` as `git diff` ref.
-4. **Merge-base** — Default fallback: `git merge-base HEAD <baseBranch>` (with fallback to branch name for shallow clones).
+**When `lastRun.read` is enabled (per-rule cache path):** For each rule, compute the rule's fingerprint (via `fingerprint.ts`) and the SHA-256 content hashes of every file in its scope. Compare both to the stored `CachedRuleEntry` in `.prosecheck/last-user-run`. A rule is cached (skipped) only if its fingerprint matches AND every in-scope file hash matches. Otherwise it triggers. Changed-files reported to the agent are the per-rule file diff (or the full scoped file list when the fingerprint changed).
 
-Git diff includes both committed/staged/unstaged changes (`git diff --name-only`) and untracked files (`git ls-files --others --exclude-standard`). Changed files are filtered through global ignore patterns, then matched to rule scopes.
+**When `lastRun.read` is disabled (legacy narrowing path):** `git diff --name-only <comparisonRef>` plus untracked files; rules trigger if any in-scope file is in that set.
 
-Returns `ChangeDetectionResult` with: `comparisonRef` (for agents), `triggeredRules`, `changedFiles`, `changedFilesByRule` map, and optional `commitLastRunHash` callback.
+The comparison ref comes from the CLI `--ref` flag or falls back to `git merge-base HEAD <baseBranch>` (branch name if merge-base fails on shallow clones).
 
-Default last-run behavior: `read`, `write`, and `files` are all off. Users enable incremental tracking via environment overrides or CLI flags (e.g., `--last-run-write 1` for local development, `--last-run-read 1` in CI, `--last-run-files 1` for per-file hash detail).
+Returns `ChangeDetectionResult` with: `comparisonRef`, `triggeredRules`, `cachedRules`, `changedFiles`, `changedFilesByRule` map, and optional `writeRuleCacheEntries(passingRuleIds)` callback (present when `lastRun.write` is enabled). The writer preserves entries for un-triggered rules, writes entries for triggered rules that passed, and drops entries for triggered rules that did not pass. Only `status: 'pass'` entries are ever stored.
+
+Default last-run behavior: `read` and `write` are both off. Users opt in via environment overrides or CLI flags (e.g., `--last-run-write 1` for local development, `--last-run-read 1` in CI).
+
+### `fingerprint.ts` — Rule Fingerprinting [IMPLEMENTED]
+
+Computes a stable SHA-256 fingerprint covering every non-file-content input that could change a rule's verdict: the rule's description text, inclusions, model, frontmatter bag, the prompt template, and the global system prompt. A fingerprint mismatch invalidates any cached entry for the rule, forcing re-evaluation on the next run. Key function: `computeRuleFingerprint(rule, { promptTemplate, globalPrompt })`.
 
 ### `content-hash.ts` — Content Hashing [IMPLEMENTED]
 
-Computes SHA-256 content hashes for files with cross-platform consistency. Normalizes `\r\n` to `\n` before hashing. `computeFilesHash()` produces both a per-file hash map and a single digest (hash of sorted `path:hash` pairs). Used by change detection for files-based diffing and by `--hash-check` mode.
+Computes SHA-256 content hashes for files with cross-platform consistency. Normalizes `\r\n` to `\n` before hashing. `computeFilesHash()` produces a per-file hash map and a single digest (hash of sorted `path:hash` pairs). Used by the per-rule cache in `change-detection.ts` and by `--hash-check` mode.
 
-**Hash-check mode** (`--hash-check`): Lightweight lint mode that compares in-scope file content hashes against stored last-run data without launching agents or requiring an API key. Passes if nothing changed, fails with a list of changed files if content differs.
+**Hash-check mode** (`--hash-check`): Lightweight lint mode that checks the per-rule cache without launching agents or requiring an API key. A rule passes if its cache entry is current (fingerprint matches and all in-scope file hashes match). Any rule whose cache entry is stale or missing fails with the list of changed files. Exits without mutating cache state.
 
-**Hash-check-write mode** (`--hash-check-write`): Computes current content hashes and writes them to the last-run file without running agents. Lets users manually mark the current state as checked when they know changes are irrelevant.
+**Hash-check-write mode** (`--hash-check-write`): Recomputes current file hashes and fingerprints and writes cache entries for every rule without running agents. Lets users manually mark the current state as checked when they know changes are irrelevant.
 
 ### `ignore.ts` — Pattern Matching [IMPLEMENTED]
 
@@ -191,6 +195,10 @@ Generates the orchestration prompt used by both user-prompt and claude-code sing
 - **Sequential mode** (`agentTeams: false`): Instructs the agent to process all rules itself with detailed instructions including output paths and step-by-step guidance.
 
 Both variants list rules by human-readable name with relative prompt file paths. Key function: `buildOrchestrationPrompt()`.
+
+### `timing.ts` — Per-Rule Timing Tracker [IMPLEMENTED]
+
+Tracks per-rule elapsed time by watching `.prosecheck/working/timing/` for `<rule-id>.started` markers and `.prosecheck/working/outputs/<rule-id>.json` for completion. `TimingTracker` exposes `markStart(ruleId)` (called programmatically for one-to-one invocations) and `getTiming(ruleId)` returning `{ startedAt, completedAt, durationMs }`. The engine starts the tracker before mode dispatch and stops it after collection; resulting timings are attached to `CollectResultsOutput.timing` and consumed by the stylish and json formatters and by drop-diagnostics to distinguish "never started" from "started but timed out".
 
 ### `post-run.ts` — Post-Run Tasks [IMPLEMENTED]
 
@@ -267,11 +275,11 @@ Ink + React components for interactive terminal display. Lazy-loaded via dynamic
 
 ### `components/LintProgress.tsx` — Live Progress Table [IMPLEMENTED]
 
-Renders a live table showing each rule's name, run status (`waiting` / `running` / `done`), and result as agents complete. Each row displays a colored status label (WAIT/`..`/PASS/WARN/FAIL/DROP) with the rule name and, when done, the result headline or pass comment. Accepts a `RuleProgressEntry[]` prop. Supports rerendering with updated status for real-time progress tracking.
+Renders a live table showing each rule's name, run status (`waiting` / `running` / `cached` / `done`), and result as agents complete. Each row displays a colored status label (WAIT/`..`/CACHED/PASS/WARN/FAIL/DROP) with the rule name and, when done, the result headline or pass comment. Cached rules render immediately with the CACHED label and a "(cache hit)" note, indicating the rule was skipped because its per-rule cache entry is current. Accepts a `RuleProgressEntry[]` prop. Supports rerendering with updated status for real-time progress tracking.
 
 ### `components/Summary.tsx` — Results Summary [IMPLEMENTED]
 
-Final results summary component. Displays total rule count, per-status counts (passed/warned/failed/dropped/errors), and overall status (PASS/WARN/FAIL/DROPPED) with color coding. Accepts a `CollectResultsOutput` prop from the results collector.
+Final results summary component. Displays total rule count, per-status counts (passed/warned/failed/dropped/cached/errors), and overall status (PASS/WARN/FAIL/DROPPED) with color coding. Cached rules are counted separately so users can see how many rules were skipped via per-rule cache. Accepts a `CollectResultsOutput` prop from the results collector.
 
 ### `LintApp.tsx` — Top-Level App [IMPLEMENTED]
 
@@ -297,6 +305,7 @@ Agents write structured JSON to `.prosecheck/working/outputs/<rule-id>.json`:
 | `warn` | Agent | `status`, `rule`, `source`, `headline`, `comments[]` |
 | `fail` | Agent | `status`, `rule`, `source`, `headline`, `comments[]` |
 | `dropped` | Tool | Assigned when no output file received |
+| `cached` | Tool | Assigned when the rule's per-rule cache entry is current (fingerprint + all in-scope file hashes match); reported alongside results, no agent was launched |
 
 Each `comments[]` entry has: `message` (required), `file` (optional), `line` (optional).
 
@@ -337,10 +346,12 @@ ADR files ───────→ adr calculator ───────┘      
 ├── config.local.json        # Personal overrides (gitignored)
 ├── prompt.md                # (optional) Global system prompt
 ├── prompt-template.md       # (optional) Custom prompt template
-├── last-user-run            # JSON: commitHash, filesHash, per-file hashes (auto-managed)
+├── last-user-run            # JSON: per-rule cache entries { rules: { <id>: { files, fingerprint, status: 'pass' } } }
 └── working/                 # Ephemeral workspace (gitignored)
     ├── prompts/             # Generated per-rule prompts (<rule-id>.md)
-    └── outputs/             # Agent result files (<rule-id>.json)
+    ├── outputs/             # Agent result files (<rule-id>.json)
+    ├── timing/              # Per-rule start markers (<rule-id>.started)
+    └── logs/                # Per-agent stdout/stderr (only when --debug is set)
 ```
 
 `.prosecheck/working` is wiped at the start of each run. Prompts and outputs are retained after the run for debugging.
@@ -364,6 +375,7 @@ See `docs/adr/` for full records:
 11. **acceptEdits permission mode** — uses `--permission-mode acceptEdits` for Claude CLI because scoped `Write()` permissions are buggy upstream
 12. **Flexible rule dispatch** — configurable `claudeToRuleShape` (one-to-one, one-to-many-teams, one-to-many-single) with rule groups and concurrency limits; supercedes ADR-002
 13. **Content-based file hashing** — SHA-256 content hashes replace git commit hashes for change detection, fixing circular dependency in CI; enables lightweight `--hash-check` mode
+14. **Per-rule last-run cache** — `.prosecheck/last-user-run` stores per-rule entries (file hashes + fingerprint + pass status). A rule is cached only when its fingerprint and every in-scope file hash match; otherwise it re-runs. Fingerprint includes rule text, inclusions, model, frontmatter, prompt template, and global prompt.
 
 ---
 

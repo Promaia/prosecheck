@@ -8,22 +8,18 @@ export const LastRunSchema = z
       .boolean()
       .default(false)
       .describe(
-        'Read the last-run hash to skip already-checked commits. Off by default; enable via environment overrides or CLI flags.',
+        'Consult per-rule cache entries in .prosecheck/last-user-run to skip rules whose in-scope files and fingerprint are unchanged since their last passing evaluation. Off by default; enable via environment overrides or CLI flags.',
       ),
     write: z
       .boolean()
       .default(false)
       .describe(
-        'Write the current hash after a run for future incremental checks. Off by default; enable via environment overrides or CLI flags.',
-      ),
-    files: z
-      .boolean()
-      .default(false)
-      .describe(
-        'Include per-file content hashes in the last-run file. Enables precise diff reporting in hash-check mode and files-based change detection.',
+        'Persist per-rule cache entries after a run so future runs can skip unchanged rules. Off by default; enable via environment overrides or CLI flags.',
       ),
   })
-  .describe('Incremental run tracking via .prosecheck/last-user-run');
+  .describe(
+    'Per-rule incremental cache via .prosecheck/last-user-run (see ADR-014)',
+  );
 
 const DEFAULT_ALLOWED_TOOLS = [
   'Read',
@@ -160,7 +156,6 @@ export const EnvironmentOverrideSchema = z
       .object({
         read: z.boolean().optional(),
         write: z.boolean().optional(),
-        files: z.boolean().optional(),
       })
       .optional(),
     addtlOverheadTimeout: z.number().nonnegative().optional(),
@@ -211,7 +206,6 @@ export const ConfigSchema = z
     lastRun: LastRunSchema.default(() => ({
       read: false,
       write: false,
-      files: false,
     })),
     addtlOverheadTimeout: z
       .number()

@@ -31,6 +31,8 @@ export interface CollectResultsOutput {
   dropped: DroppedRule[];
   /** Rules that produced malformed output */
   errors: ResultError[];
+  /** Rules skipped because their cache entry was current */
+  cached?: Rule[] | undefined;
   /** Overall worst status across all results and dropped rules */
   overallStatus: RuleStatus;
   /** Per-rule timing data (keyed by rule ID) */

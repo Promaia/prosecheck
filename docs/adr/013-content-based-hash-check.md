@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. Superseded in part by ADR-014 — the per-file content-hashing primitive defined here remains in use, but the global-snapshot model (one `commitHash` + one `filesHash` digest + one flat `files` map for the whole repo) is replaced by the per-rule cache model.
 
 ## Context
 

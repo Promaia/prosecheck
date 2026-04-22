@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import type { RuleResult } from '../../lib/config-schema.js';
 
 /** Per-rule run status as it progresses through the pipeline. */
-export type RuleRunStatus = 'waiting' | 'running' | 'done';
+export type RuleRunStatus = 'waiting' | 'running' | 'done' | 'cached';
 
 export interface RuleProgressEntry {
   /** Stable rule ID */
@@ -42,6 +42,7 @@ function pad(
 function statusColor(runStatus: RuleRunStatus, result?: RuleResult): string {
   if (runStatus === 'waiting') return 'gray';
   if (runStatus === 'running') return 'cyan';
+  if (runStatus === 'cached') return 'cyan';
   if (!result) return 'magenta';
   switch (result.status) {
     case 'pass':
@@ -62,6 +63,7 @@ function getStatusText(entry: RuleProgressEntry, now: number): string {
     }
     return '..';
   }
+  if (entry.runStatus === 'cached') return 'CACHED';
   if (!entry.result) return 'DROP';
   switch (entry.result.status) {
     case 'pass':

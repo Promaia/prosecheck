@@ -95,6 +95,24 @@ describe('json formatter', () => {
     expect(first.ruleName).toBe('Dropped');
   });
 
+  it('includes cached rules', () => {
+    const rule = createRule('Cached Rule', 'D', ['src/'], 'src/RULES.md');
+    const output = makeOutput({
+      cached: [rule],
+    });
+
+    const parsed = JSON.parse(formatJson(output)) as JsonOutput;
+
+    expect(parsed.cached).toHaveLength(1);
+    const first = parsed.cached[0];
+    expect(first).toBeDefined();
+    if (!first) return;
+    expect(first.ruleId).toBe(rule.id);
+    expect(first.ruleName).toBe('Cached Rule');
+    expect(first.source).toBe('src/RULES.md');
+    expect(first.status).toBe('cached');
+  });
+
   it('includes errors', () => {
     const output = makeOutput({
       overallStatus: 'fail',

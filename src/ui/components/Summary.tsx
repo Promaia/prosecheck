@@ -22,6 +22,7 @@ export function Summary({ results }: SummaryProps): React.ReactElement {
   ).length;
   const droppedCount = results.dropped.length;
   const errorCount = results.errors.length;
+  const cachedCount = (results.cached ?? []).length;
 
   const parts: { count: number; label: string; color: string }[] = [];
   if (failed > 0) parts.push({ count: failed, label: 'failed', color: 'red' });
@@ -31,6 +32,8 @@ export function Summary({ results }: SummaryProps): React.ReactElement {
     parts.push({ count: warned, label: 'warned', color: 'yellow' });
   if (droppedCount > 0)
     parts.push({ count: droppedCount, label: 'dropped', color: 'magenta' });
+  if (cachedCount > 0)
+    parts.push({ count: cachedCount, label: 'cached', color: 'cyan' });
   if (errorCount > 0)
     parts.push({ count: errorCount, label: 'errors', color: 'red' });
 

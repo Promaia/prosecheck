@@ -79,6 +79,13 @@ function useLintAppState(progressRef: ProgressRef): {
             result: event.result,
           });
           break;
+        case 'cached':
+          next.set(event.ruleId, {
+            ruleId: event.ruleId,
+            name: event.ruleName,
+            runStatus: 'cached',
+          });
+          break;
       }
 
       return next;

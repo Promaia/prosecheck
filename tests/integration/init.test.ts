@@ -221,9 +221,9 @@ describe('--github-actions-incremental', () => {
     expect(
       config['environments']?.['interactive']?.['lastRun']?.['write'],
     ).toBe(true);
-    expect(
-      config['environments']?.['interactive']?.['lastRun']?.['files'],
-    ).toBe(true);
+    expect(config['environments']?.['interactive']?.['lastRun']?.['read']).toBe(
+      true,
+    );
   });
 });
 

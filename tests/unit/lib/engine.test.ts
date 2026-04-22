@@ -19,34 +19,32 @@ const mockFormatSarif = vi.fn();
 vi.mock('../../../src/lib/calculators/index.js', () => ({
   runCalculators: mockRunCalculators,
 }));
-const mockCollectInScopeFiles = vi.fn();
-const mockReadLastRunData = vi.fn();
+const mockListAllFiles = vi.fn();
 const mockWriteLastRunData = vi.fn();
-const mockGetCurrentHead = vi.fn();
 vi.mock('../../../src/lib/change-detection.js', () => ({
   detectChanges: mockDetectChanges,
-  collectInScopeFiles: (...args: unknown[]) =>
-    mockCollectInScopeFiles(...args) as unknown,
-  readLastRunData: (...args: unknown[]) =>
-    mockReadLastRunData(...args) as unknown,
+  listAllFiles: (...args: unknown[]) => mockListAllFiles(...args) as unknown,
   writeLastRunData: (...args: unknown[]) =>
     mockWriteLastRunData(...args) as unknown,
-  getCurrentHead: (...args: unknown[]) =>
-    mockGetCurrentHead(...args) as unknown,
 }));
 const mockBuildIgnoreFilter = vi.fn();
 vi.mock('../../../src/lib/ignore.js', () => ({
   buildIgnoreFilter: (...args: unknown[]) =>
     mockBuildIgnoreFilter(...args) as unknown,
+  buildInclusionFilter: () => () => true,
 }));
 const mockComputeFilesHash = vi.fn();
 vi.mock('../../../src/lib/content-hash.js', () => ({
   computeFilesHash: (...args: unknown[]) =>
     mockComputeFilesHash(...args) as unknown,
 }));
+vi.mock('../../../src/lib/fingerprint.js', () => ({
+  computeRuleFingerprint: (rule: { id: string }) => `fp-${rule.id}`,
+}));
 vi.mock('../../../src/lib/prompt.js', () => ({
   generatePrompts: mockGeneratePrompts,
   loadGlobalPrompt: () => Promise.resolve(undefined),
+  loadTemplate: () => Promise.resolve('tpl'),
 }));
 const mockComputeOverallStatus = vi.fn();
 vi.mock('../../../src/lib/results.js', () => ({
@@ -81,7 +79,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     baseBranch: 'main',
     globalIgnore: [],
     additionalIgnore: ['.gitignore'],
-    lastRun: { read: false, write: false, files: false },
+    lastRun: { read: false, write: false },
     addtlOverheadTimeout: 60,
     hardTotalTimeout: null,
     warnAsError: false,
@@ -142,6 +140,7 @@ beforeEach(() => {
         source: 'RULES.md',
       },
     ],
+    cachedRules: [],
     changedFiles: ['src/foo.ts'],
     changedFilesByRule: new Map([['rule-a', ['src/foo.ts']]]),
   });
@@ -225,6 +224,7 @@ describe('runEngine', () => {
     mockDetectChanges.mockResolvedValue({
       comparisonRef: 'abc123',
       triggeredRules: [],
+      cachedRules: [],
       changedFiles: [],
       changedFilesByRule: new Map(),
     });
@@ -319,8 +319,8 @@ describe('runEngine', () => {
     expect(mockExecutePostRun).not.toHaveBeenCalled();
   });
 
-  it('calls commitLastRunHash when present', async () => {
-    const commitFn = vi.fn().mockResolvedValue(undefined);
+  it('calls writeRuleCacheEntries with passing rule IDs when present', async () => {
+    const writeFn = vi.fn().mockResolvedValue(undefined);
     mockDetectChanges.mockResolvedValue({
       comparisonRef: 'abc123',
       triggeredRules: [
@@ -332,15 +332,18 @@ describe('runEngine', () => {
           source: 'RULES.md',
         },
       ],
+      cachedRules: [],
       changedFiles: ['src/foo.ts'],
       changedFilesByRule: new Map([['rule-a', ['src/foo.ts']]]),
-      commitLastRunHash: commitFn,
+      writeRuleCacheEntries: writeFn,
     });
 
     const context = makeContext();
     await runEngine(context);
 
-    expect(commitFn).toHaveBeenCalledOnce();
+    expect(writeFn).toHaveBeenCalledOnce();
+    const passingIds = writeFn.mock.calls[0]?.[0] as Set<string>;
+    expect(passingIds.has('rule-a')).toBe(true);
   });
 
   describe('retryDropped', () => {
@@ -364,6 +367,7 @@ describe('runEngine', () => {
       mockDetectChanges.mockResolvedValue({
         comparisonRef: 'abc123',
         triggeredRules: [ruleA],
+        cachedRules: [],
         changedFiles: ['src/foo.ts'],
         changedFilesByRule: new Map([['rule-a', ['src/foo.ts']]]),
       });
@@ -390,6 +394,7 @@ describe('runEngine', () => {
       mockDetectChanges.mockResolvedValue({
         comparisonRef: 'abc123',
         triggeredRules: [ruleA, ruleB],
+        cachedRules: [],
         changedFiles: ['src/foo.ts'],
         changedFilesByRule: new Map([
           ['rule-a', ['src/foo.ts']],
@@ -451,6 +456,7 @@ describe('runEngine', () => {
       mockDetectChanges.mockResolvedValue({
         comparisonRef: 'abc123',
         triggeredRules: [ruleA],
+        cachedRules: [],
         changedFiles: ['src/foo.ts'],
         changedFilesByRule: new Map([['rule-a', ['src/foo.ts']]]),
       });
@@ -482,6 +488,7 @@ describe('runEngine', () => {
       mockDetectChanges.mockResolvedValue({
         comparisonRef: 'abc123',
         triggeredRules: [ruleA],
+        cachedRules: [],
         changedFiles: ['src/foo.ts'],
         changedFilesByRule: new Map([['rule-a', ['src/foo.ts']]]),
       });
@@ -529,6 +536,7 @@ describe('runEngine', () => {
       mockDetectChanges.mockResolvedValue({
         comparisonRef: 'abc123',
         triggeredRules: [ruleA, ruleB],
+        cachedRules: [],
         changedFiles: ['src/foo.ts'],
         changedFilesByRule: new Map([
           ['rule-a', ['src/foo.ts']],
@@ -593,21 +601,14 @@ describe('runEngine', () => {
       source: 'RULES.md',
     };
 
-    function setupHashCheckMocks() {
+    it('passes when every rule has a current cache entry', async () => {
       mockRunCalculators.mockResolvedValue([rule]);
-      mockBuildIgnoreFilter.mockResolvedValue({ ignores: () => false });
-      mockCollectInScopeFiles.mockResolvedValue(['src/foo.ts']);
-    }
-
-    it('passes when filesHash matches stored hash', async () => {
-      setupHashCheckMocks();
-      mockComputeFilesHash.mockResolvedValue({
-        filesHash: 'abc123',
-        files: { 'src/foo.ts': 'hash1' },
-      });
-      mockReadLastRunData.mockResolvedValue({
-        commitHash: 'commit1',
-        filesHash: 'abc123',
+      mockDetectChanges.mockResolvedValue({
+        comparisonRef: 'abc123',
+        triggeredRules: [],
+        cachedRules: [rule],
+        changedFiles: [],
+        changedFilesByRule: new Map(),
       });
 
       const context = makeContext({ hashCheck: true });
@@ -615,21 +616,17 @@ describe('runEngine', () => {
 
       expect(result.overallStatus).toBe('pass');
       expect(result.output).toContain('Hash check passed');
-      expect(result.output).toContain('1 in-scope files');
-      // Should not launch agents
-      expect(mockDetectChanges).not.toHaveBeenCalled();
       expect(mockRunClaudeCode).not.toHaveBeenCalled();
     });
 
-    it('fails when filesHash does not match', async () => {
-      setupHashCheckMocks();
-      mockComputeFilesHash.mockResolvedValue({
-        filesHash: 'new-hash',
-        files: { 'src/foo.ts': 'hash-new' },
-      });
-      mockReadLastRunData.mockResolvedValue({
-        commitHash: 'commit1',
-        filesHash: 'old-hash',
+    it('fails when any rule has stale or missing cache entries', async () => {
+      mockRunCalculators.mockResolvedValue([rule]);
+      mockDetectChanges.mockResolvedValue({
+        comparisonRef: 'abc123',
+        triggeredRules: [rule],
+        cachedRules: [],
+        changedFiles: ['src/foo.ts'],
+        changedFilesByRule: new Map([['rule-a', ['src/foo.ts']]]),
       });
 
       const context = makeContext({ hashCheck: true });
@@ -637,81 +634,31 @@ describe('runEngine', () => {
 
       expect(result.overallStatus).toBe('fail');
       expect(result.output).toContain('Hash check failed');
+      expect(result.output).toContain('Rule A');
       expect(mockRunClaudeCode).not.toHaveBeenCalled();
     });
 
-    it('reports changed files when per-file detail is available', async () => {
-      setupHashCheckMocks();
-      mockComputeFilesHash.mockResolvedValue({
-        filesHash: 'new-hash',
-        files: { 'src/foo.ts': 'hash-new', 'src/bar.ts': 'hash-same' },
-      });
-      mockReadLastRunData.mockResolvedValue({
-        commitHash: 'commit1',
-        filesHash: 'old-hash',
-        files: { 'src/foo.ts': 'hash-old', 'src/bar.ts': 'hash-same' },
+    it('forces lastRun.read on regardless of config', async () => {
+      mockRunCalculators.mockResolvedValue([rule]);
+      mockDetectChanges.mockResolvedValue({
+        comparisonRef: 'abc123',
+        triggeredRules: [],
+        cachedRules: [rule],
+        changedFiles: [],
+        changedFilesByRule: new Map(),
       });
 
-      const context = makeContext({ hashCheck: true });
-      const result = await runEngine(context);
-
-      expect(result.overallStatus).toBe('fail');
-      expect(result.output).toContain('src/foo.ts');
-      expect(result.output).not.toContain('src/bar.ts');
-    });
-
-    it('reports removed files', async () => {
-      setupHashCheckMocks();
-      mockComputeFilesHash.mockResolvedValue({
-        filesHash: 'new-hash',
-        files: { 'src/foo.ts': 'hash1' },
+      const context = makeContext({
+        hashCheck: true,
+        config: makeConfig({ lastRun: { read: false, write: false } }),
       });
-      mockReadLastRunData.mockResolvedValue({
-        commitHash: 'commit1',
-        filesHash: 'old-hash',
-        files: {
-          'src/foo.ts': 'hash1',
-          'src/deleted.ts': 'hash-del',
-        },
-      });
+      await runEngine(context);
 
-      const context = makeContext({ hashCheck: true });
-      const result = await runEngine(context);
-
-      expect(result.overallStatus).toBe('fail');
-      expect(result.output).toContain('src/deleted.ts');
-    });
-
-    it('fails when no last-run data exists', async () => {
-      setupHashCheckMocks();
-      mockComputeFilesHash.mockResolvedValue({
-        filesHash: 'abc123',
-        files: {},
-      });
-      mockReadLastRunData.mockResolvedValue(undefined);
-
-      const context = makeContext({ hashCheck: true });
-      const result = await runEngine(context);
-
-      expect(result.overallStatus).toBe('fail');
-      expect(result.output).toContain('no last-run data found');
-    });
-
-    it('fails when last-run data has no filesHash', async () => {
-      setupHashCheckMocks();
-      mockComputeFilesHash.mockResolvedValue({
-        filesHash: 'abc123',
-        files: {},
-      });
-      mockReadLastRunData.mockResolvedValue({
-        commitHash: 'commit1',
-      });
-
-      const context = makeContext({ hashCheck: true });
-      const result = await runEngine(context);
-
-      expect(result.overallStatus).toBe('fail');
-      expect(result.output).toContain('no filesHash');
+      const callArg = mockDetectChanges.mock.calls[0]?.[0] as {
+        config: { lastRun: { read: boolean; write: boolean } };
+      };
+      expect(callArg.config.lastRun.read).toBe(true);
+      expect(callArg.config.lastRun.write).toBe(false);
     });
 
     it('returns early when no rules found', async () => {
@@ -721,7 +668,7 @@ describe('runEngine', () => {
       const result = await runEngine(context);
 
       expect(result.overallStatus).toBe('pass');
-      expect(mockCollectInScopeFiles).not.toHaveBeenCalled();
+      expect(mockDetectChanges).not.toHaveBeenCalled();
     });
   });
 
@@ -734,15 +681,14 @@ describe('runEngine', () => {
       source: 'RULES.md',
     };
 
-    it('writes current hashes and returns pass', async () => {
+    it('writes per-rule cache entries and returns pass', async () => {
       mockRunCalculators.mockResolvedValue([rule]);
       mockBuildIgnoreFilter.mockResolvedValue({ ignores: () => false });
-      mockCollectInScopeFiles.mockResolvedValue(['src/foo.ts', 'src/bar.ts']);
+      mockListAllFiles.mockResolvedValue(['src/foo.ts', 'src/bar.ts']);
       mockComputeFilesHash.mockResolvedValue({
         filesHash: 'new-digest',
         files: { 'src/foo.ts': 'h1', 'src/bar.ts': 'h2' },
       });
-      mockGetCurrentHead.mockResolvedValue('head123');
       mockWriteLastRunData.mockResolvedValue(undefined);
 
       const context = makeContext({ hashCheckWrite: true });
@@ -750,43 +696,19 @@ describe('runEngine', () => {
 
       expect(result.overallStatus).toBe('pass');
       expect(result.output).toContain('Hash check write');
-      expect(result.output).toContain('2 in-scope files');
-      expect(mockWriteLastRunData).toHaveBeenCalledWith(
-        '/tmp/fake-project',
-        expect.objectContaining({
-          commitHash: 'head123',
-          filesHash: 'new-digest',
-        }),
-      );
+      expect(mockWriteLastRunData).toHaveBeenCalledOnce();
+      const writeCall = mockWriteLastRunData.mock.calls[0] as [
+        string,
+        { rules: Record<string, unknown> },
+      ];
+      expect(writeCall[0]).toBe('/tmp/fake-project');
+      expect(writeCall[1].rules['rule-a']).toEqual({
+        status: 'pass',
+        fingerprint: 'fp-rule-a',
+        files: { 'src/foo.ts': 'h1', 'src/bar.ts': 'h2' },
+      });
       expect(mockRunClaudeCode).not.toHaveBeenCalled();
       expect(mockDetectChanges).not.toHaveBeenCalled();
-    });
-
-    it('includes per-file hashes when lastRun.files is enabled', async () => {
-      mockRunCalculators.mockResolvedValue([rule]);
-      mockBuildIgnoreFilter.mockResolvedValue({ ignores: () => false });
-      mockCollectInScopeFiles.mockResolvedValue(['src/foo.ts']);
-      mockComputeFilesHash.mockResolvedValue({
-        filesHash: 'digest',
-        files: { 'src/foo.ts': 'h1' },
-      });
-      mockGetCurrentHead.mockResolvedValue('head456');
-      mockWriteLastRunData.mockResolvedValue(undefined);
-
-      const context = makeContext({
-        hashCheckWrite: true,
-        config: makeConfig({
-          lastRun: { read: false, write: false, files: true },
-        }),
-      });
-      await runEngine(context);
-
-      expect(mockWriteLastRunData).toHaveBeenCalledWith(
-        '/tmp/fake-project',
-        expect.objectContaining({
-          files: { 'src/foo.ts': 'h1' },
-        }),
-      );
     });
   });
 
@@ -810,6 +732,7 @@ describe('runEngine', () => {
       mockDetectChanges.mockResolvedValue({
         comparisonRef: 'abc123',
         triggeredRules: [ruleA],
+        cachedRules: [],
         changedFiles: ['src/foo.ts'],
         changedFilesByRule: new Map([['rule-a', ['src/foo.ts']]]),
       });
@@ -825,8 +748,8 @@ describe('runEngine', () => {
       );
     });
 
-    it('suppresses last-run-hash write when ruleFilter is active', async () => {
-      const commitFn = vi.fn().mockResolvedValue(undefined);
+    it('writes cache entries for targeted rules during a partial --rules run', async () => {
+      const writeFn = vi.fn().mockResolvedValue(undefined);
       mockDetectChanges.mockResolvedValue({
         comparisonRef: 'abc123',
         triggeredRules: [
@@ -838,20 +761,23 @@ describe('runEngine', () => {
             source: 'RULES.md',
           },
         ],
+        cachedRules: [],
         changedFiles: ['src/foo.ts'],
         changedFilesByRule: new Map([['rule-a', ['src/foo.ts']]]),
-        commitLastRunHash: commitFn,
+        writeRuleCacheEntries: writeFn,
       });
 
       const context = makeContext({
         config: makeConfig({
-          lastRun: { read: false, write: true, files: false },
+          lastRun: { read: false, write: true },
         }),
         ruleFilter: ['Rule A'],
       });
       await runEngine(context);
 
-      expect(commitFn).not.toHaveBeenCalled();
+      expect(writeFn).toHaveBeenCalledOnce();
+      const passingIds = writeFn.mock.calls[0]?.[0] as Set<string>;
+      expect(passingIds.has('rule-a')).toBe(true);
     });
   });
 });

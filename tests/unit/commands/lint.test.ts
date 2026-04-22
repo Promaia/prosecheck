@@ -53,7 +53,7 @@ beforeEach(async () => {
       addtlOverheadTimeout: 60,
       hardTotalTimeout: null,
       postRun: [],
-      lastRun: { read: false, write: false, files: false },
+      lastRun: { read: false, write: false },
       environments: {},
       ruleCalculators: [],
       claudeCode: {

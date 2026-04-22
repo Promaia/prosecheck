@@ -5,6 +5,7 @@ import type { Config } from './config-schema.js';
 import type { Rule } from '../types/index.js';
 import { buildIgnoreFilter, buildInclusionFilter } from './ignore.js';
 import { computeFilesHash } from './content-hash.js';
+import { computeRuleFingerprint } from './fingerprint.js';
 
 export interface ChangeDetectionOptions {
   /** Project root directory */
@@ -15,193 +16,153 @@ export interface ChangeDetectionOptions {
   rules: Rule[];
   /** Explicit comparison ref override (from CLI --ref flag) */
   comparisonRef?: string;
+  /** Prompt template used for rule fingerprinting */
+  promptTemplate: string;
+  /** Global system prompt used for rule fingerprinting (undefined if absent) */
+  globalPrompt: string | undefined;
 }
 
 export interface ChangeDetectionResult {
   /** The git ref agents should compare against */
   comparisonRef: string;
-  /** Rules that have at least one changed file in their scope */
+  /** Rules that need to run this round */
   triggeredRules: Rule[];
-  /** All changed files (after global ignore filtering) */
+  /** Rules skipped because their cache entry is current (only when lastRun.read) */
+  cachedRules: Rule[];
+  /** All changed files across triggered rules (after global ignore filtering) */
   changedFiles: string[];
-  /** Map from rule ID to the changed files within that rule's scope */
+  /** Map from rule ID to changed files in that rule's scope */
   changedFilesByRule: Map<string, string[]>;
   /**
-   * Callback to persist the current HEAD as the last-run hash.
-   * Only present when `config.lastRun.write` is enabled.
-   * The caller (engine) should invoke this after a successful run.
+   * Callback to persist the per-rule cache after a run. Only present when
+   * `config.lastRun.write` is enabled. Accepts the set of rule IDs that
+   * passed and removes entries for triggered rules that did not pass.
    */
-  commitLastRunHash?: () => Promise<void>;
+  writeRuleCacheEntries?: (passingRuleIds: Set<string>) => Promise<void>;
 }
 
 /**
- * Detect changed files and determine which rules should be triggered.
+ * Per-rule change detection.
  *
- * When `lastRun.read` is enabled, uses a tiered detection strategy:
- * 1. **Files-based**: If stored per-file hashes exist, diff against current
- *    content hashes to find exactly which files changed.
- * 2. **Digest-only**: If only a filesHash digest exists and it matches,
- *    skip all rules (nothing changed). On mismatch, fall through.
- * 3. **Git-based**: Use stored commitHash as git diff ref.
- * 4. **Merge-base**: Default fallback using `git merge-base HEAD baseBranch`.
+ * For each rule, compare its current in-scope file hashes and fingerprint
+ * against the stored cache entry. Trigger the rule if no entry exists, the
+ * fingerprint differs, or any in-scope file has changed. Otherwise the rule
+ * is "cached" and skipped for this run.
  *
- * When `lastRun.write` is enabled, prepares a deferred callback that writes
- * both git hash and content hashes to the last-run file.
+ * When `lastRun.read` is off, cache entries are ignored and rules trigger
+ * via git-diff against the comparison ref (legacy narrowing behavior).
  */
 export async function detectChanges(
   options: ChangeDetectionOptions,
 ): Promise<ChangeDetectionResult> {
-  const { projectRoot, config, rules } = options;
+  const { projectRoot, config, rules, promptTemplate, globalPrompt } = options;
 
-  // Determine the comparison ref for agents (merge-base with baseBranch)
   const comparisonRef =
     options.comparisonRef ??
     (await getMergeBase(projectRoot, config.baseBranch));
 
-  // Build global ignore filter (shared across all detection paths)
   const globalFilter = await buildIgnoreFilter(
     projectRoot,
     config.globalIgnore,
     config.additionalIgnore,
   );
 
-  // Collect all in-scope file paths across all rules (for content hashing)
-  const allInScopeFiles = await collectInScopeFiles(
-    projectRoot,
-    rules,
-    globalFilter,
-  );
+  // Build the shared universe of files (tracked + untracked, globally un-ignored)
+  const allFiles = await listAllFiles(projectRoot);
+  const unIgnored = allFiles.filter((f) => !globalFilter.ignores(f));
 
-  // Try files-based detection first when lastRun.read is enabled
-  let lastRunData: LastRunData | undefined;
-  if (config.lastRun.read) {
-    lastRunData = await readLastRunData(projectRoot);
-
-    if (lastRunData) {
-      // Tier 1: Files-based diff (stored per-file hashes exist)
-      if (lastRunData.files) {
-        const result = await detectChangesFromFileHashes(
-          projectRoot,
-          rules,
-          allInScopeFiles,
-          lastRunData.files,
-          comparisonRef,
-          config,
-        );
-        if (result) return result;
-      }
-
-      // Tier 2: Digest-only (filesHash exists but no per-file detail)
-      if (lastRunData.filesHash && !lastRunData.files) {
-        const current = await computeFilesHash(projectRoot, allInScopeFiles);
-        if (current.filesHash === lastRunData.filesHash) {
-          // Nothing changed — no rules triggered
-          return buildEmptyResult(
-            comparisonRef,
-            config,
-            projectRoot,
-            rules,
-            allInScopeFiles,
-          );
-        }
-        // Digest mismatch — fall through to git-based
-      }
-    }
-  }
-
-  // Tier 3: Git-based diff (commitHash or merge-base)
-  let diffRef = comparisonRef;
-  if (config.lastRun.read && lastRunData?.commitHash) {
-    diffRef = lastRunData.commitHash;
-  }
-
-  const rawChangedFiles = await getChangedFiles(projectRoot, diffRef);
-  const changedFiles = rawChangedFiles.filter((f) => !globalFilter.ignores(f));
-
-  return buildResult(
-    changedFiles,
-    rules,
-    comparisonRef,
-    config,
-    projectRoot,
-    allInScopeFiles,
-  );
-}
-
-/**
- * Detect changes by comparing stored per-file hashes against current content.
- * Returns a ChangeDetectionResult if the comparison is conclusive, or
- * undefined to signal that the caller should fall through to git-based.
- */
-async function detectChangesFromFileHashes(
-  projectRoot: string,
-  rules: Rule[],
-  allInScopeFiles: string[],
-  storedFiles: Record<string, string>,
-  comparisonRef: string,
-  config: Config,
-): Promise<ChangeDetectionResult | undefined> {
-  const current = await computeFilesHash(projectRoot, allInScopeFiles);
-
-  // Find files that changed, were added, or were removed
-  const changedFiles: string[] = [];
-  for (const [filePath, hash] of Object.entries(current.files)) {
-    if (storedFiles[filePath] !== hash) {
-      changedFiles.push(filePath);
-    }
-  }
-  // Files that were in the stored set but no longer exist
-  for (const filePath of Object.keys(storedFiles)) {
-    if (current.files[filePath] === undefined) {
-      changedFiles.push(filePath);
-    }
-  }
-
-  return buildResult(
-    changedFiles,
-    rules,
-    comparisonRef,
-    config,
-    projectRoot,
-    allInScopeFiles,
-  );
-}
-
-/**
- * Build a ChangeDetectionResult from a list of changed files.
- */
-function buildResult(
-  changedFiles: string[],
-  rules: Rule[],
-  comparisonRef: string,
-  config: Config,
-  projectRoot: string,
-  allInScopeFiles: string[],
-): ChangeDetectionResult {
-  const changedFilesByRule = new Map<string, string[]>();
-  const triggeredRules: Rule[] = [];
-
+  // Compute per-rule in-scope file sets
+  const filesByRule = new Map<string, string[]>();
   for (const rule of rules) {
     const inclusionFilter = buildInclusionFilter(rule.inclusions);
-    const ruleFiles = changedFiles.filter(inclusionFilter);
-    if (ruleFiles.length > 0) {
-      changedFilesByRule.set(rule.id, ruleFiles);
+    filesByRule.set(rule.id, unIgnored.filter(inclusionFilter).sort());
+  }
+
+  const fingerprintInputs = { promptTemplate, globalPrompt };
+  const fingerprintByRule = new Map<string, string>();
+  for (const rule of rules) {
+    fingerprintByRule.set(
+      rule.id,
+      computeRuleFingerprint(rule, fingerprintInputs),
+    );
+  }
+
+  // Compute current per-rule file hashes (only for files we care about)
+  const hashesByRule = new Map<string, Record<string, string>>();
+  const allInScope = new Set<string>();
+  for (const files of filesByRule.values()) {
+    for (const f of files) allInScope.add(f);
+  }
+  const { files: currentHashes } = await computeFilesHash(projectRoot, [
+    ...allInScope,
+  ]);
+  for (const rule of rules) {
+    const scoped: Record<string, string> = {};
+    for (const f of filesByRule.get(rule.id) ?? []) {
+      const h = currentHashes[f];
+      if (h !== undefined) scoped[f] = h;
+    }
+    hashesByRule.set(rule.id, scoped);
+  }
+
+  const triggeredRules: Rule[] = [];
+  const cachedRules: Rule[] = [];
+  const changedFilesByRule = new Map<string, string[]>();
+  const allChanged = new Set<string>();
+
+  if (config.lastRun.read) {
+    const lastRun = await readLastRunData(projectRoot);
+    for (const rule of rules) {
+      const entry = lastRun?.rules[rule.id];
+      const currentFiles = hashesByRule.get(rule.id) ?? {};
+      const currentFingerprint = fingerprintByRule.get(rule.id) ?? '';
+
+      const changed = diffFileMaps(entry?.files, currentFiles);
+      const fingerprintChanged =
+        !entry || entry.fingerprint !== currentFingerprint;
+
+      if (!fingerprintChanged && changed.length === 0) {
+        cachedRules.push(rule);
+        continue;
+      }
+
       triggeredRules.push(rule);
+      const fallback = fingerprintChanged
+        ? Object.keys(currentFiles).sort()
+        : changed;
+      changedFilesByRule.set(rule.id, fallback);
+      for (const f of fallback) allChanged.add(f);
+    }
+  } else {
+    // Legacy narrowing: git diff against comparisonRef determines triggered set.
+    const rawChanged = await getChangedFiles(projectRoot, comparisonRef);
+    const changed = rawChanged.filter((f) => !globalFilter.ignores(f));
+    for (const f of changed) allChanged.add(f);
+
+    for (const rule of rules) {
+      const inclusionFilter = buildInclusionFilter(rule.inclusions);
+      const ruleChanged = changed.filter(inclusionFilter);
+      if (ruleChanged.length > 0) {
+        triggeredRules.push(rule);
+        changedFilesByRule.set(rule.id, ruleChanged);
+      }
     }
   }
 
   const result: ChangeDetectionResult = {
     comparisonRef,
     triggeredRules,
-    changedFiles,
+    cachedRules,
+    changedFiles: [...allChanged].sort(),
     changedFilesByRule,
   };
 
   if (config.lastRun.write) {
-    result.commitLastRunHash = buildLastRunWriter(
+    result.writeRuleCacheEntries = buildCacheWriter(
       projectRoot,
-      config,
-      allInScopeFiles,
+      triggeredRules,
+      hashesByRule,
+      fingerprintByRule,
     );
   }
 
@@ -209,62 +170,68 @@ function buildResult(
 }
 
 /**
- * Build an empty result (no triggered rules) with an optional last-run writer.
+ * Return the set of file paths that changed between the stored and current
+ * per-file hash maps (additions, modifications, deletions).
  */
-function buildEmptyResult(
-  comparisonRef: string,
-  config: Config,
-  projectRoot: string,
-  rules: Rule[],
-  allInScopeFiles: string[],
-): ChangeDetectionResult {
-  return buildResult(
-    [],
-    rules,
-    comparisonRef,
-    config,
-    projectRoot,
-    allInScopeFiles,
-  );
+function diffFileMaps(
+  stored: Record<string, string> | undefined,
+  current: Record<string, string>,
+): string[] {
+  if (!stored) {
+    return Object.keys(current).sort();
+  }
+  const changed = new Set<string>();
+  for (const [filePath, hash] of Object.entries(current)) {
+    if (stored[filePath] !== hash) changed.add(filePath);
+  }
+  for (const filePath of Object.keys(stored)) {
+    if (current[filePath] === undefined) changed.add(filePath);
+  }
+  return [...changed].sort();
 }
 
 /**
- * Build the deferred last-run writer callback.
+ * Build the deferred cache writer callback. Reads existing entries, updates
+ * only the rules that were triggered this run (writing passes, removing
+ * non-passes), and leaves other entries untouched.
  */
-function buildLastRunWriter(
+function buildCacheWriter(
   projectRoot: string,
-  config: Config,
-  allInScopeFiles: string[],
-): () => Promise<void> {
-  return async () => {
-    const headHash = await getCurrentHead(projectRoot);
-    const { filesHash, files } = await computeFilesHash(
-      projectRoot,
-      allInScopeFiles,
-    );
-    await writeLastRunData(projectRoot, {
-      commitHash: headHash,
-      filesHash,
-      files: config.lastRun.files ? files : undefined,
-    });
+  triggeredRules: Rule[],
+  hashesByRule: Map<string, Record<string, string>>,
+  fingerprintByRule: Map<string, string>,
+): (passingRuleIds: Set<string>) => Promise<void> {
+  return async (passingRuleIds: Set<string>) => {
+    const existing = (await readLastRunData(projectRoot)) ?? { rules: {} };
+    const triggeredIds = new Set(triggeredRules.map((r) => r.id));
+    const rules: Record<string, CachedRuleEntry> = {};
+
+    // Preserve entries for rules that were not triggered this run
+    for (const [ruleId, entry] of Object.entries(existing.rules)) {
+      if (!triggeredIds.has(ruleId)) {
+        rules[ruleId] = entry;
+      }
+    }
+
+    // Write entries for triggered rules that passed
+    for (const rule of triggeredRules) {
+      if (passingRuleIds.has(rule.id)) {
+        rules[rule.id] = {
+          files: hashesByRule.get(rule.id) ?? {},
+          fingerprint: fingerprintByRule.get(rule.id) ?? '',
+          status: 'pass',
+        };
+      }
+    }
+
+    await writeLastRunData(projectRoot, { rules });
   };
 }
 
-/**
- * Collect all file paths that fall within any rule's scope.
- * Uses `git ls-files` for tracked files plus `git ls-files --others`
- * for untracked files, then filters through global ignore and rule scopes.
- */
-export async function collectInScopeFiles(
-  projectRoot: string,
-  rules: Rule[],
-  globalFilter: { ignores: (path: string) => boolean },
-): Promise<string[]> {
-  // Get all tracked files
+export async function listAllFiles(projectRoot: string): Promise<string[]> {
   const { stdout: trackedOutput } = await execa('git', ['ls-files'], {
     cwd: projectRoot,
   });
-  // Get untracked files (respects .gitignore)
   const { stdout: untrackedOutput } = await execa(
     'git',
     ['ls-files', '--others', '--exclude-standard'],
@@ -278,28 +245,12 @@ export async function collectInScopeFiles(
   for (const line of untrackedOutput.trim().split('\n')) {
     if (line) allFiles.add(line);
   }
-
-  // Filter through global ignore
-  const filtered = [...allFiles].filter((f) => !globalFilter.ignores(f));
-
-  // Filter to files that match at least one rule's scope
-  const inScope = new Set<string>();
-  for (const rule of rules) {
-    const inclusionFilter = buildInclusionFilter(rule.inclusions);
-    for (const file of filtered) {
-      if (inclusionFilter(file)) {
-        inScope.add(file);
-      }
-    }
-  }
-
-  return [...inScope].sort();
+  return [...allFiles];
 }
 
 /**
  * Compute the merge-base between HEAD and the given base branch.
- * Falls back to the base branch ref itself if merge-base fails
- * (e.g. shallow clone, unrelated histories).
+ * Falls back to the base branch ref if merge-base fails.
  */
 export async function getMergeBase(
   projectRoot: string,
@@ -311,28 +262,22 @@ export async function getMergeBase(
     });
     return stdout.trim();
   } catch {
-    // Fallback: use the branch ref directly (e.g. shallow clone)
     return baseBranch;
   }
 }
 
 /**
- * Get the list of changed files between a ref and HEAD, plus any
- * untracked files (new files not yet staged).
- * Returns paths relative to project root, using forward slashes.
+ * Get the list of changed files between a ref and HEAD, including untracked.
  */
 export async function getChangedFiles(
   projectRoot: string,
   ref: string,
 ): Promise<string[]> {
-  // Changed files (committed, staged, and unstaged) since ref
   const { stdout: diffOutput } = await execa(
     'git',
     ['diff', '--name-only', ref],
     { cwd: projectRoot },
   );
-
-  // Untracked files (respects .gitignore)
   const { stdout: untrackedOutput } = await execa(
     'git',
     ['ls-files', '--others', '--exclude-standard'],
@@ -346,7 +291,6 @@ export async function getChangedFiles(
   for (const line of untrackedOutput.trim().split('\n')) {
     if (line) files.add(line);
   }
-
   return [...files];
 }
 
@@ -362,25 +306,23 @@ export async function getCurrentHead(projectRoot: string): Promise<string> {
 
 const LAST_RUN_PATH = '.prosecheck/last-user-run';
 
-const GIT_HASH_RE = /^[0-9a-f]{4,40}$/;
+export interface CachedRuleEntry {
+  /** Per-file content hashes for files in this rule's scope at last pass */
+  files: Record<string, string>;
+  /** Fingerprint over rule text + inclusions + model + frontmatter + templates */
+  fingerprint: string;
+  /** Only 'pass' entries are stored — non-pass never caches */
+  status: 'pass';
+}
 
 export interface LastRunData {
-  /** Git HEAD at time of run */
-  commitHash: string;
-  /** SHA-256 digest of all in-scope file contents */
-  filesHash?: string | undefined;
-  /** Per-file content hashes (only when lastRun.files is enabled) */
-  files?: Record<string, string> | undefined;
+  rules: Record<string, CachedRuleEntry>;
 }
 
 /**
- * Read the last-run data from `.prosecheck/last-user-run`.
- *
- * Supports two formats for backwards compatibility:
- * - New JSON format: `{"commitHash":"...","filesHash":"...","files":{...}}`
- * - Legacy plain-text format: bare git hash on a single line
- *
- * Returns undefined if the file doesn't exist or is unparseable.
+ * Read per-rule cache data from `.prosecheck/last-user-run`.
+ * Returns undefined if the file does not exist or is unparseable.
+ * Unknown shapes are treated as absent (ADR-014 specifies no migration shim).
  */
 export async function readLastRunData(
   projectRoot: string,
@@ -389,95 +331,59 @@ export async function readLastRunData(
   try {
     content = await readFile(path.join(projectRoot, LAST_RUN_PATH), 'utf-8');
   } catch (error: unknown) {
-    if (isEnoent(error)) {
-      return undefined;
-    }
+    if (isEnoent(error)) return undefined;
     throw error;
   }
 
   const trimmed = content.trim();
   if (!trimmed) return undefined;
 
-  // Try JSON format first
-  if (trimmed.startsWith('{')) {
-    try {
-      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
-      const commitHash = parsed['commitHash'];
-      if (typeof commitHash !== 'string') return undefined;
-      return {
-        commitHash,
-        filesHash:
-          typeof parsed['filesHash'] === 'string'
-            ? parsed['filesHash']
-            : undefined,
-        files:
-          parsed['files'] &&
-          typeof parsed['files'] === 'object' &&
-          !Array.isArray(parsed['files'])
-            ? (parsed['files'] as Record<string, string>)
-            : undefined,
-      };
-    } catch {
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const rawRules = parsed['rules'];
+    if (!rawRules || typeof rawRules !== 'object' || Array.isArray(rawRules)) {
       return undefined;
     }
-  }
 
-  // Legacy plain-text git hash
-  if (GIT_HASH_RE.test(trimmed)) {
-    return { commitHash: trimmed };
+    const rules: Record<string, CachedRuleEntry> = {};
+    for (const [ruleId, raw] of Object.entries(
+      rawRules as Record<string, unknown>,
+    )) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      const obj = raw as Record<string, unknown>;
+      const files = obj['files'];
+      const fingerprint = obj['fingerprint'];
+      const status = obj['status'];
+      if (
+        files &&
+        typeof files === 'object' &&
+        !Array.isArray(files) &&
+        typeof fingerprint === 'string' &&
+        status === 'pass'
+      ) {
+        rules[ruleId] = {
+          files: files as Record<string, string>,
+          fingerprint,
+          status: 'pass',
+        };
+      }
+    }
+    return { rules };
+  } catch {
+    return undefined;
   }
-
-  return undefined;
 }
 
 /**
- * Read only the commit hash from the last-run file (for git-based diffing).
- * Convenience wrapper around readLastRunData.
- */
-export async function readLastRunHash(
-  projectRoot: string,
-): Promise<string | undefined> {
-  const data = await readLastRunData(projectRoot);
-  return data?.commitHash;
-}
-
-export interface WriteLastRunOptions {
-  commitHash: string;
-  filesHash?: string | undefined;
-  files?: Record<string, string> | undefined;
-}
-
-/**
- * Write last-run data to `.prosecheck/last-user-run` as a single compact
- * JSON line. Non-mergeable by design — most recent version always wins.
+ * Write per-rule cache data to `.prosecheck/last-user-run` as compact JSON.
  */
 export async function writeLastRunData(
   projectRoot: string,
-  data: WriteLastRunOptions,
+  data: LastRunData,
 ): Promise<void> {
   const filePath = path.join(projectRoot, LAST_RUN_PATH);
   await mkdir(path.dirname(filePath), { recursive: true });
-  const obj: Record<string, unknown> = {
-    commitHash: data.commitHash,
-  };
-  if (data.filesHash !== undefined) {
-    obj['filesHash'] = data.filesHash;
-  }
-  if (data.files !== undefined) {
-    obj['files'] = data.files;
-  }
-  await writeFile(filePath, JSON.stringify(obj) + '\n', 'utf-8');
-}
-
-/**
- * Write the current HEAD hash to `.prosecheck/last-user-run`.
- * @deprecated Use writeLastRunData for the new JSON format.
- */
-export async function writeLastRunHash(
-  projectRoot: string,
-  hash: string,
-): Promise<void> {
-  await writeLastRunData(projectRoot, { commitHash: hash });
+  await writeFile(filePath, JSON.stringify(data) + '\n', 'utf-8');
 }
 
 function isEnoent(error: unknown): boolean {

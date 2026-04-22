@@ -121,7 +121,7 @@ export async function init(options: InitOptions): Promise<void> {
       'prosecheck-merge-queue.yml',
       buildMergeQueueWorkflow(sarif),
     );
-    await setInteractiveLastRun(projectRoot, { write: true, files: true });
+    await setInteractiveLastRun(projectRoot, { write: true, read: true });
   }
 
   if (options.githubActionsHashCheck) {

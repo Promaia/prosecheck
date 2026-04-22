@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import path from 'node:path';
 import {
   detectChanges,
   getMergeBase,
   getChangedFiles,
   getCurrentHead,
-  readLastRunHash,
+  readLastRunData,
   writeLastRunData,
 } from '../../../src/lib/change-detection.js';
+import type { LastRunData } from '../../../src/lib/change-detection.js';
 import { ConfigSchema } from '../../../src/lib/config-schema.js';
-import { createRule } from '../../../src/lib/rule.js';
+import type { Rule } from '../../../src/types/index.js';
 
 // Mock execa
 vi.mock('execa', () => ({
@@ -23,7 +23,7 @@ vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn(),
 }));
 
-// Mock buildIgnoreFilter from ignore module — buildInclusionFilter is kept as-is via passthrough
+// Pass through buildInclusionFilter, mock buildIgnoreFilter to a no-op allowlist
 vi.mock('../../../src/lib/ignore.js', async () => {
   const { buildInclusionFilter } = await vi.importActual<
     Record<string, unknown>
@@ -36,7 +36,7 @@ vi.mock('../../../src/lib/ignore.js', async () => {
   };
 });
 
-// Mock content-hash to avoid real file I/O
+// Mock content-hash — the test writes per-call values into this mock
 vi.mock('../../../src/lib/content-hash.js', () => ({
   computeFilesHash: vi.fn().mockResolvedValue({
     filesHash: 'mock-digest',
@@ -46,708 +46,524 @@ vi.mock('../../../src/lib/content-hash.js', () => ({
 }));
 
 import { execa } from 'execa';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { buildIgnoreFilter } from '../../../src/lib/ignore.js';
+import { readFile, writeFile } from 'node:fs/promises';
 import { computeFilesHash } from '../../../src/lib/content-hash.js';
+import { buildIgnoreFilter } from '../../../src/lib/ignore.js';
 
 const mockedExeca = vi.mocked(execa);
 const mockedReadFile = vi.mocked(readFile);
 const mockedWriteFile = vi.mocked(writeFile);
-const mockedMkdir = vi.mocked(mkdir);
-const mockedBuildIgnoreFilter = vi.mocked(buildIgnoreFilter);
 const mockedComputeFilesHash = vi.mocked(computeFilesHash);
+const mockedBuildIgnoreFilter = vi.mocked(buildIgnoreFilter);
 
 const PROJECT_ROOT = '/fake/project';
 
+function makeRule(over: Partial<Rule> & { id: string; name: string }): Rule {
+  return {
+    id: over.id,
+    name: over.name,
+    description: over.description ?? 'desc',
+    inclusions: over.inclusions ?? ['src/**'],
+    source: over.source ?? 'RULES.md',
+  };
+}
+
+function makeConfig(over: Record<string, unknown> = {}) {
+  return ConfigSchema.parse({
+    lastRun: { read: true, write: true },
+    ...over,
+  });
+}
+
+function mockListAllFiles(files: string[]): void {
+  // listAllFiles: git ls-files (tracked) + git ls-files --others (untracked)
+  mockedExeca.mockResolvedValueOnce({
+    stdout: files.join('\n') + '\n',
+  } as never);
+  mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
+}
+
+function mockMergeBase(sha: string): void {
+  mockedExeca.mockResolvedValueOnce({ stdout: sha + '\n' } as never);
+}
+
+function mockLastRunFile(data: LastRunData | null): void {
+  if (data === null) {
+    const err = new Error('ENOENT') as NodeJS.ErrnoException;
+    err.code = 'ENOENT';
+    mockedReadFile.mockRejectedValueOnce(err);
+  } else {
+    mockedReadFile.mockResolvedValueOnce(JSON.stringify(data));
+  }
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
-  // Re-establish content-hash mock after resetAllMocks
   mockedComputeFilesHash.mockResolvedValue({
     filesHash: 'mock-digest',
     files: {},
   });
+  mockedBuildIgnoreFilter.mockResolvedValue({
+    ignores: () => false,
+  } as unknown as ReturnType<typeof buildIgnoreFilter> extends Promise<infer R>
+    ? R
+    : never);
 });
 
 describe('getMergeBase', () => {
   it('returns the merge-base hash', async () => {
     mockedExeca.mockResolvedValueOnce({ stdout: 'abc123\n' } as never);
-
-    const result = await getMergeBase(PROJECT_ROOT, 'main');
-
-    expect(result).toBe('abc123');
-    expect(mockedExeca).toHaveBeenCalledWith(
-      'git',
-      ['merge-base', 'HEAD', 'main'],
-      { cwd: PROJECT_ROOT },
-    );
+    expect(await getMergeBase(PROJECT_ROOT, 'main')).toBe('abc123');
   });
 
   it('falls back to branch name when merge-base fails', async () => {
-    mockedExeca.mockRejectedValueOnce(new Error('fatal: not a git repository'));
-
-    const result = await getMergeBase(PROJECT_ROOT, 'main');
-
-    expect(result).toBe('main');
+    mockedExeca.mockRejectedValueOnce(new Error('not a repo'));
+    expect(await getMergeBase(PROJECT_ROOT, 'main')).toBe('main');
   });
 });
 
 describe('getChangedFiles', () => {
-  it('returns list of changed files including untracked', async () => {
-    // git diff --name-only
-    mockedExeca.mockResolvedValueOnce({
-      stdout: 'src/foo.ts\nsrc/bar.ts\n',
-    } as never);
-    // git ls-files --others --exclude-standard
-    mockedExeca.mockResolvedValueOnce({
-      stdout: 'src/new-file.ts\n',
-    } as never);
-
-    const result = await getChangedFiles(PROJECT_ROOT, 'abc123');
-
-    expect(result).toContain('src/foo.ts');
-    expect(result).toContain('src/bar.ts');
-    expect(result).toContain('src/new-file.ts');
-    expect(mockedExeca).toHaveBeenCalledWith(
-      'git',
-      ['diff', '--name-only', 'abc123'],
-      { cwd: PROJECT_ROOT },
-    );
-  });
-
-  it('returns empty array when no changes and no untracked', async () => {
-    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-
-    const result = await getChangedFiles(PROJECT_ROOT, 'abc123');
-
-    expect(result).toEqual([]);
-  });
-
-  it('deduplicates files that appear in both diff and untracked', async () => {
-    mockedExeca.mockResolvedValueOnce({ stdout: 'src/foo.ts' } as never);
-    mockedExeca.mockResolvedValueOnce({ stdout: 'src/foo.ts' } as never);
-
-    const result = await getChangedFiles(PROJECT_ROOT, 'abc123');
-
-    expect(result).toEqual(['src/foo.ts']);
+  it('merges diff and untracked', async () => {
+    mockedExeca.mockResolvedValueOnce({ stdout: 'a.ts\nb.ts\n' } as never);
+    mockedExeca.mockResolvedValueOnce({ stdout: 'c.ts\n' } as never);
+    const files = await getChangedFiles(PROJECT_ROOT, 'abc');
+    expect(files.sort()).toEqual(['a.ts', 'b.ts', 'c.ts']);
   });
 });
 
 describe('getCurrentHead', () => {
-  it('returns the current HEAD hash', async () => {
-    mockedExeca.mockResolvedValueOnce({ stdout: 'def456\n' } as never);
-
-    const result = await getCurrentHead(PROJECT_ROOT);
-
-    expect(result).toBe('def456');
+  it('returns trimmed stdout', async () => {
+    mockedExeca.mockResolvedValueOnce({ stdout: 'deadbeef\n' } as never);
+    expect(await getCurrentHead(PROJECT_ROOT)).toBe('deadbeef');
   });
 });
 
-describe('readLastRunHash', () => {
-  it('reads commitHash from JSON format', async () => {
-    mockedReadFile.mockResolvedValueOnce(
-      '{"commitHash":"abc123","filesHash":"xyz"}\n',
-    );
-
-    const result = await readLastRunHash(PROJECT_ROOT);
-
-    expect(result).toBe('abc123');
+describe('readLastRunData / writeLastRunData', () => {
+  it('returns undefined when file is missing', async () => {
+    const err = new Error('ENOENT') as NodeJS.ErrnoException;
+    err.code = 'ENOENT';
+    mockedReadFile.mockRejectedValueOnce(err);
+    expect(await readLastRunData(PROJECT_ROOT)).toBeUndefined();
   });
 
-  it('reads the hash from legacy plain-text format', async () => {
-    mockedReadFile.mockResolvedValueOnce('abc123\n');
-
-    const result = await readLastRunHash(PROJECT_ROOT);
-
-    expect(result).toBe('abc123');
-    expect(mockedReadFile).toHaveBeenCalledWith(
-      path.join(PROJECT_ROOT, '.prosecheck/last-user-run'),
-      'utf-8',
-    );
+  it('returns undefined when file contents are not valid JSON', async () => {
+    mockedReadFile.mockResolvedValueOnce('not json');
+    expect(await readLastRunData(PROJECT_ROOT)).toBeUndefined();
   });
 
-  it('returns undefined when file does not exist', async () => {
-    const error = new Error('ENOENT') as NodeJS.ErrnoException;
-    error.code = 'ENOENT';
-    mockedReadFile.mockRejectedValueOnce(error);
-
-    const result = await readLastRunHash(PROJECT_ROOT);
-
-    expect(result).toBeUndefined();
+  it('returns undefined when schema does not match', async () => {
+    mockedReadFile.mockResolvedValueOnce(JSON.stringify({ foo: 'bar' }));
+    expect(await readLastRunData(PROJECT_ROOT)).toBeUndefined();
   });
 
-  it('returns undefined for empty file', async () => {
-    mockedReadFile.mockResolvedValueOnce('');
-
-    const result = await readLastRunHash(PROJECT_ROOT);
-
-    expect(result).toBeUndefined();
+  it('parses rule entries from stored data', async () => {
+    const stored: LastRunData = {
+      rules: {
+        'rule-a': {
+          files: { 'src/foo.ts': 'hash1' },
+          fingerprint: 'fp1',
+          status: 'pass',
+        },
+      },
+    };
+    mockedReadFile.mockResolvedValueOnce(JSON.stringify(stored));
+    const result = await readLastRunData(PROJECT_ROOT);
+    expect(result).toEqual(stored);
   });
 
-  it('returns undefined for invalid (non-hex) hash', async () => {
-    mockedReadFile.mockResolvedValueOnce('not-a-hex-hash\n');
-
-    const result = await readLastRunHash(PROJECT_ROOT);
-
-    expect(result).toBeUndefined();
-  });
-
-  it('rethrows non-ENOENT errors', async () => {
-    const error = new Error('EACCES') as NodeJS.ErrnoException;
-    error.code = 'EACCES';
-    mockedReadFile.mockRejectedValueOnce(error);
-
-    await expect(readLastRunHash(PROJECT_ROOT)).rejects.toThrow('EACCES');
-  });
-});
-
-describe('writeLastRunData', () => {
-  it('writes compact JSON with commitHash', async () => {
-    mockedMkdir.mockResolvedValueOnce(undefined);
+  it('writes compact JSON to .prosecheck/last-user-run', async () => {
     mockedWriteFile.mockResolvedValueOnce(undefined);
-
-    await writeLastRunData(PROJECT_ROOT, { commitHash: 'abc123' });
-
-    expect(mockedMkdir).toHaveBeenCalledWith(
-      path.join(PROJECT_ROOT, '.prosecheck'),
-      { recursive: true },
-    );
-    expect(mockedWriteFile).toHaveBeenCalledWith(
-      path.join(PROJECT_ROOT, '.prosecheck/last-user-run'),
-      '{"commitHash":"abc123"}\n',
-      'utf-8',
-    );
-  });
-
-  it('includes filesHash and files when provided', async () => {
-    mockedMkdir.mockResolvedValueOnce(undefined);
-    mockedWriteFile.mockResolvedValueOnce(undefined);
-
     await writeLastRunData(PROJECT_ROOT, {
-      commitHash: 'abc123',
-      filesHash: 'digest456',
-      files: { 'src/foo.ts': 'hash1' },
+      rules: {
+        'rule-a': { files: {}, fingerprint: 'fp', status: 'pass' },
+      },
     });
-
-    const written = mockedWriteFile.mock.calls[0]?.[1] as string;
-    const parsed = JSON.parse(written.trim()) as Record<string, unknown>;
-    expect(parsed['commitHash']).toBe('abc123');
-    expect(parsed['filesHash']).toBe('digest456');
-    expect(parsed['files']).toEqual({ 'src/foo.ts': 'hash1' });
+    expect(mockedWriteFile).toHaveBeenCalled();
+    const [, content] = mockedWriteFile.mock.calls[0] as [string, string];
+    expect(content).toContain('"rules"');
+    expect(content).toContain('rule-a');
   });
 });
 
-describe('detectChanges', () => {
-  const baseConfig = ConfigSchema.parse({});
+describe('detectChanges — lastRun.read off (legacy narrowing)', () => {
+  it('uses git diff and per-rule inclusion to pick triggered rules', async () => {
+    const rule = makeRule({ id: 'r1', name: 'R1', inclusions: ['src/**'] });
+    const config = makeConfig({ lastRun: { read: false, write: false } });
 
-  function makeRules() {
-    return [
-      createRule('Global Rule', 'Applies everywhere', [], 'RULES.md'),
-      createRule('API Rule', 'API-only', ['src/api/'], 'src/api/RULES.md'),
-      createRule('Src Rule', 'Src-wide', ['src/'], 'src/RULES.md'),
-    ];
-  }
-
-  function setupGitMocks(opts: {
-    mergeBase?: string;
-    changedFiles?: string[];
-    trackedFiles?: string[];
-    head?: string;
-    skipMergeBase?: boolean;
-  }) {
-    const mergeBase = opts.mergeBase ?? 'merge-base-hash';
-    const changedFiles = opts.changedFiles ?? [];
-    const trackedFiles = opts.trackedFiles ?? changedFiles;
-
-    // getMergeBase (skipped when explicit comparisonRef is provided)
-    if (!opts.skipMergeBase) {
-      mockedExeca.mockResolvedValueOnce({ stdout: mergeBase } as never);
-    }
-    // collectInScopeFiles: git ls-files (tracked)
+    mockMergeBase('base-sha');
+    // getChangedFiles: diff + untracked
     mockedExeca.mockResolvedValueOnce({
-      stdout: trackedFiles.join('\n'),
+      stdout: 'src/foo.ts\ndocs/readme.md\n',
     } as never);
-    // collectInScopeFiles: git ls-files --others (untracked)
     mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-    // getChangedFiles: git diff --name-only
-    mockedExeca.mockResolvedValueOnce({
-      stdout: changedFiles.join('\n'),
-    } as never);
-    // getChangedFiles: git ls-files --others (untracked)
-    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-    // getCurrentHead — only mocked when head is explicitly provided (for lastRun.write tests)
-    if (opts.head !== undefined) {
-      mockedExeca.mockResolvedValueOnce({ stdout: opts.head } as never);
-    }
-  }
-
-  it('triggers rules whose scope contains changed files', async () => {
-    setupGitMocks({ changedFiles: ['src/api/routes.ts'] });
-    // Mock ignore filter that doesn't filter anything
-    mockedBuildIgnoreFilter.mockResolvedValueOnce({
-      ignores: () => false,
-    } as never);
-
-    const rules = makeRules();
-    const result = await detectChanges({
-      projectRoot: PROJECT_ROOT,
-      config: baseConfig,
-      rules,
+    // listAllFiles: not used in legacy branch — but detectChanges still calls it (filesByRule built up front).
+    mockListAllFiles(['src/foo.ts', 'docs/readme.md']);
+    // computeFilesHash for inScope set
+    mockedComputeFilesHash.mockResolvedValueOnce({
+      filesHash: 'd',
+      files: { 'src/foo.ts': 'h' },
     });
 
-    const triggeredNames = result.triggeredRules.map((r) => r.name);
-    // Global rule matches everything, API rule matches src/api/, Src rule matches src/
-    expect(triggeredNames).toContain('Global Rule');
-    expect(triggeredNames).toContain('API Rule');
-    expect(triggeredNames).toContain('Src Rule');
-  });
-
-  it('does not trigger rules when no files match their scope', async () => {
-    setupGitMocks({ changedFiles: ['docs/README.md'] });
-    mockedBuildIgnoreFilter.mockResolvedValueOnce({
-      ignores: () => false,
-    } as never);
-
-    const rules = makeRules();
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
-      config: baseConfig,
-      rules,
+      config,
+      rules: [rule],
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
     });
 
-    const triggeredNames = result.triggeredRules.map((r) => r.name);
-    // Global rule matches everything, but API and Src rules don't match docs/
-    expect(triggeredNames).toContain('Global Rule');
-    expect(triggeredNames).not.toContain('API Rule');
-    expect(triggeredNames).not.toContain('Src Rule');
+    expect(result.triggeredRules).toEqual([rule]);
+    expect(result.changedFilesByRule.get('r1')).toEqual(['src/foo.ts']);
+    expect(result.cachedRules).toEqual([]);
+    expect(result.writeRuleCacheEntries).toBeUndefined();
   });
 
-  it('returns no triggered rules when there are no changes', async () => {
-    setupGitMocks({ changedFiles: [] });
-    mockedBuildIgnoreFilter.mockResolvedValueOnce({
-      ignores: () => false,
-    } as never);
+  it('does not return writeRuleCacheEntries when lastRun.write is off', async () => {
+    const rule = makeRule({ id: 'r1', name: 'R1', inclusions: ['src/**'] });
+    const config = makeConfig({ lastRun: { read: false, write: false } });
+
+    mockMergeBase('base');
+    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
+    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
+    mockListAllFiles([]);
+    mockedComputeFilesHash.mockResolvedValueOnce({ filesHash: 'd', files: {} });
 
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
-      config: baseConfig,
-      rules: makeRules(),
+      config,
+      rules: [rule],
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
+    });
+
+    expect(result.writeRuleCacheEntries).toBeUndefined();
+  });
+});
+
+describe('detectChanges — per-rule cache (lastRun.read on)', () => {
+  it('triggers all rules when no prior state exists', async () => {
+    const ruleA = makeRule({ id: 'a', name: 'A', inclusions: ['src/**'] });
+    const ruleB = makeRule({ id: 'b', name: 'B', inclusions: ['docs/**'] });
+    const config = makeConfig({ lastRun: { read: true, write: true } });
+
+    mockMergeBase('base');
+    mockListAllFiles(['src/foo.ts', 'docs/readme.md']);
+    mockedComputeFilesHash.mockResolvedValueOnce({
+      filesHash: 'd',
+      files: { 'src/foo.ts': 'h1', 'docs/readme.md': 'h2' },
+    });
+    mockLastRunFile(null); // no file
+
+    const result = await detectChanges({
+      projectRoot: PROJECT_ROOT,
+      config,
+      rules: [ruleA, ruleB],
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
+    });
+
+    expect(result.triggeredRules.map((r) => r.id).sort()).toEqual(['a', 'b']);
+    expect(result.cachedRules).toEqual([]);
+    expect(result.writeRuleCacheEntries).toBeDefined();
+  });
+
+  it('skips a rule whose fingerprint and file hashes are unchanged', async () => {
+    const rule = makeRule({ id: 'a', name: 'A', inclusions: ['src/**'] });
+    const config = makeConfig({ lastRun: { read: true, write: true } });
+
+    mockMergeBase('base');
+    mockListAllFiles(['src/foo.ts']);
+    mockedComputeFilesHash.mockResolvedValueOnce({
+      filesHash: 'd',
+      files: { 'src/foo.ts': 'h-current' },
+    });
+
+    // Compute the expected fingerprint via the production function
+    const { computeRuleFingerprint } =
+      await import('../../../src/lib/fingerprint.js');
+    const fp = computeRuleFingerprint(rule, {
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
+    });
+
+    mockLastRunFile({
+      rules: {
+        a: {
+          files: { 'src/foo.ts': 'h-current' },
+          fingerprint: fp,
+          status: 'pass',
+        },
+      },
+    });
+
+    const result = await detectChanges({
+      projectRoot: PROJECT_ROOT,
+      config,
+      rules: [rule],
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
     });
 
     expect(result.triggeredRules).toEqual([]);
-    expect(result.changedFiles).toEqual([]);
+    expect(result.cachedRules.map((r) => r.id)).toEqual(['a']);
   });
 
-  it('uses explicit comparisonRef when provided', async () => {
-    setupGitMocks({
-      skipMergeBase: true,
-      changedFiles: ['src/foo.ts'],
+  it('triggers when fingerprint changes (rule text edit)', async () => {
+    const rule = makeRule({ id: 'a', name: 'A', inclusions: ['src/**'] });
+    const config = makeConfig({ lastRun: { read: true, write: false } });
+
+    mockMergeBase('base');
+    mockListAllFiles(['src/foo.ts']);
+    mockedComputeFilesHash.mockResolvedValueOnce({
+      filesHash: 'd',
+      files: { 'src/foo.ts': 'h1' },
     });
-    mockedBuildIgnoreFilter.mockResolvedValueOnce({
-      ignores: () => false,
-    } as never);
-
-    const result = await detectChanges({
-      projectRoot: PROJECT_ROOT,
-      config: baseConfig,
-      rules: makeRules(),
-      comparisonRef: 'explicit-ref',
-    });
-
-    expect(result.comparisonRef).toBe('explicit-ref');
-    expect(mockedExeca).toHaveBeenCalledWith(
-      'git',
-      ['diff', '--name-only', 'explicit-ref'],
-      { cwd: PROJECT_ROOT },
-    );
-  });
-
-  it('reads last-run commitHash when lastRun.read is enabled', async () => {
-    const ciConfig = ConfigSchema.parse({
-      lastRun: { read: true, write: false, files: false },
-    });
-
-    // getMergeBase
-    mockedExeca.mockResolvedValueOnce({ stdout: 'merge-base-hash' } as never);
-    // collectInScopeFiles: git ls-files (tracked)
-    mockedExeca.mockResolvedValueOnce({ stdout: 'src/foo.ts' } as never);
-    // collectInScopeFiles: git ls-files --others
-    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-    // readLastRunData — JSON format with commitHash only (no filesHash)
-    mockedReadFile.mockResolvedValueOnce('{"commitHash":"aabbccdd1122"}\n');
-    // getChangedFiles: git diff (should use commitHash)
-    mockedExeca.mockResolvedValueOnce({ stdout: 'src/foo.ts' } as never);
-    // getChangedFiles: git ls-files --others
-    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-    mockedBuildIgnoreFilter.mockResolvedValueOnce({
-      ignores: () => false,
-    } as never);
-
-    const result = await detectChanges({
-      projectRoot: PROJECT_ROOT,
-      config: ciConfig,
-      rules: makeRules(),
-    });
-
-    // comparisonRef should be merge-base (agents get this), but diff used last-run
-    expect(result.comparisonRef).toBe('merge-base-hash');
-    expect(mockedExeca).toHaveBeenCalledWith(
-      'git',
-      ['diff', '--name-only', 'aabbccdd1122'],
-      { cwd: PROJECT_ROOT },
-    );
-  });
-
-  it('falls back to comparisonRef when last-run file does not exist', async () => {
-    const ciConfig = ConfigSchema.parse({
-      lastRun: { read: true, write: false, files: false },
-    });
-
-    // getMergeBase
-    mockedExeca.mockResolvedValueOnce({ stdout: 'merge-base-hash' } as never);
-    // collectInScopeFiles: git ls-files
-    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-    // collectInScopeFiles: git ls-files --others
-    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-    // readLastRunData — file missing
-    const error = new Error('ENOENT') as NodeJS.ErrnoException;
-    error.code = 'ENOENT';
-    mockedReadFile.mockRejectedValueOnce(error);
-    // getChangedFiles: git diff (falls back to merge-base)
-    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-    // getChangedFiles: git ls-files --others
-    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-    mockedBuildIgnoreFilter.mockResolvedValueOnce({
-      ignores: () => false,
-    } as never);
-
-    const result = await detectChanges({
-      projectRoot: PROJECT_ROOT,
-      config: ciConfig,
-      rules: makeRules(),
-    });
-
-    expect(mockedExeca).toHaveBeenCalledWith(
-      'git',
-      ['diff', '--name-only', 'merge-base-hash'],
-      { cwd: PROJECT_ROOT },
-    );
-    expect(result.comparisonRef).toBe('merge-base-hash');
-  });
-
-  it('returns commitLastRunHash callback when lastRun.write is enabled', async () => {
-    const config = ConfigSchema.parse({
-      lastRun: { read: false, write: true, files: false },
-    });
-
-    setupGitMocks({ changedFiles: [], head: 'new-head-hash' });
-    mockedBuildIgnoreFilter.mockResolvedValueOnce({
-      ignores: () => false,
-    } as never);
-
-    const result = await detectChanges({
-      projectRoot: PROJECT_ROOT,
-      config,
-      rules: [],
-    });
-
-    // Should NOT write immediately — deferred to caller
-    expect(mockedWriteFile).not.toHaveBeenCalled();
-    expect(result.commitLastRunHash).toBeDefined();
-
-    // Caller invokes the callback after successful run
-    // getCurrentHead call inside the deferred writer
-    mockedExeca.mockResolvedValueOnce({ stdout: 'new-head-hash' } as never);
-    mockedMkdir.mockResolvedValueOnce(undefined);
-    mockedWriteFile.mockResolvedValueOnce(undefined);
-    const commit = result.commitLastRunHash;
-    expect(commit).toBeDefined();
-    if (commit) await commit();
-
-    // Should write JSON format with commitHash and filesHash
-    expect(mockedWriteFile).toHaveBeenCalledWith(
-      path.join(PROJECT_ROOT, '.prosecheck/last-user-run'),
-      expect.stringContaining('"commitHash":"new-head-hash"'),
-      'utf-8',
-    );
-  });
-
-  it('does not return commitLastRunHash when lastRun.write is disabled', async () => {
-    const config = ConfigSchema.parse({
-      lastRun: { read: false, write: false, files: false },
-    });
-
-    setupGitMocks({ changedFiles: [] });
-    mockedBuildIgnoreFilter.mockResolvedValueOnce({
-      ignores: () => false,
-    } as never);
-
-    const result = await detectChanges({
-      projectRoot: PROJECT_ROOT,
-      config,
-      rules: [],
-    });
-
-    expect(result.commitLastRunHash).toBeUndefined();
-    expect(mockedWriteFile).not.toHaveBeenCalled();
-  });
-
-  it('populates changedFilesByRule correctly', async () => {
-    setupGitMocks({
-      changedFiles: ['src/api/routes.ts', 'src/utils.ts', 'docs/README.md'],
-    });
-    mockedBuildIgnoreFilter.mockResolvedValueOnce({
-      ignores: () => false,
-    } as never);
-
-    const rules = makeRules();
-    const result = await detectChanges({
-      projectRoot: PROJECT_ROOT,
-      config: baseConfig,
-      rules,
-    });
-
-    const globalRuleFiles = result.changedFilesByRule.get(rules[0]?.id ?? '');
-    const apiRuleFiles = result.changedFilesByRule.get(rules[1]?.id ?? '');
-    const srcRuleFiles = result.changedFilesByRule.get(rules[2]?.id ?? '');
-
-    // Global rule sees all files
-    expect(globalRuleFiles).toContain('src/api/routes.ts');
-    expect(globalRuleFiles).toContain('src/utils.ts');
-    expect(globalRuleFiles).toContain('docs/README.md');
-    // API rule only sees src/api/ files
-    expect(apiRuleFiles).toEqual(['src/api/routes.ts']);
-    // Src rule sees all src/ files
-    expect(srcRuleFiles).toContain('src/api/routes.ts');
-    expect(srcRuleFiles).toContain('src/utils.ts');
-    expect(srcRuleFiles).not.toContain('docs/README.md');
-  });
-
-  describe('tiered fallback detection', () => {
-    it('Tier 1: uses stored per-file hashes to detect changes', async () => {
-      const config = ConfigSchema.parse({
-        lastRun: { read: true, write: false, files: false },
-      });
-
-      // getMergeBase
-      mockedExeca.mockResolvedValueOnce({ stdout: 'merge-base-hash' } as never);
-      // collectInScopeFiles: git ls-files (tracked)
-      mockedExeca.mockResolvedValueOnce({
-        stdout: 'src/foo.ts\nsrc/bar.ts',
-      } as never);
-      // collectInScopeFiles: git ls-files --others
-      mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-      // readLastRunData — JSON with per-file hashes
-      mockedReadFile.mockResolvedValueOnce(
-        JSON.stringify({
-          commitHash: 'old-hash',
-          filesHash: 'old-digest',
-          files: { 'src/foo.ts': 'hash-unchanged', 'src/bar.ts': 'hash-old' },
-        }) + '\n',
-      );
-      // computeFilesHash returns current hashes (bar.ts changed)
-      mockedComputeFilesHash.mockResolvedValueOnce({
-        filesHash: 'new-digest',
-        files: {
-          'src/foo.ts': 'hash-unchanged',
-          'src/bar.ts': 'hash-new',
+    mockLastRunFile({
+      rules: {
+        a: {
+          files: { 'src/foo.ts': 'h1' },
+          fingerprint: 'stale-fp',
+          status: 'pass',
         },
-      });
-
-      mockedBuildIgnoreFilter.mockResolvedValueOnce({
-        ignores: () => false,
-      } as never);
-
-      const rules = [
-        createRule('Src Rule', 'Src-wide', ['src/'], 'src/RULES.md'),
-      ];
-      const result = await detectChanges({
-        projectRoot: PROJECT_ROOT,
-        config,
-        rules,
-      });
-
-      // Should detect bar.ts as changed via file hash diff (Tier 1)
-      expect(result.changedFiles).toContain('src/bar.ts');
-      expect(result.changedFiles).not.toContain('src/foo.ts');
-      expect(result.triggeredRules).toHaveLength(1);
-      // Should NOT have called git diff (skipped Tier 3)
-      const diffCalls = mockedExeca.mock.calls.filter(
-        (c) => c[0] === 'git' && (c[1] as string[])[0] === 'diff',
-      );
-      expect(diffCalls).toHaveLength(0);
+      },
     });
-
-    it('Tier 2: skips all rules when digest matches (no per-file detail)', async () => {
-      const config = ConfigSchema.parse({
-        lastRun: { read: true, write: false, files: false },
-      });
-
-      // getMergeBase
-      mockedExeca.mockResolvedValueOnce({ stdout: 'merge-base-hash' } as never);
-      // collectInScopeFiles: git ls-files
-      mockedExeca.mockResolvedValueOnce({ stdout: 'src/foo.ts' } as never);
-      // collectInScopeFiles: git ls-files --others
-      mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-      // readLastRunData — JSON with filesHash only, no files map
-      mockedReadFile.mockResolvedValueOnce(
-        JSON.stringify({
-          commitHash: 'old-hash',
-          filesHash: 'same-digest',
-        }) + '\n',
-      );
-      // computeFilesHash returns matching digest
-      mockedComputeFilesHash.mockResolvedValueOnce({
-        filesHash: 'same-digest',
-        files: { 'src/foo.ts': 'hash1' },
-      });
-
-      mockedBuildIgnoreFilter.mockResolvedValueOnce({
-        ignores: () => false,
-      } as never);
-
-      const rules = makeRules();
-      const result = await detectChanges({
-        projectRoot: PROJECT_ROOT,
-        config,
-        rules,
-      });
-
-      // Digest matches → no rules triggered
-      expect(result.triggeredRules).toHaveLength(0);
-      expect(result.changedFiles).toHaveLength(0);
-      // Should NOT have called git diff
-      const diffCalls = mockedExeca.mock.calls.filter(
-        (c) => c[0] === 'git' && (c[1] as string[])[0] === 'diff',
-      );
-      expect(diffCalls).toHaveLength(0);
-    });
-
-    it('Tier 2→3: falls through to git-based when digest mismatches', async () => {
-      const config = ConfigSchema.parse({
-        lastRun: { read: true, write: false, files: false },
-      });
-
-      // getMergeBase
-      mockedExeca.mockResolvedValueOnce({ stdout: 'merge-base-hash' } as never);
-      // collectInScopeFiles: git ls-files
-      mockedExeca.mockResolvedValueOnce({ stdout: 'src/foo.ts' } as never);
-      // collectInScopeFiles: git ls-files --others
-      mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-      // readLastRunData — JSON with filesHash only (no files map), different digest
-      mockedReadFile.mockResolvedValueOnce(
-        JSON.stringify({
-          commitHash: 'stored-commit',
-          filesHash: 'old-digest',
-        }) + '\n',
-      );
-      // computeFilesHash returns different digest
-      mockedComputeFilesHash.mockResolvedValueOnce({
-        filesHash: 'new-digest',
-        files: { 'src/foo.ts': 'hash1' },
-      });
-      // getChangedFiles: git diff (should use stored commitHash)
-      mockedExeca.mockResolvedValueOnce({ stdout: 'src/foo.ts' } as never);
-      // getChangedFiles: git ls-files --others
-      mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-
-      mockedBuildIgnoreFilter.mockResolvedValueOnce({
-        ignores: () => false,
-      } as never);
-
-      const rules = makeRules();
-      const result = await detectChanges({
-        projectRoot: PROJECT_ROOT,
-        config,
-        rules,
-      });
-
-      // Should have fallen through to git diff with stored commitHash
-      expect(mockedExeca).toHaveBeenCalledWith(
-        'git',
-        ['diff', '--name-only', 'stored-commit'],
-        { cwd: PROJECT_ROOT },
-      );
-      expect(result.triggeredRules.length).toBeGreaterThan(0);
-    });
-
-    it('Tier 1: detects removed files', async () => {
-      const config = ConfigSchema.parse({
-        lastRun: { read: true, write: false, files: false },
-      });
-
-      // getMergeBase
-      mockedExeca.mockResolvedValueOnce({ stdout: 'merge-base-hash' } as never);
-      // collectInScopeFiles: git ls-files (only foo.ts remains)
-      mockedExeca.mockResolvedValueOnce({ stdout: 'src/foo.ts' } as never);
-      // collectInScopeFiles: git ls-files --others
-      mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-      // readLastRunData — stored hashes include bar.ts which no longer exists
-      mockedReadFile.mockResolvedValueOnce(
-        JSON.stringify({
-          commitHash: 'old-hash',
-          filesHash: 'old-digest',
-          files: {
-            'src/foo.ts': 'hash-foo',
-            'src/bar.ts': 'hash-bar',
-          },
-        }) + '\n',
-      );
-      // computeFilesHash returns only foo.ts (bar.ts removed)
-      mockedComputeFilesHash.mockResolvedValueOnce({
-        filesHash: 'new-digest',
-        files: { 'src/foo.ts': 'hash-foo' },
-      });
-
-      mockedBuildIgnoreFilter.mockResolvedValueOnce({
-        ignores: () => false,
-      } as never);
-
-      const rules = [
-        createRule('Src Rule', 'Src-wide', ['src/'], 'src/RULES.md'),
-      ];
-      const result = await detectChanges({
-        projectRoot: PROJECT_ROOT,
-        config,
-        rules,
-      });
-
-      // bar.ts was removed → shows as changed
-      expect(result.changedFiles).toContain('src/bar.ts');
-      expect(result.triggeredRules).toHaveLength(1);
-    });
-  });
-
-  it('filters out globally ignored files from changedFiles', async () => {
-    // getMergeBase
-    mockedExeca.mockResolvedValueOnce({ stdout: 'merge-base-hash' } as never);
-    // collectInScopeFiles: git ls-files
-    mockedExeca.mockResolvedValueOnce({
-      stdout: 'src/foo.ts\nnode_modules/pkg/index.js\ndist/bundle.js',
-    } as never);
-    // collectInScopeFiles: git ls-files --others
-    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-    // getChangedFiles: git diff
-    mockedExeca.mockResolvedValueOnce({
-      stdout: 'src/foo.ts\nnode_modules/pkg/index.js\ndist/bundle.js',
-    } as never);
-    // getChangedFiles: git ls-files --others
-    mockedExeca.mockResolvedValueOnce({ stdout: '' } as never);
-
-    // Mock ignore filter that ignores node_modules/ and dist/
-    mockedBuildIgnoreFilter.mockResolvedValueOnce({
-      ignores: (f: string) =>
-        f.startsWith('node_modules/') || f.startsWith('dist/'),
-    } as never);
 
     const result = await detectChanges({
       projectRoot: PROJECT_ROOT,
-      config: baseConfig,
-      rules: makeRules(),
+      config,
+      rules: [rule],
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
     });
 
-    expect(result.changedFiles).toEqual(['src/foo.ts']);
-    expect(result.changedFiles).not.toContain('node_modules/pkg/index.js');
-    expect(result.changedFiles).not.toContain('dist/bundle.js');
+    expect(result.triggeredRules.map((r) => r.id)).toEqual(['a']);
+    expect(result.cachedRules).toEqual([]);
+  });
+
+  it('triggers when an in-scope file changes', async () => {
+    const rule = makeRule({ id: 'a', name: 'A', inclusions: ['src/**'] });
+    const config = makeConfig({ lastRun: { read: true, write: false } });
+    const { computeRuleFingerprint } =
+      await import('../../../src/lib/fingerprint.js');
+    const fp = computeRuleFingerprint(rule, {
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
+    });
+
+    mockMergeBase('base');
+    mockListAllFiles(['src/foo.ts']);
+    mockedComputeFilesHash.mockResolvedValueOnce({
+      filesHash: 'd',
+      files: { 'src/foo.ts': 'h-new' },
+    });
+    mockLastRunFile({
+      rules: {
+        a: {
+          files: { 'src/foo.ts': 'h-old' },
+          fingerprint: fp,
+          status: 'pass',
+        },
+      },
+    });
+
+    const result = await detectChanges({
+      projectRoot: PROJECT_ROOT,
+      config,
+      rules: [rule],
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
+    });
+
+    expect(result.triggeredRules.map((r) => r.id)).toEqual(['a']);
+    expect(result.changedFilesByRule.get('a')).toEqual(['src/foo.ts']);
+  });
+
+  it('does not trigger when only out-of-scope files change', async () => {
+    const rule = makeRule({ id: 'a', name: 'A', inclusions: ['src/**'] });
+    const config = makeConfig({ lastRun: { read: true, write: false } });
+    const { computeRuleFingerprint } =
+      await import('../../../src/lib/fingerprint.js');
+    const fp = computeRuleFingerprint(rule, {
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
+    });
+
+    mockMergeBase('base');
+    mockListAllFiles(['src/foo.ts', 'docs/readme.md']);
+    // src/foo.ts unchanged, docs/readme.md changed — but docs/ is out of scope
+    mockedComputeFilesHash.mockResolvedValueOnce({
+      filesHash: 'd',
+      files: { 'src/foo.ts': 'h1', 'docs/readme.md': 'new' },
+    });
+    mockLastRunFile({
+      rules: {
+        a: {
+          files: { 'src/foo.ts': 'h1' },
+          fingerprint: fp,
+          status: 'pass',
+        },
+      },
+    });
+
+    const result = await detectChanges({
+      projectRoot: PROJECT_ROOT,
+      config,
+      rules: [rule],
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
+    });
+
+    expect(result.triggeredRules).toEqual([]);
+    expect(result.cachedRules.map((r) => r.id)).toEqual(['a']);
+  });
+
+  it('handles in-scope file removal (stored file no longer exists)', async () => {
+    const rule = makeRule({ id: 'a', name: 'A', inclusions: ['src/**'] });
+    const config = makeConfig({ lastRun: { read: true, write: false } });
+    const { computeRuleFingerprint } =
+      await import('../../../src/lib/fingerprint.js');
+    const fp = computeRuleFingerprint(rule, {
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
+    });
+
+    mockMergeBase('base');
+    mockListAllFiles(['src/foo.ts']);
+    mockedComputeFilesHash.mockResolvedValueOnce({
+      filesHash: 'd',
+      files: { 'src/foo.ts': 'h1' },
+    });
+    mockLastRunFile({
+      rules: {
+        a: {
+          files: { 'src/foo.ts': 'h1', 'src/deleted.ts': 'h2' },
+          fingerprint: fp,
+          status: 'pass',
+        },
+      },
+    });
+
+    const result = await detectChanges({
+      projectRoot: PROJECT_ROOT,
+      config,
+      rules: [rule],
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
+    });
+
+    expect(result.triggeredRules.map((r) => r.id)).toEqual(['a']);
+  });
+
+  it('writeRuleCacheEntries updates only triggered rules', async () => {
+    const ruleA = makeRule({ id: 'a', name: 'A', inclusions: ['src/**'] });
+    const ruleB = makeRule({ id: 'b', name: 'B', inclusions: ['docs/**'] });
+    const config = makeConfig({ lastRun: { read: true, write: true } });
+    const { computeRuleFingerprint } =
+      await import('../../../src/lib/fingerprint.js');
+    const fpB = computeRuleFingerprint(ruleB, {
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
+    });
+
+    mockMergeBase('base');
+    mockListAllFiles(['src/foo.ts', 'docs/readme.md']);
+    mockedComputeFilesHash.mockResolvedValueOnce({
+      filesHash: 'd',
+      files: { 'src/foo.ts': 'h-new', 'docs/readme.md': 'h-same' },
+    });
+    // Initial read: rule A stale, rule B current
+    mockLastRunFile({
+      rules: {
+        a: {
+          files: { 'src/foo.ts': 'h-old' },
+          fingerprint: 'old-fp',
+          status: 'pass',
+        },
+        b: {
+          files: { 'docs/readme.md': 'h-same' },
+          fingerprint: fpB,
+          status: 'pass',
+        },
+      },
+    });
+
+    const result = await detectChanges({
+      projectRoot: PROJECT_ROOT,
+      config,
+      rules: [ruleA, ruleB],
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
+    });
+
+    expect(result.triggeredRules.map((r) => r.id)).toEqual(['a']);
+    expect(result.cachedRules.map((r) => r.id)).toEqual(['b']);
+    expect(result.writeRuleCacheEntries).toBeDefined();
+
+    // Cache writer re-reads existing, updates rule A only
+    mockLastRunFile({
+      rules: {
+        a: {
+          files: { 'src/foo.ts': 'h-old' },
+          fingerprint: 'old-fp',
+          status: 'pass',
+        },
+        b: {
+          files: { 'docs/readme.md': 'h-same' },
+          fingerprint: fpB,
+          status: 'pass',
+        },
+      },
+    });
+    mockedWriteFile.mockResolvedValueOnce(undefined);
+
+    await result.writeRuleCacheEntries?.(new Set(['a']));
+
+    const writeCall = mockedWriteFile.mock.calls[0];
+    expect(writeCall).toBeDefined();
+    const written = JSON.parse(writeCall?.[1] as string) as LastRunData;
+    // rule A updated with new hashes
+    expect(written.rules['a']?.files).toEqual({ 'src/foo.ts': 'h-new' });
+    // rule B untouched
+    expect(written.rules['b']?.fingerprint).toBe(fpB);
+  });
+
+  it('writeRuleCacheEntries deletes triggered rules that did not pass', async () => {
+    const rule = makeRule({ id: 'a', name: 'A', inclusions: ['src/**'] });
+    const config = makeConfig({ lastRun: { read: true, write: true } });
+
+    mockMergeBase('base');
+    mockListAllFiles(['src/foo.ts']);
+    mockedComputeFilesHash.mockResolvedValueOnce({
+      filesHash: 'd',
+      files: { 'src/foo.ts': 'h1' },
+    });
+    mockLastRunFile({
+      rules: {
+        a: { files: {}, fingerprint: 'old', status: 'pass' },
+      },
+    });
+
+    const result = await detectChanges({
+      projectRoot: PROJECT_ROOT,
+      config,
+      rules: [rule],
+      promptTemplate: 'tpl',
+      globalPrompt: undefined,
+    });
+
+    mockLastRunFile({
+      rules: {
+        a: { files: {}, fingerprint: 'old', status: 'pass' },
+      },
+    });
+    mockedWriteFile.mockResolvedValueOnce(undefined);
+
+    // Rule ran but did not pass → entry should be deleted
+    await result.writeRuleCacheEntries?.(new Set());
+
+    const written = JSON.parse(
+      mockedWriteFile.mock.calls[0]?.[1] as string,
+    ) as LastRunData;
+    expect(written.rules).toEqual({});
   });
 });

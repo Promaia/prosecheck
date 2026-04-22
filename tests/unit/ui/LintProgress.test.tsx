@@ -125,6 +125,17 @@ describe('LintProgress', () => {
     expect(frame).toContain('Rule A');
   });
 
+  it('renders cached rules with CACHED label', () => {
+    const rules: RuleProgressEntry[] = [
+      makeEntry({ ruleId: 'rule-a', name: 'Rule A', runStatus: 'cached' }),
+    ];
+
+    const frame = getFrame(render(<LintProgress rules={rules} />));
+
+    expect(frame).toContain('CACHED');
+    expect(frame).toContain('Rule A');
+  });
+
   it('renders done with no result as DROP', () => {
     const rules: RuleProgressEntry[] = [
       makeEntry({ ruleId: 'rule-a', name: 'Rule A', runStatus: 'done' }),

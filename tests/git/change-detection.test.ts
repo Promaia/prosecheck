@@ -7,7 +7,7 @@ import { execa } from 'execa';
 import {
   detectChanges,
   getMergeBase,
-  readLastRunHash,
+  readLastRunData,
 } from '../../src/lib/change-detection.js';
 import { ConfigSchema } from '../../src/lib/config-schema.js';
 import { createRule } from '../../src/lib/rule.js';
@@ -18,8 +18,6 @@ import {
   type TestRepo,
 } from '../helpers/git-repo.js';
 
-// --- Tests ---
-
 // Collect repos to clean up after each test
 const repos: TestRepo[] = [];
 
@@ -29,6 +27,11 @@ afterEach(async () => {
   }
   repos.length = 0;
 });
+
+const fingerprintInputs = {
+  promptTemplate: 'tpl',
+  globalPrompt: undefined,
+};
 
 describe('git integration: basic change detection', () => {
   it('detects changed and added files on a feature branch', async () => {
@@ -57,6 +60,7 @@ describe('git integration: basic change detection', () => {
       projectRoot: repo.dir,
       config,
       rules,
+      ...fingerprintInputs,
     });
 
     expect(result.changedFiles).toContain('src/foo.ts');
@@ -132,6 +136,7 @@ describe('git integration: scope matching with nested directories', () => {
       projectRoot: repo.dir,
       config,
       rules: [apiRule, srcRule, globalRule],
+      ...fingerprintInputs,
     });
 
     const apiFiles = result.changedFilesByRule.get(apiRule.id);
@@ -178,6 +183,7 @@ describe('git integration: global ignore filtering', () => {
       projectRoot: repo.dir,
       config,
       rules,
+      ...fingerprintInputs,
     });
 
     expect(result.changedFiles).toContain('src/app.ts');
@@ -186,8 +192,8 @@ describe('git integration: global ignore filtering', () => {
   }, 30_000);
 });
 
-describe('git integration: incremental run tracking', () => {
-  it('second run only sees files changed after commitLastRunHash', async () => {
+describe('git integration: per-rule cache tracking', () => {
+  it('second run skips rule whose in-scope files are unchanged', async () => {
     const repo = await createTestRepo();
     repos.push(repo);
 
@@ -200,43 +206,87 @@ describe('git integration: incremental run tracking', () => {
     await writeTestFile(repo.dir, 'src/file-a.ts');
     await gitCommit(repo.dir, 'Commit A');
 
-    const configFirstRun = ConfigSchema.parse({
+    const config = ConfigSchema.parse({
       lastRun: { read: true, write: true },
-      globalIgnore: [],
+      globalIgnore: ['.prosecheck/'],
       additionalIgnore: [],
     });
-    const rules = [createRule('All', 'Everything', [], 'RULES.md')];
+    const rules = [createRule('Src', 'Src only', ['src/'], 'RULES.md')];
 
-    // First run
+    // First run — no cache; rule must trigger
     const result1 = await detectChanges({
       projectRoot: repo.dir,
-      config: configFirstRun,
+      config,
       rules,
+      ...fingerprintInputs,
     });
 
-    expect(result1.changedFiles).toContain('src/file-a.ts');
-    expect(result1.commitLastRunHash).toBeDefined();
-    const commit = result1.commitLastRunHash;
-    if (commit) await commit();
+    expect(result1.triggeredRules).toHaveLength(1);
+    expect(result1.cachedRules).toHaveLength(0);
+    expect(result1.writeRuleCacheEntries).toBeDefined();
 
-    // Verify the hash was written
-    const savedHash = await readLastRunHash(repo.dir);
-    expect(savedHash).toMatch(/^[0-9a-f]{40}$/);
+    // Simulate rule passing: persist cache entry
+    const write = result1.writeRuleCacheEntries;
+    if (write) await write(new Set(rules.map((r) => r.id)));
 
-    // Commit B: add file-b
-    await writeTestFile(repo.dir, 'src/file-b.ts');
-    await gitCommit(repo.dir, 'Commit B');
+    const saved = await readLastRunData(repo.dir);
+    expect(saved?.rules[rules[0]?.id ?? '']?.status).toBe('pass');
 
-    // Second run (reads last-run hash)
+    // Second run with no file changes — rule should be cached
     const result2 = await detectChanges({
       projectRoot: repo.dir,
-      config: configFirstRun,
+      config,
       rules,
+      ...fingerprintInputs,
     });
 
-    // Should only see file-b, not file-a
-    expect(result2.changedFiles).toContain('src/file-b.ts');
-    expect(result2.changedFiles).not.toContain('src/file-a.ts');
+    expect(result2.triggeredRules).toHaveLength(0);
+    expect(result2.cachedRules).toHaveLength(1);
+  }, 30_000);
+
+  it('second run re-triggers rule after an in-scope file changes', async () => {
+    const repo = await createTestRepo();
+    repos.push(repo);
+
+    await writeTestFile(repo.dir, 'base.ts');
+    await gitCommit(repo.dir, 'Base commit');
+
+    await execa('git', ['checkout', '-b', 'feature'], { cwd: repo.dir });
+
+    await writeTestFile(repo.dir, 'src/file-a.ts', 'const a = 1;\n');
+    await gitCommit(repo.dir, 'Commit A');
+
+    const config = ConfigSchema.parse({
+      lastRun: { read: true, write: true },
+      globalIgnore: ['.prosecheck/'],
+      additionalIgnore: [],
+    });
+    const rules = [createRule('Src', 'Src only', ['src/'], 'RULES.md')];
+
+    const result1 = await detectChanges({
+      projectRoot: repo.dir,
+      config,
+      rules,
+      ...fingerprintInputs,
+    });
+    const write = result1.writeRuleCacheEntries;
+    if (write) await write(new Set(rules.map((r) => r.id)));
+
+    // Modify file-a
+    await writeTestFile(repo.dir, 'src/file-a.ts', 'const a = 2;\n');
+
+    const result2 = await detectChanges({
+      projectRoot: repo.dir,
+      config,
+      rules,
+      ...fingerprintInputs,
+    });
+
+    expect(result2.triggeredRules).toHaveLength(1);
+    expect(result2.cachedRules).toHaveLength(0);
+    expect(result2.changedFilesByRule.get(rules[0]?.id ?? '')).toEqual([
+      'src/file-a.ts',
+    ]);
   }, 30_000);
 });
 
@@ -307,7 +357,7 @@ describe('git integration: shallow clone behavior', () => {
     const config = ConfigSchema.parse({
       globalIgnore: [],
       additionalIgnore: [],
-      lastRun: { read: false, write: false, files: false },
+      lastRun: { read: false, write: false },
     });
     const rules = [createRule('All', 'Everything', [], 'RULES.md')];
 
@@ -317,6 +367,7 @@ describe('git integration: shallow clone behavior', () => {
       config,
       rules,
       comparisonRef: headHash.trim(),
+      ...fingerprintInputs,
     });
 
     expect(result.changedFiles).toContain('src/new.ts');
@@ -344,6 +395,7 @@ describe('git integration: no changes detected', () => {
       projectRoot: repo.dir,
       config,
       rules,
+      ...fingerprintInputs,
     });
 
     expect(result.changedFiles).toEqual([]);

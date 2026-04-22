@@ -94,7 +94,7 @@ describe('ConfigSchema', () => {
   it('has descriptions on top-level fields', () => {
     // Verify .describe() metadata is present on key fields
     expect(ConfigSchema.description).toBe('Prosecheck configuration');
-    expect(LastRunSchema.description).toContain('Incremental run tracking');
+    expect(LastRunSchema.description).toContain('Per-rule incremental cache');
     expect(ClaudeCodeSchema.description).toContain('Claude Code');
     expect(CalculatorConfigSchema.description).toContain('rule calculator');
     expect(EnvironmentOverrideSchema.description).toContain('environment');

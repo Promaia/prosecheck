@@ -104,6 +104,24 @@ describe('Summary', () => {
     );
   });
 
+  it('renders cached count', () => {
+    const results = makeResults({
+      cached: [
+        {
+          id: 'a',
+          name: 'A',
+          description: '',
+          inclusions: [],
+          source: 'RULES.md',
+        },
+      ],
+    });
+
+    expect(getFrame(render(<Summary results={results} />))).toContain(
+      '1 cached',
+    );
+  });
+
   it('renders error count', () => {
     const results = makeResults({
       errors: [{ ruleId: 'a', ruleName: 'A', message: 'bad json' }],

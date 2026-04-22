@@ -15,8 +15,8 @@
   "environments": {
     "interactive": {
       "lastRun": {
-        "write": true,
-        "files": true
+        "read": true,
+        "write": true
       }
     }
   }

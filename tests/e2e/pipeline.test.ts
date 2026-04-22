@@ -43,7 +43,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     baseBranch: 'main',
     globalIgnore: ['node_modules/', 'dist/', '.prosecheck/'],
     additionalIgnore: [],
-    lastRun: { read: false, write: false, files: false },
+    lastRun: { read: false, write: false },
     addtlOverheadTimeout: 60,
     hardTotalTimeout: null,
     warnAsError: false,
@@ -384,8 +384,8 @@ describe('E2E: init creates working project scaffold', () => {
   });
 });
 
-describe('E2E: incremental run tracking', () => {
-  it('writes last-run hash and reads it on subsequent run', async () => {
+describe('E2E: per-rule cache tracking', () => {
+  it('writes per-rule cache entries for passing rules, skips them on subsequent unchanged run', async () => {
     await mkdir(path.join(tmpDir, '.prosecheck'), { recursive: true });
     await writeFile(
       path.join(tmpDir, '.prosecheck/config.json'),
@@ -398,7 +398,6 @@ describe('E2E: incremental run tracking', () => {
       'utf-8',
     );
 
-    // Make ls-files return RULES.md so collectInScopeFiles finds real files
     mockExeca.mockImplementation((cmd: string, args: string[]) => {
       const firstArg = args[0];
       if (cmd === 'git' && firstArg === 'merge-base') {
@@ -408,7 +407,7 @@ describe('E2E: incremental run tracking', () => {
         return Promise.resolve({ stdout: 'RULES.md' });
       }
       if (cmd === 'git' && firstArg === 'diff') {
-        return Promise.resolve({ stdout: 'src/foo.ts\nsrc/bar.ts' });
+        return Promise.resolve({ stdout: 'RULES.md' });
       }
       if (cmd === 'git' && firstArg === 'rev-parse') {
         return Promise.resolve({ stdout: 'deadbeef12345678' });
@@ -424,79 +423,40 @@ describe('E2E: incremental run tracking', () => {
       });
     });
 
-    // Run 1: lastRun.write = true
+    // Run 1: write is on — per-rule cache entries should be written for passing rules
     const context1 = makeContext({
       config: makeConfig({
-        lastRun: { read: false, write: true, files: false },
+        lastRun: { read: false, write: true },
       }),
     });
     await runEngine(context1);
 
-    // Verify last-run data was written as JSON
     const lastRunPath = path.join(tmpDir, '.prosecheck/last-user-run');
     const raw = (await readFile(lastRunPath, 'utf-8')).trim();
     const lastRunData = JSON.parse(raw) as Record<string, unknown>;
-    expect(lastRunData['commitHash']).toBe('deadbeef12345678');
-    expect(lastRunData['filesHash']).toBeDefined();
+    const rules = lastRunData['rules'] as Record<string, unknown> | undefined;
+    expect(rules).toBeDefined();
+    const entry = rules?.['rules-md--no-console-log'] as
+      | Record<string, unknown>
+      | undefined;
+    expect(entry).toBeDefined();
+    expect(entry?.['status']).toBe('pass');
+    expect(entry?.['fingerprint']).toBeDefined();
 
-    // Modify RULES.md so content hash changes between runs
-    await writeFile(
-      path.join(tmpDir, 'RULES.md'),
-      '# No console.log\n\nDo not use console.log.\n\n# Keep it short\n\nKeep functions short.\n',
-      'utf-8',
-    );
-
-    // Run 2: lastRun.read = true — content changed so falls through to git-based
-    mockExeca.mockClear();
+    // Run 2: read is on — no files changed, so the rule is cached (not re-run)
     mockRunClaudeCode.mockClear();
-
-    mockExeca.mockImplementation((cmd: string, args: string[]) => {
-      const firstArg = args[0];
-      if (cmd === 'git' && firstArg === 'merge-base') {
-        return Promise.resolve({ stdout: 'abc123def456' });
-      }
-      if (cmd === 'git' && firstArg === 'ls-files') {
-        return Promise.resolve({ stdout: 'RULES.md' });
-      }
-      if (cmd === 'git' && firstArg === 'diff') {
-        // When reading last-run, diff should be called with the last-run hash
-        return Promise.resolve({ stdout: 'RULES.md' });
-      }
-      if (cmd === 'git' && firstArg === 'rev-parse') {
-        return Promise.resolve({ stdout: 'newheadhash1234' });
-      }
-      return Promise.resolve({ stdout: '' });
-    });
-
-    mockRunClaudeCode.mockImplementation(async () => {
-      await writeAgentOutput('rules-md--no-console-log', {
-        status: 'pass',
-        rule: 'No console.log',
-        source: 'RULES.md',
-      });
-      await writeAgentOutput('rules-md--keep-it-short', {
-        status: 'pass',
-        rule: 'Keep it short',
-        source: 'RULES.md',
-      });
-    });
 
     const context2 = makeContext({
       config: makeConfig({
-        lastRun: { read: true, write: false, files: false },
+        lastRun: { read: true, write: false },
       }),
     });
     const result2 = await runEngine(context2);
 
     expect(result2.overallStatus).toBe('pass');
-
-    // Verify git diff was called with the last-run commitHash
-    const diffCalls = mockExeca.mock.calls.filter(
-      (c: unknown[]) => c[0] === 'git' && (c[1] as string[])[0] === 'diff',
-    );
-    expect(diffCalls.length).toBeGreaterThan(0);
-    const diffArgs = diffCalls[0] as unknown[];
-    expect((diffArgs[1] as string[])[2]).toBe('deadbeef12345678');
+    expect(mockRunClaudeCode).not.toHaveBeenCalled();
+    expect(result2.results.cached).toBeDefined();
+    expect(result2.results.cached?.length).toBeGreaterThan(0);
   });
 });
 

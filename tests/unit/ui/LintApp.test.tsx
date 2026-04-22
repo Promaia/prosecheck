@@ -146,6 +146,22 @@ describe('LintApp', () => {
     });
   });
 
+  it('marks rules as cached on the cached phase', async () => {
+    const ref = makeRef();
+    const inst = render(<LintApp progressRef={ref} />);
+
+    fireProgress(ref, {
+      phase: 'cached',
+      ruleId: 'rule-a',
+      ruleName: 'Rule A',
+    });
+
+    await vi.waitFor(() => {
+      expect(getFrame(inst)).toContain('CACHED');
+    });
+    expect(getFrame(inst)).toContain('Rule A');
+  });
+
   it('shows fail result status', async () => {
     const ref = makeRef();
     const inst = render(<LintApp progressRef={ref} />);

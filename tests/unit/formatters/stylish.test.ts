@@ -110,6 +110,21 @@ describe('stylish formatter', () => {
     expect(text).toContain('1 dropped');
   });
 
+  it('formats cached rules', () => {
+    const rule = createRule('Cached Rule', 'Desc', ['src/'], 'src/RULES.md');
+    const output = makeOutput({
+      cached: [rule],
+    });
+
+    const text = formatStylish(output);
+
+    expect(text).toContain('CACHED');
+    expect(text).toContain('Cached Rule');
+    expect(text).toContain('skipped (cache current)');
+    expect(text).toContain('1 rules');
+    expect(text).toContain('1 cached');
+  });
+
   it('formats error results', () => {
     const output = makeOutput({
       overallStatus: 'fail',
