@@ -73,6 +73,14 @@ export interface RuleMetadata {
   group: string | undefined;
   model: string | undefined;
   timeout: number | undefined;
+  /**
+   * Per-rule gitignore-syntax inclusion patterns from frontmatter, when the
+   * author has narrowed scope manually. `undefined` means "use the calculator's
+   * default scope" (e.g. the RULES.md file's directory, or project-wide for
+   * ADRs). Negation (`!pattern`) is supported since inclusions flow straight
+   * into `buildInclusionFilter`.
+   */
+  inclusions: string[] | undefined;
   frontmatter: Record<string, unknown> | undefined;
   description: string;
 }
@@ -106,18 +114,51 @@ export function extractRuleMetadata(
       group: undefined,
       model: undefined,
       timeout: undefined,
+      inclusions: undefined,
       frontmatter: undefined,
       description: descriptionLines.join('\n').trim(),
     };
   }
 
   const { group, rest } = extractGroupFromFrontmatter(data);
-  const { model, timeout, ...remaining } = rest;
+  const { model, timeout, inclusions: rawInclusions, ...remaining } = rest;
+  const inclusions = parseInclusionsField(rawInclusions, source);
   return {
     group,
     model: typeof model === 'string' ? model : undefined,
     timeout: typeof timeout === 'number' && timeout > 0 ? timeout : undefined,
+    inclusions,
     frontmatter: Object.keys(remaining).length > 0 ? remaining : undefined,
     description: body.trim(),
   };
+}
+
+/**
+ * Validate and normalize a frontmatter `inclusions` field. Accepts an array of
+ * non-empty strings. Invalid shapes log a warning and fall back to undefined
+ * (calculator default).
+ */
+function parseInclusionsField(
+  raw: unknown,
+  source: string | undefined,
+): string[] | undefined {
+  if (raw === undefined) return undefined;
+  const where = source ? ` in ${source}` : '';
+  if (!Array.isArray(raw)) {
+    console.error(
+      `[prosecheck] Warning: \`inclusions\` frontmatter${where} must be a list of gitignore-style patterns (ignored).`,
+    );
+    return undefined;
+  }
+  const cleaned: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'string' || entry.trim() === '') {
+      console.error(
+        `[prosecheck] Warning: \`inclusions\` frontmatter${where} contains a non-string or empty entry (ignored).`,
+      );
+      continue;
+    }
+    cleaned.push(entry);
+  }
+  return cleaned.length > 0 ? cleaned : undefined;
 }

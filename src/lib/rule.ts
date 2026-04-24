@@ -20,6 +20,20 @@ export function makeRuleId(name: string, source: string): string {
   return `${sourceSlug}--${nameSlug}`;
 }
 
+/**
+ * Return filter entries that do not match any rule by name (case-insensitive)
+ * or by id (exact). Used to validate `--rules` before launching agents so
+ * callers don't burn a run on a misspelled filter.
+ */
+export function findUnmatchedRuleFilters(
+  rules: Rule[],
+  filter: string[],
+): string[] {
+  const names = new Set(rules.map((r) => r.name.toLowerCase()));
+  const ids = new Set(rules.map((r) => r.id));
+  return filter.filter((f) => !names.has(f.toLowerCase()) && !ids.has(f));
+}
+
 export interface CreateRuleOptions {
   group?: string | undefined;
   model?: string | undefined;

@@ -67,6 +67,7 @@ describe('init command', () => {
 
     expect(content).toContain('.prosecheck/working/');
     expect(content).toContain('.prosecheck/config.local.json');
+    expect(content).toContain('.prosecheck/.runlock');
   });
 
   it('appends to existing .gitignore without duplicates', async () => {

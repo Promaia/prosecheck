@@ -4,6 +4,7 @@ dist/
 .prosecheck/working/
 .prosecheck/output.*
 .prosecheck/config.local.json
+.prosecheck/.runlock
 coverage/
 .claude/settings.local.json
 .npmrc

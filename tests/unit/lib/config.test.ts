@@ -60,6 +60,15 @@ describe('loadConfig', () => {
     expect(config.baseBranch).toBe('main');
     expect(config.addtlOverheadTimeout).toBe(60);
     expect(config.hardTotalTimeout).toBeNull();
+    // Default env is interactive, which enables the per-rule cache.
+    expect(config.lastRun.read).toBe(true);
+    expect(config.lastRun.write).toBe(true);
+  });
+
+  it('leaves lastRun off for the ci environment by default', async () => {
+    await writeConfig(tmpDir, {});
+
+    const { config } = await loadConfig({ projectRoot: tmpDir, env: 'ci' });
     expect(config.lastRun.read).toBe(false);
     expect(config.lastRun.write).toBe(false);
   });

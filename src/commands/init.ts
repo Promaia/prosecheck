@@ -28,7 +28,7 @@ export interface InitOptions {
 
 const DEFAULT_CONFIG = {
   baseBranch: 'main',
-  globalIgnore: ['node_modules/', 'dist/', '.git/'],
+  globalIgnore: ['.git/', 'node_modules/', 'dist/', 'build/', '.prosecheck/'],
   ruleCalculators: [{ name: 'rules-md' }],
 };
 
@@ -47,6 +47,7 @@ const GITIGNORE_ENTRIES = [
   '.prosecheck/working/',
   '.prosecheck/output.*',
   '.prosecheck/config.local.json',
+  '.prosecheck/.runlock',
 ];
 
 const PRE_PUSH_HOOK = `#!/bin/sh

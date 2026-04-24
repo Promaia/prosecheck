@@ -258,7 +258,9 @@ export const ConfigSchema = z
         ci: {
           warnAsError: true,
         },
-        interactive: {},
+        interactive: {
+          lastRun: { read: true, write: true },
+        },
       }))
       .describe('Named environment overrides selected via --env'),
     ruleCalculators: z

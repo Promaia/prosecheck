@@ -3,6 +3,7 @@ import { Command, InvalidArgumentError } from 'commander';
 import { lint } from './commands/lint.js';
 import { init } from './commands/init.js';
 import { config } from './commands/config.js';
+import { listRules } from './commands/list-rules.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
@@ -86,6 +87,15 @@ program
     'Comma-separated list of rule names or IDs to run (disables last-run-hash write)',
   )
   .option(
+    '--rules-allow-missing',
+    "Warn and continue (today's behavior) when --rules entries do not match any rule. Default is to exit 2.",
+  )
+  .option(
+    '--force',
+    'Bypass the runlock check. Use only when you are certain no other prosecheck is active against this working directory (alias: --ignore-runlock).',
+  )
+  .option('--ignore-runlock', 'Alias for --force')
+  .option(
     '--debug',
     'Stream per-agent stdout/stderr to .prosecheck/working/logs/ for debugging',
   )
@@ -108,6 +118,9 @@ program
       allowedTools?: string;
       output?: string;
       rules?: string;
+      rulesAllowMissing?: boolean;
+      force?: boolean;
+      ignoreRunlock?: boolean;
       debug?: boolean;
     }) => {
       await lint({
@@ -129,6 +142,8 @@ program
         allowedTools: options.allowedTools,
         output: options.output,
         rules: options.rules,
+        rulesAllowMissing: options.rulesAllowMissing,
+        force: options.force ?? options.ignoreRunlock,
         debug: options.debug,
       });
     },
@@ -179,6 +194,21 @@ program
       });
     },
   );
+
+program
+  .command('list-rules')
+  .description(
+    'Discover and list all rules (name, id, source, scope). Use before --rules to avoid mis-typing.',
+  )
+  .option('--env <environment>', 'Environment name (ci, interactive)')
+  .option('--json', 'Emit JSON instead of human-readable table')
+  .action(async (options: { env?: string; json?: boolean }) => {
+    await listRules({
+      projectRoot: process.cwd(),
+      env: options.env,
+      json: options.json,
+    });
+  });
 
 const configCmd = program
   .command('config')

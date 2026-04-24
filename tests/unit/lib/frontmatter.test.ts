@@ -191,4 +191,62 @@ describe('extractRuleMetadata', () => {
     const result = extractRuleMetadata(lines);
     expect(result.model).toBeUndefined();
   });
+
+  it('extracts inclusions array from frontmatter', () => {
+    const lines = [
+      '---',
+      'inclusions:',
+      '  - packages/api/**',
+      '  - "!packages/api/tests/**"',
+      '---',
+      'Desc.',
+    ];
+    const result = extractRuleMetadata(lines);
+    expect(result.inclusions).toEqual([
+      'packages/api/**',
+      '!packages/api/tests/**',
+    ]);
+    expect(result.frontmatter).toBeUndefined();
+  });
+
+  it('returns undefined inclusions when not present', () => {
+    const lines = ['---', 'group: style', '---', 'Desc.'];
+    const result = extractRuleMetadata(lines);
+    expect(result.inclusions).toBeUndefined();
+  });
+
+  it('warns and ignores non-array inclusions value', () => {
+    const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const lines = ['---', 'inclusions: packages/api/**', '---', 'Desc.'];
+    const result = extractRuleMetadata(lines, 'src/RULES.md');
+    expect(result.inclusions).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalled();
+    expect(warnSpy.mock.calls[0]?.[0]).toContain('src/RULES.md');
+    warnSpy.mockRestore();
+  });
+
+  it('drops empty/non-string entries and keeps the rest', () => {
+    const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const lines = [
+      '---',
+      'inclusions:',
+      '  - packages/api/**',
+      '  - ""',
+      '  - 42',
+      '---',
+      'Desc.',
+    ];
+    const result = extractRuleMetadata(lines);
+    expect(result.inclusions).toEqual(['packages/api/**']);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('treats an all-invalid inclusions list as undefined', () => {
+    const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const lines = ['---', 'inclusions:', '  - ""', '---', 'Desc.'];
+    const result = extractRuleMetadata(lines);
+    expect(result.inclusions).toBeUndefined();
+    warnSpy.mockRestore();
+  });
 });

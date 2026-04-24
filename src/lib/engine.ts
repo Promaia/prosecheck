@@ -4,6 +4,7 @@ import type { Rule, Config, RunContext, OnProgress } from '../types/index.js';
 import type { CollectResultsOutput } from './results.js';
 import type { ChangeDetectionResult } from './change-detection.js';
 import { runCalculators } from './calculators/index.js';
+import { findUnmatchedRuleFilters } from './rule.js';
 import {
   detectChanges,
   listAllFiles,
@@ -24,6 +25,24 @@ import { formatJson } from '../formatters/json.js';
 import { formatSarif } from '../formatters/sarif.js';
 
 const WORKING_DIR = '.prosecheck/working';
+
+/**
+ * Thrown when `--rules` entries don't match any discovered rule and the
+ * caller has not opted into the `rulesAllowMissing` escape hatch.
+ */
+export class UnknownRuleFilterError extends Error {
+  constructor(
+    public readonly unmatched: string[],
+    public readonly available: Rule[],
+  ) {
+    super(
+      `Unrecognized --rules entr${unmatched.length === 1 ? 'y' : 'ies'}: ${unmatched
+        .map((u) => `"${u}"`)
+        .join(', ')}`,
+    );
+    this.name = 'UnknownRuleFilterError';
+  }
+}
 
 export interface EngineResult {
   /** Formatted output string */
@@ -63,15 +82,19 @@ export async function runEngine(context: RunContext): Promise<EngineResult> {
   // 2. Discover rules via calculators
   let rules = await runCalculators(projectRoot, config);
 
-  // 2-filter. If --rules was specified, filter to matching rules only
+  // 2-filter. If --rules was specified, validate and filter to matching rules.
   if (context.ruleFilter) {
-    const allRuleNames = rules.map((r) => r.name);
-    rules = filterRulesByNameOrId(rules, context.ruleFilter);
-    if (rules.length === 0) {
+    const unmatched = findUnmatchedRuleFilters(rules, context.ruleFilter);
+    if (unmatched.length > 0 && !context.rulesAllowMissing) {
+      throw new UnknownRuleFilterError(unmatched, rules);
+    }
+    if (unmatched.length > 0) {
+      const allRuleNames = rules.map((r) => r.name);
       console.error(
-        `[prosecheck] Warning: --rules filter matched no rules. Available rules: ${allRuleNames.join(', ')}`,
+        `[prosecheck] Warning: --rules entries did not match any rule: ${unmatched.join(', ')}. Available rules: ${allRuleNames.join(', ')}`,
       );
     }
+    rules = filterRulesByNameOrId(rules, context.ruleFilter);
   }
 
   // 2a. Resolve per-rule model — stamp defaultModel onto rules without an explicit model

@@ -83,6 +83,8 @@ export interface RunContext {
   hashCheckWrite?: boolean | undefined;
   /** Optional rule name/ID filter — only run matching rules (disables last-run-hash write) */
   ruleFilter?: string[] | undefined;
+  /** When true, unrecognized --rules entries warn and continue. Default: exit 2. */
+  rulesAllowMissing?: boolean | undefined;
   /** Optional progress callback for interactive UI */
   onProgress?: OnProgress | undefined;
   /** Enable per-agent log streaming to .prosecheck/working/logs/ */

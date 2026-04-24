@@ -779,6 +779,52 @@ describe('runEngine', () => {
       const passingIds = writeFn.mock.calls[0]?.[0] as Set<string>;
       expect(passingIds.has('rule-a')).toBe(true);
     });
+
+    it('throws UnknownRuleFilterError when an entry matches no rule', async () => {
+      const { UnknownRuleFilterError } =
+        await import('../../../src/lib/engine.js');
+      mockRunCalculators.mockResolvedValue([
+        {
+          id: 'rule-a',
+          name: 'Rule A',
+          description: 'D',
+          inclusions: [],
+          source: 'RULES.md',
+        },
+      ]);
+
+      const context = makeContext({ ruleFilter: ['Not A Rule'] });
+      await expect(runEngine(context)).rejects.toBeInstanceOf(
+        UnknownRuleFilterError,
+      );
+      // Must not reach dispatch
+      expect(mockDetectChanges).not.toHaveBeenCalled();
+    });
+
+    it('warn-and-continues when rulesAllowMissing is true', async () => {
+      const ruleA = {
+        id: 'rule-a',
+        name: 'Rule A',
+        description: 'D',
+        inclusions: [],
+        source: 'RULES.md',
+      };
+      mockRunCalculators.mockResolvedValue([ruleA]);
+      mockDetectChanges.mockResolvedValue({
+        comparisonRef: 'abc123',
+        triggeredRules: [ruleA],
+        cachedRules: [],
+        changedFiles: [],
+        changedFilesByRule: new Map(),
+      });
+
+      const context = makeContext({
+        ruleFilter: ['Rule A', 'Bogus'],
+        rulesAllowMissing: true,
+      });
+      await expect(runEngine(context)).resolves.toBeDefined();
+      expect(mockDetectChanges).toHaveBeenCalled();
+    });
   });
 });
 
@@ -830,5 +876,62 @@ describe('filterRulesByNameOrId', () => {
   it('returns empty array when nothing matches', () => {
     const result = filterRulesByNameOrId(rules, ['nonexistent']);
     expect(result).toEqual([]);
+  });
+});
+
+describe('findUnmatchedRuleFilters', () => {
+  const rules: Rule[] = [
+    {
+      id: 'rules-md--no-console-log',
+      name: 'No console.log',
+      description: 'D',
+      inclusions: [],
+      source: 'RULES.md',
+    },
+    {
+      id: 'src-rules-md--no-any',
+      name: 'No any types',
+      description: 'D',
+      inclusions: ['src/'],
+      source: 'src/RULES.md',
+    },
+  ];
+
+  it('returns empty when every entry matches (mixed name + id)', async () => {
+    const { findUnmatchedRuleFilters } =
+      await import('../../../src/lib/rule.js');
+    expect(
+      findUnmatchedRuleFilters(rules, [
+        'No console.log',
+        'src-rules-md--no-any',
+      ]),
+    ).toEqual([]);
+  });
+
+  it('matches names case-insensitively', async () => {
+    const { findUnmatchedRuleFilters } =
+      await import('../../../src/lib/rule.js');
+    expect(findUnmatchedRuleFilters(rules, ['no CONSOLE.log'])).toEqual([]);
+  });
+
+  it('returns the misses verbatim, preserving input casing/order', async () => {
+    const { findUnmatchedRuleFilters } =
+      await import('../../../src/lib/rule.js');
+    expect(
+      findUnmatchedRuleFilters(rules, [
+        'Not A Rule',
+        'No console.log',
+        'Also missing',
+      ]),
+    ).toEqual(['Not A Rule', 'Also missing']);
+  });
+
+  it('ids are matched case-sensitively', async () => {
+    const { findUnmatchedRuleFilters } =
+      await import('../../../src/lib/rule.js');
+    // Slugs are lowercase by construction. An uppercase slug should not match.
+    expect(findUnmatchedRuleFilters(rules, ['SRC-RULES-MD--NO-ANY'])).toEqual([
+      'SRC-RULES-MD--NO-ANY',
+    ]);
   });
 });

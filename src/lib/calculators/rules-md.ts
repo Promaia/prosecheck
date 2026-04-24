@@ -101,8 +101,9 @@ export function parseRulesMd(content: string, source: string): Rule[] {
   let currentName: string | undefined;
   let descriptionLines: string[] = [];
   const dir = path.dirname(source);
-  // Use the directory as inclusion scope — root means everything
-  const inclusions = dir === '.' ? [] : [`${dir}/`];
+  // Default inclusion scope: the file's directory. Root means everything.
+  // A rule's `inclusions:` frontmatter overrides this when present.
+  const defaultInclusions = dir === '.' ? [] : [`${dir}/`];
 
   for (let i = 0; i < lines.length; i++) {
     if (i === skip) continue; // skip the `# Rules` line in section mode
@@ -116,12 +117,18 @@ export function parseRulesMd(content: string, source: string): Rule[] {
       if (currentName !== undefined) {
         const meta = extractRuleMetadata(descriptionLines, source);
         rules.push(
-          createRule(currentName, meta.description, inclusions, source, {
-            group: meta.group,
-            model: meta.model,
-            timeout: meta.timeout,
-            frontmatter: meta.frontmatter,
-          }),
+          createRule(
+            currentName,
+            meta.description,
+            meta.inclusions ?? defaultInclusions,
+            source,
+            {
+              group: meta.group,
+              model: meta.model,
+              timeout: meta.timeout,
+              frontmatter: meta.frontmatter,
+            },
+          ),
         );
       }
 
@@ -137,11 +144,17 @@ export function parseRulesMd(content: string, source: string): Rule[] {
   if (currentName !== undefined) {
     const meta = extractRuleMetadata(descriptionLines, source);
     rules.push(
-      createRule(currentName, meta.description, inclusions, source, {
-        group: meta.group,
-        model: meta.model,
-        frontmatter: meta.frontmatter,
-      }),
+      createRule(
+        currentName,
+        meta.description,
+        meta.inclusions ?? defaultInclusions,
+        source,
+        {
+          group: meta.group,
+          model: meta.model,
+          frontmatter: meta.frontmatter,
+        },
+      ),
     );
   }
 

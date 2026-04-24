@@ -1,7 +1,13 @@
 import { writeFileSync } from 'node:fs';
 import { loadConfig, resolveEnvironment, ConfigError } from '../lib/config.js';
 import type { PartialConfig } from '../lib/config-schema.js';
-import { runEngine } from '../lib/engine.js';
+import { runEngine, UnknownRuleFilterError } from '../lib/engine.js';
+import { buildOutputHints } from '../lib/output-hints.js';
+import {
+  acquireRunlock,
+  RunlockHeldError,
+  type Runlock,
+} from '../lib/runlock.js';
 import type { RunContext } from '../types/index.js';
 import type { InteractiveUI } from '../ui/render.js';
 
@@ -42,6 +48,10 @@ export interface LintOptions {
   output?: string | undefined;
   /** Comma-separated rule names or IDs to filter to (disables last-run-hash write) */
   rules?: string | undefined;
+  /** When true, unrecognized --rules entries warn and continue instead of exiting 2 */
+  rulesAllowMissing?: boolean | undefined;
+  /** Bypass the runlock check (use when certain no other prosecheck is active) */
+  force?: boolean | undefined;
   /** Enable per-agent log streaming to .prosecheck/working/logs/ */
   debug?: boolean | undefined;
 }
@@ -55,8 +65,18 @@ export interface LintOptions {
 export async function lint(options: LintOptions): Promise<void> {
   const { projectRoot } = options;
   let interactiveUI: InteractiveUI | undefined;
+  let runlock: Runlock | undefined;
 
   try {
+    runlock = await acquireRunlock(projectRoot, {
+      force: options.force,
+      onStale: (info) => {
+        process.stderr.write(
+          `[prosecheck] Warning: reclaiming stale runlock from dead pid ${String(info.pid)} (started ${info.startedAt}).\n`,
+        );
+      },
+    });
+
     // Resolve environment
     const environment = resolveEnvironment(options.env);
 
@@ -145,9 +165,12 @@ export async function lint(options: LintOptions): Promise<void> {
             .map((r) => r.trim())
             .filter(Boolean)
         : undefined,
+      rulesAllowMissing: options.rulesAllowMissing,
       onProgress: interactiveUI?.onProgress,
       debug: options.debug,
     };
+    // NB: `options.force` is handled by `acquireRunlock` above, not threaded
+    // through RunContext (the engine itself does not care about runlocks).
 
     // Run the engine
     const result = await runEngine(context);
@@ -168,6 +191,18 @@ export async function lint(options: LintOptions): Promise<void> {
       writeFileSync(options.output, result.output + '\n');
     }
 
+    // Emit trailing hints to stdout (stylish format only — keeps json/sarif
+    // stdout clean). Placed AFTER the summary so `tail -N` catches them even
+    // when callers truncate per-rule lines.
+    const hints = buildOutputHints({
+      outputPath: options.output,
+      format,
+      results: result.results,
+    });
+    if (hints.length > 0) {
+      process.stdout.write(hints.join('\n') + '\n');
+    }
+
     // Set exit code based on status
     switch (result.overallStatus) {
       case 'fail':
@@ -186,8 +221,30 @@ export async function lint(options: LintOptions): Promise<void> {
   } catch (error: unknown) {
     interactiveUI?.cleanup();
 
+    if (error instanceof RunlockHeldError) {
+      process.stderr.write(`${error.message}\n`);
+      process.exitCode = 2;
+      return;
+    }
+
     if (error instanceof ConfigError) {
       process.stderr.write(`Configuration error: ${error.message}\n`);
+      process.exitCode = 2;
+      return;
+    }
+
+    if (error instanceof UnknownRuleFilterError) {
+      process.stderr.write(`${error.message}\n\n`);
+      process.stderr.write('Available rules:\n');
+      for (const rule of error.available) {
+        process.stderr.write(`  - ${rule.name}  (id: ${rule.id})\n`);
+      }
+      process.stderr.write(
+        '\nRun `prosecheck list-rules` to see the same list with sources and scopes.\n',
+      );
+      process.stderr.write(
+        'Pass --rules-allow-missing to warn-and-continue instead of erroring.\n',
+      );
       process.exitCode = 2;
       return;
     }
@@ -202,5 +259,9 @@ export async function lint(options: LintOptions): Promise<void> {
       `Unexpected error: ${String(error)}\nRun with PROSECHECK_VERBOSE=1 for more details.\n`,
     );
     process.exitCode = 2;
+  } finally {
+    if (runlock !== undefined) {
+      await runlock.release();
+    }
   }
 }

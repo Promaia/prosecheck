@@ -96,10 +96,12 @@ export function parseAdr(content: string, source: string): Rule[] | undefined {
   );
 
   if (!hasSubHeadings) {
-    // Single rule: entire section as description, ADR title as name
+    // Single rule: entire section as description, ADR title as name.
+    // ADR-derived rules apply project-wide by default; frontmatter
+    // `inclusions:` narrows that when provided.
     const meta = extractRuleMetadata(rulesSectionLines, source);
     return [
-      createRule(title, meta.description, [], source, {
+      createRule(title, meta.description, meta.inclusions ?? [], source, {
         group: meta.group,
         model: meta.model,
         timeout: meta.timeout,
@@ -122,11 +124,17 @@ export function parseAdr(content: string, source: string): Rule[] | undefined {
       if (currentName !== undefined) {
         const meta = extractRuleMetadata(descriptionLines, source);
         rules.push(
-          createRule(currentName, meta.description, [], source, {
-            group: meta.group,
-            model: meta.model,
-            frontmatter: meta.frontmatter,
-          }),
+          createRule(
+            currentName,
+            meta.description,
+            meta.inclusions ?? [],
+            source,
+            {
+              group: meta.group,
+              model: meta.model,
+              frontmatter: meta.frontmatter,
+            },
+          ),
         );
       }
       currentName = subText.trim();
@@ -141,7 +149,7 @@ export function parseAdr(content: string, source: string): Rule[] | undefined {
   if (currentName !== undefined) {
     const meta = extractRuleMetadata(descriptionLines, source);
     rules.push(
-      createRule(currentName, meta.description, [], source, {
+      createRule(currentName, meta.description, meta.inclusions ?? [], source, {
         group: meta.group,
         model: meta.model,
         timeout: meta.timeout,

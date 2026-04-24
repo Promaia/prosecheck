@@ -6,6 +6,19 @@ import os from 'node:os';
 // Mock the engine before importing lint
 vi.mock('../../../src/lib/engine.js', () => ({
   runEngine: vi.fn(),
+  UnknownRuleFilterError: class UnknownRuleFilterError extends Error {
+    constructor(
+      public readonly unmatched: string[],
+      public readonly available: Array<{ id: string; name: string }>,
+    ) {
+      super(
+        `Unrecognized --rules entr${unmatched.length === 1 ? 'y' : 'ies'}: ${unmatched
+          .map((u) => `"${u}"`)
+          .join(', ')}`,
+      );
+      this.name = 'UnknownRuleFilterError';
+    }
+  },
 }));
 
 // Mock config loading to avoid needing real config files
@@ -21,7 +34,7 @@ vi.mock('../../../src/lib/config.js', () => ({
 }));
 
 import { lint } from '../../../src/commands/lint.js';
-import { runEngine } from '../../../src/lib/engine.js';
+import { runEngine, UnknownRuleFilterError } from '../../../src/lib/engine.js';
 import { loadConfig } from '../../../src/lib/config.js';
 import type { EngineResult } from '../../../src/lib/engine.js';
 
@@ -76,6 +89,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(tmpDir, { recursive: true, force: true });
   vi.restoreAllMocks();
+  vi.clearAllMocks();
   process.exitCode = undefined;
 });
 
@@ -155,5 +169,108 @@ describe('lint --output', () => {
 
     const content = await readFile(outputPath, 'utf-8');
     expect(content).toBe('new content\n');
+  });
+});
+
+describe('lint runlock', () => {
+  it('exits 2 and explains when another run holds the lock', async () => {
+    mockedRunEngine.mockResolvedValue(
+      mockEngineResult({ output: 'should not be reached' }),
+    );
+
+    // Write a lock pointing at our own pid so isLiveLock() returns true.
+    const { writeFileSync, mkdirSync } = await import('node:fs');
+    mkdirSync(path.join(tmpDir, '.prosecheck'), { recursive: true });
+    writeFileSync(
+      path.join(tmpDir, '.prosecheck', '.runlock'),
+      JSON.stringify({
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+        host: (await import('node:os')).default.hostname(),
+      }),
+    );
+
+    const writes: string[] = [];
+    (
+      process.stderr.write as unknown as {
+        mockImplementation: (fn: (s: string) => boolean) => void;
+      }
+    ).mockImplementation((s: string) => {
+      writes.push(s);
+      return true;
+    });
+
+    await lint({ projectRoot: tmpDir });
+
+    expect(process.exitCode).toBe(2);
+    const combined = writes.join('');
+    expect(combined).toContain('Another prosecheck run');
+    expect(combined).toContain(`pid:        ${String(process.pid)}`);
+    expect(mockedRunEngine).not.toHaveBeenCalled();
+  });
+
+  it('force: true bypasses the runlock', async () => {
+    mockedRunEngine.mockResolvedValue(mockEngineResult({ output: 'ok' }));
+    const { writeFileSync, mkdirSync } = await import('node:fs');
+    mkdirSync(path.join(tmpDir, '.prosecheck'), { recursive: true });
+    writeFileSync(
+      path.join(tmpDir, '.prosecheck', '.runlock'),
+      JSON.stringify({
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+        host: (await import('node:os')).default.hostname(),
+      }),
+    );
+
+    await lint({ projectRoot: tmpDir, force: true });
+
+    expect(process.exitCode).toBe(0);
+    expect(mockedRunEngine).toHaveBeenCalled();
+  });
+});
+
+describe('lint --rules strict validation', () => {
+  it('exits 2 on UnknownRuleFilterError and prints available rules', async () => {
+    const available = [
+      {
+        id: 'rules-md--alpha',
+        name: 'Alpha',
+        description: 'd',
+        inclusions: [],
+        source: 'RULES.md',
+      },
+      {
+        id: 'rules-md--beta',
+        name: 'Beta',
+        description: 'd',
+        inclusions: [],
+        source: 'RULES.md',
+      },
+    ];
+    mockedRunEngine.mockRejectedValue(
+      new UnknownRuleFilterError(['gamma'], available),
+    );
+
+    const writes: string[] = [];
+    (
+      process.stderr.write as unknown as {
+        mockImplementation: (fn: (s: string) => boolean) => void;
+      }
+    ).mockImplementation((s: string) => {
+      writes.push(s);
+      return true;
+    });
+
+    await lint({
+      projectRoot: tmpDir,
+      rules: 'gamma',
+    });
+
+    expect(process.exitCode).toBe(2);
+    const combined = writes.join('');
+    expect(combined).toContain('gamma');
+    expect(combined).toContain('Alpha');
+    expect(combined).toContain('rules-md--beta');
+    expect(combined).toContain('--rules-allow-missing');
   });
 });

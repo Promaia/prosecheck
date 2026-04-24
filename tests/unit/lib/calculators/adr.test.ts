@@ -90,6 +90,48 @@ describe('parseAdr', () => {
     expect(rules?.[0]?.inclusions).toEqual([]);
   });
 
+  it('single-rule ADR honors frontmatter inclusions', () => {
+    const content = [
+      '# 2. Scope test',
+      '',
+      '## Rules',
+      '',
+      '---',
+      'inclusions:',
+      '  - packages/api/**',
+      '---',
+      'Narrow rule body.',
+    ].join('\n');
+    const rules = parseAdr(content, 'docs/adr/002.md');
+    expect(rules?.[0]?.inclusions).toEqual(['packages/api/**']);
+  });
+
+  it('sub-rule ADR honors per-sub-rule frontmatter inclusions', () => {
+    const content = [
+      '# 3. Style',
+      '',
+      '## Rules',
+      '',
+      '### Narrow',
+      '',
+      '---',
+      'inclusions:',
+      '  - packages/web/**',
+      '---',
+      'Narrow body.',
+      '',
+      '### Broad',
+      '',
+      'No frontmatter.',
+    ].join('\n');
+    const rules = parseAdr(content, 'docs/adr/003.md');
+    expect(rules).toHaveLength(2);
+    const narrow = rules?.find((r) => r.name === 'Narrow');
+    const broad = rules?.find((r) => r.name === 'Broad');
+    expect(narrow?.inclusions).toEqual(['packages/web/**']);
+    expect(broad?.inclusions).toEqual([]);
+  });
+
   describe('sub-heading rules (### within ## Rules)', () => {
     it('creates separate rules for each ### sub-heading', () => {
       const content = [

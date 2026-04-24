@@ -79,6 +79,47 @@ describe('parseRulesMd', () => {
     expect(rules[0]?.inclusions).toEqual([]);
   });
 
+  it('frontmatter inclusions override the directory default', () => {
+    const content = [
+      '# Narrow Rule',
+      '',
+      '---',
+      'inclusions:',
+      '  - packages/api/**',
+      '  - "!packages/api/tests/**"',
+      '---',
+      'Desc.',
+    ].join('\n');
+    const rules = parseRulesMd(content, 'RULES.md');
+    expect(rules[0]?.inclusions).toEqual([
+      'packages/api/**',
+      '!packages/api/tests/**',
+    ]);
+  });
+
+  it('frontmatter inclusions also override nested-file default', () => {
+    const content = [
+      '# Rule',
+      '',
+      '---',
+      'inclusions:',
+      '  - packages/web/**',
+      '---',
+      'Desc.',
+    ].join('\n');
+    const rules = parseRulesMd(content, 'src/api/RULES.md');
+    // The directory default ['src/api/'] must be replaced, not merged.
+    expect(rules[0]?.inclusions).toEqual(['packages/web/**']);
+  });
+
+  it('falls back to directory default when inclusions absent', () => {
+    const content = ['# Rule', '', '---', 'group: g1', '---', 'Desc.'].join(
+      '\n',
+    );
+    const rules = parseRulesMd(content, 'src/api/RULES.md');
+    expect(rules[0]?.inclusions).toEqual(['src/api/']);
+  });
+
   it('returns empty array for file with no headings', () => {
     const rules = parseRulesMd('Just some text without headings.', 'RULES.md');
 
