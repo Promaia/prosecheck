@@ -56,11 +56,16 @@ describe('loadConfig', () => {
   it('applies defaults when config.json is empty', async () => {
     await writeConfig(tmpDir, {});
 
-    const { config } = await loadConfig({ projectRoot: tmpDir });
+    // Pass env: 'interactive' explicitly — otherwise CI auto-detection from
+    // process.env.CI kicks in when the suite runs under GitHub Actions and
+    // resolves env to 'ci', which keeps lastRun off.
+    const { config } = await loadConfig({
+      projectRoot: tmpDir,
+      env: 'interactive',
+    });
     expect(config.baseBranch).toBe('main');
     expect(config.addtlOverheadTimeout).toBe(60);
     expect(config.hardTotalTimeout).toBeNull();
-    // Default env is interactive, which enables the per-rule cache.
     expect(config.lastRun.read).toBe(true);
     expect(config.lastRun.write).toBe(true);
   });
