@@ -36,6 +36,16 @@ After completing each milestone (or any significant set of changes), run `npm ru
 
 After completing implementation work, consult `docs/self-review.md` for the self-review checklist — criteria and severity levels for evaluating changes before presenting findings.
 
+## Release process
+
+When the user asks you to cut a release:
+
+1. **Switch to `main`** if not already on it. Merge the changes being released if they live on a branch.
+2. **Bump the version** in `package.json` using semver based on the changes (patch for fixes, minor for backwards-compatible features, major for breaking changes). Commit with a message matching the repo style (e.g. `0.6.0`).
+3. **Tag the commit** with a `v`-prefixed version matching the new version, e.g. `git tag v0.6.0`.
+4. **Push the commit and tag** to GitHub: `git push origin main && git push origin v0.6.0`.
+5. **Publish to npm**: `npm publish`. Credentials are configured locally, so this runs non-interactively — you don't need to ask the user to run it.
+
 ## Known issues
 
 `docs/issues.md` tracks known bugs and architectural concerns. Fixed issues should be removed from the file.
